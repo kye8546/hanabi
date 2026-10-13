@@ -330,3 +330,16 @@ func TestL4TrashChopMoveOnlyOnCommonKnowledge(t *testing.T) {
 		}
 	}
 }
+
+func TestL4GiveFivesChopMoveEvenIfItLocks(t *testing.T) {
+	// Bob 的 chop 是 critical 的 r4，左邊四張都是 5：「5」是 5's Chop Move，之後他鎖手又沒牌可打。
+	// 但直接救 r4 的話，5 就成了 chop，還得一張張再花提示救——保護的牌本來就都必須保留，鎖手是遲早的事
+	g, bots := scenarioAt(t, 4, allOnes, "y4 g4 b4 w4 b3", "b5 w5 g5 r4 y3", "y3 b3 w3 g3 w4")
+	g.Discards = append(g.Discards, card(t, "r4"))
+	g.Deck[len(g.Deck)-2].Color = game.Yellow // midGame 時 Bob 抽到的是 y5
+	g.Deck[len(g.Deck)-2].Rank = 5
+	midGame(t, g)
+	if a := step(t, g, bots); a != game.HintRankTo(1, 5) {
+		t.Fatalf("Alice 應給 Bob「5」（5's Chop Move，一次救四張 5 和 r4），卻做了 %+v", a)
+	}
+}

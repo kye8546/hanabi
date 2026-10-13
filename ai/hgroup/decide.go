@@ -654,9 +654,15 @@ func (s *state) cmSave(evs []clueEval, e clueEval) bool {
 	if chop < 0 || !slices.Contains(e.cm, chop) || !s.needsSave(e.target, chop) {
 		return false
 	}
-	// Chop Move 後他的手牌全被提示或 Chop Move（鎖手）、又沒牌可打：他不能棄牌，只能拖延或棄可能有用的牌
+	// Chop Move 後他的手牌全被提示或 Chop Move（鎖手）、又沒牌可打：他不能棄牌，只能拖延或棄可能有用的牌。
+	// 但這次保護的牌（新點到的與被 Chop Move 的）本來就全都必須保留時，鎖手是遲早的事：直接救 chop 後，
+	// 下一張 chop 也得再花一個提示救（例如 5's Chop Move 點到的 w5 與 chop 上 critical 的 b4，一個提示救兩張）
 	if s.chopAfter(e.target, append(slices.Clone(e.touched), e.cm...)) < 0 && !s.willPlay(e.target) {
-		return false
+		for _, id := range append(slices.Clone(e.touched), e.cm...) {
+			if !s.gotten(id) && !s.needsSave(e.target, id) {
+				return false
+			}
+		}
 	}
 	if e.cmKind == cmTrash && e.cmSaves < 2 {
 		_, direct := best(evs, func(d clueEval) bool {
