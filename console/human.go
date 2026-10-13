@@ -13,7 +13,7 @@ import (
 	"hanabi/player"
 )
 
-const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ u 回溯 │ x 偷看 │ ? 說明"
+const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ u 回溯 │ x 偷看 │ n 反向資訊 │ ? 說明"
 
 const helpText = `
  p <位置>              打出手牌，例如 p 1（位置從左邊 1 開始；新抽的牌放最左邊）
@@ -24,13 +24,15 @@ const helpText = `
  x                     偷看自己手牌的真實牌面（紀錄檔會註明你在第幾回合偷看過）
  log                   顯示完整紀錄
  b                     重新顯示盤面
+ n                     切換是否顯示反向提示資訊（「不是紅色」這類由沒被點到推出的資訊），連 AI 手牌的「他知」一起切換
  q                     離開遊戲
 
  畫面說明
    位置列的 * 代表這張牌曾被提示點到
    「他知」是對方自己對那張牌的認知（?? = 完全不知道）
-   你自己的「顏色 / 數字」列出所有剩下的可能（含「不是紅色」這類反向資訊，和 Hanab Live 一樣）；
-   啟動時加 -hideneg 會改成只顯示被提示點到的顏色 / 數字（? = 還沒被點到）
+   你自己的「顏色 / 數字」是被提示點到的顏色 / 數字（? = 還沒被點到）
+   用 n（或啟動時加 -showneg）顯示反向資訊：自己和 AI 的牌都改成列出所有剩下的可能（和 Hanab Live 一樣），
+   AI 的「他知」也分成顏色、數字兩列
  AI 依開局選的 H-Group 慣例等級行動，你給的提示也會被照那個等級解讀
 `
 
@@ -129,6 +131,11 @@ func (h *Human) parse(line string, v game.PlayerView) (game.Action, error) {
 		return game.Action{}, errHandled
 	case "b", "board":
 		h.r.Board(v)
+		return game.Action{}, errHandled
+	case "n", "neg":
+		on := h.r.ToggleNeg()
+		h.r.Board(v)
+		fmt.Fprintf(h.out, " 反向提示資訊：%s\n", map[bool]string{true: "顯示", false: "隱藏"}[on])
 		return game.Action{}, errHandled
 	case "u", "undo":
 		return player.UndoAction, nil

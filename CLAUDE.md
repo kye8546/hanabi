@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 go run ./cmd/hanabi                       # 開局先問人數（2–5）、慣例等級（1–25）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black (6 Suits)）、洗牌種子（Enter = 隨機）；座位 0 是真人
 go run ./cmd/hanabi -seed 42 -nocolor     # 固定牌序（有 -seed 就不問種子）/ 關閉 ANSI 顏色（也吃 NO_COLOR）
-go run ./cmd/hanabi -hideneg              # 介面不顯示反向提示資訊（預設顯示，和 Hanab Live 一樣；H-Group 慣例預設大家看得到反向資訊）
+go run ./cmd/hanabi -showneg              # 開局就顯示反向提示資訊（預設隱藏；遊戲中 n 指令即時切換，開啟時 AI 手牌的「他知」也分顏色、數字兩列列出所有可能；H-Group 慣例預設大家看得到反向資訊，Hanab Live 預設顯示）
 go test ./...
 go vet ./...
 # 腳本化試玩（前三行是人數、等級、變體（空行 = 標準）；沒加 -seed 時第四行是種子，空行 = 隨機）
@@ -47,7 +47,7 @@ cmd/hanabi 組裝
 - **`game` 不做 I/O**：`Game.Apply(Action) ([]Event, error)`，`Validate` 回傳具體中文錯誤（sentinel errors 在 [game/rules.go](game/rules.go)）。
 - **玩家只拿 `PlayerView`**（[game/view.go](game/view.go)）：自己手牌與自己抽牌事件被遮蔽（`Visible=false`、`Card` 只留 ID）。AI 結構上無法偷看。
 - **`player.Player`**：`Name()` + `Act(PlayerView) Action`。真人額外實作 `player.Rejecter`，`Run` 遇到不合法行動會呼叫 `Reject` 後重新 `Act`；AI 回傳不合法行動視為程式錯誤，`Run` 直接回傳 error。
-- **`Knowledge`**（[game/knowledge.go](game/knowledge.go)）：每張手牌可能顏色/數字的 bitmask，保留負向資訊；`Clued` = 曾被提示點到（chop 等進階策略用）；`HintedColors/HintedRanks` 只記正向提示，供 console 在加了 `-hideneg` 時隱藏反向資訊（預設顯示）。這只影響畫面，AI 永遠拿完整的 `Knowledge`。
+- **`Knowledge`**（[game/knowledge.go](game/knowledge.go)）：每張手牌可能顏色/數字的 bitmask，保留負向資訊；`Clued` = 曾被提示點到（chop 等進階策略用）；`HintedColors/HintedRanks` 只記正向提示，供 console 在預設（反向資訊關閉，`-showneg` 或遊戲中 `n` 開啟）時隱藏反向資訊。這只影響畫面，AI 永遠拿完整的 `Knowledge`。
 - **回溯（`u`）與偷看（`x`）**：真人回傳 `player.UndoAction` 時 `Run` 回傳 `player.ErrUndo`，`cmd/hanabi` 的 `rewind` 用同一個 seed 重新開局、把真人上一次行動之前的行動照順序重播（AI 每手都重新 Act，直接呼叫 bot、不經過紀錄包裝），`gameLog.rewind` 刪掉被撤銷的行。偷看由 `Human.Peek` 讀真實手牌。兩者都在紀錄裡留 `#` 開頭的註記（重播時忽略），分析使用者回報時要注意「他偷看過」「回溯過」。
 - **可重現**：`game.New(n, seed)` 用 `math/rand/v2` PCG；Card ID 在洗牌後才配，不洩漏牌面。
 - **變體**：`game.Variant`（`NoVariant` / `SixSuits` / `BlackSix`），`game.NewVariant(n, va, seed)`，`Game.Variant` / `PlayerView.Variant`；`NumColors`（= 7，含青色與黑色）只是陣列大小，迭代這局的顏色一律用 `Variant.Colors()` / `v.Colors()`（Black 變體是 R/Y/G/B/W/K，沒有青色），滿分用 `MaxScore()`，張數用 `game.Copies(color, rank)`（黑色每個數字 1 張；AI 用 `ident.copies()`），`NewKnowledge(va)` 的顏色位元只含這局的顏色。5 色與 6 Suits 的牌序和以前完全相同（舊紀錄照樣能重播）；紀錄開頭是 `variant=<代碼>`（`Variant.Code()`：none / 6suits / black6），舊紀錄是 `suits=5/6`、沒有就是 5 色。AI 的牌面全集是 `state.all`（`suitIdents(va)`；ident 有 35 種，`idSet` 是 uint64），新牌筆記、`useful()`、`allClues`、`pace` 都只看這局的顏色——不能再用「全部牌面」，否則會把這局不存在的顏色當成有用的牌。H-Group 對 6 Suits 沒有額外慣例，AI 照原本的等級規則打；6 色 1000 局基準（2/3/4/5 人）：Lv1 25.91/28.04/28.12/27.57、Lv2 25.31/28.23/28.33/27.87、Lv3 25.92/28.06/28.27/27.86、Lv4 25.95/28.05/28.16/27.79。

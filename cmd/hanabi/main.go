@@ -18,7 +18,7 @@ func main() {
 	seed := flag.Uint64("seed", 0, "洗牌種子；0 = 開局時詢問（直接按 Enter 為隨機）。相同種子可重玩同一副牌")
 	name := flag.String("name", "你", "你的名字")
 	noColor := flag.Bool("nocolor", false, "不使用終端顏色")
-	hideNeg := flag.Bool("hideneg", false, "手牌只顯示被提示點到的顏色/數字，不顯示反向提示資訊（預設和 Hanab Live 一樣顯示，例如提示紅色時，沒被點到的牌會排除紅色）")
+	showNeg := flag.Bool("showneg", false, "開局就顯示反向提示資訊（例如提示紅色時，沒被點到的牌排除紅色；遊戲中可用 n 指令切換）")
 	flag.Parse()
 
 	// 人數與慣例等級每局開始前都必須選，不做成啟動參數；種子沒用 -seed 指定時也在這裡問
@@ -48,7 +48,7 @@ func main() {
 		names[i] = fmt.Sprintf("AI-%d", i)
 	}
 	color := !*noColor && os.Getenv("NO_COLOR") == ""
-	r := console.NewRenderer(os.Stdout, names, color, !*hideNeg)
+	r := console.NewRenderer(os.Stdout, names, color, *showNeg)
 
 	gl, err := newGameLog(names, set, *seed)
 	if err != nil {

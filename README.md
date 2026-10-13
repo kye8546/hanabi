@@ -11,7 +11,7 @@
 go run ./cmd/hanabi              # 開局時會要求選人數（2–5）、H-Group 慣例等級（Lv1–25）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black）
 go run ./cmd/hanabi -seed 42     # 固定牌序（不加 -seed 時開局會問種子，直接按 Enter = 隨機）
 go run ./cmd/hanabi -nocolor     # 不用終端顏色（也支援 NO_COLOR 環境變數）
-go run ./cmd/hanabi -hideneg     # 不顯示反向提示資訊，只顯示被點到的顏色/數字（預設和 Hanab Live 一樣顯示）
+go run ./cmd/hanabi -showneg     # 開局就顯示反向提示資訊（預設只顯示被點到的顏色/數字；遊戲中可用 n 即時切換，連 AI 手牌一起）
 ```
 
 編成 Windows 執行檔：`GOOS=windows GOARCH=amd64 go build -o hanabi.exe ./cmd/hanabi`。

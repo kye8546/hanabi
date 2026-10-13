@@ -44,6 +44,12 @@ func NewRenderer(w io.Writer, names []string, color, showNeg bool) *Renderer {
 	return &Renderer{w: w, names: names, color: color, showNeg: showNeg}
 }
 
+// ToggleNeg 切換是否顯示反向提示資訊，回傳切換後的狀態（遊戲中用 n 指令即時切換）。
+func (r *Renderer) ToggleNeg() bool {
+	r.showNeg = !r.showNeg
+	return r.showNeg
+}
+
 func (r *Renderer) printf(format string, a ...any) { fmt.Fprintf(r.w, format, a...) }
 
 func (r *Renderer) style(code, s string) string {
@@ -138,30 +144,9 @@ func (r *Renderer) hand(v game.PlayerView, seat int) {
 
 	if seat == v.Seat {
 		// 自己：列出每張牌仍可能的顏色與數字（隱藏反向資訊時，沒被點到就是 ?）
-		var cols, ranks strings.Builder
-		for _, vc := range cards {
-			pc := r.colorsShown(vc.Know)
-			var s strings.Builder
-			for _, c := range pc {
-				s.WriteString(r.paint(c, c.Letter()))
-			}
-			if len(pc) == 0 {
-				cols.WriteString(cell(r.style(ansiDim, "?"), 1))
-			} else {
-				cols.WriteString(cell(s.String(), len(pc)))
-			}
-			var rs string
-			for _, rk := range r.ranksShown(vc.Know) {
-				rs += strconv.Itoa(int(rk))
-			}
-			if rs == "" {
-				ranks.WriteString(cell(r.style(ansiDim, "?"), 1))
-			} else {
-				ranks.WriteString(cell(rs, len(rs)))
-			}
-		}
-		r.printf("     顏色  %s\n", cols.String())
-		r.printf("     數字  %s\n", ranks.String())
+		cols, ranks := r.possRows(cards)
+		r.printf("     顏色  %s\n", cols)
+		r.printf("     數字  %s\n", ranks)
 		return
 	}
 
@@ -172,7 +157,41 @@ func (r *Renderer) hand(v game.PlayerView, seat int) {
 		known.WriteString(cell(r.knownShort(vc.Know), 2))
 	}
 	r.printf("     手牌  %s\n", actual.String())
-	r.printf("     他知  %s\n", known.String())
+	if !r.showNeg {
+		r.printf("     他知  %s\n", known.String())
+		return
+	}
+	// 顯示反向資訊時，和自己的牌一樣分兩列列出他那張牌剩下的可能顏色與數字
+	cols, ranks := r.possRows(cards)
+	r.printf("     他知  %s\n", cols)
+	r.printf("           %s\n", ranks)
+}
+
+// possRows 回傳每張牌仍可能的顏色列與數字列（依 showNeg 決定含不含反向資訊；沒有資訊時是 ?）。
+func (r *Renderer) possRows(cards []game.VisibleCard) (string, string) {
+	var cols, ranks strings.Builder
+	for _, vc := range cards {
+		pc := r.colorsShown(vc.Know)
+		var s strings.Builder
+		for _, c := range pc {
+			s.WriteString(r.paint(c, c.Letter()))
+		}
+		if len(pc) == 0 {
+			cols.WriteString(cell(r.style(ansiDim, "?"), 1))
+		} else {
+			cols.WriteString(cell(s.String(), len(pc)))
+		}
+		var rs string
+		for _, rk := range r.ranksShown(vc.Know) {
+			rs += strconv.Itoa(int(rk))
+		}
+		if rs == "" {
+			ranks.WriteString(cell(r.style(ansiDim, "?"), 1))
+		} else {
+			ranks.WriteString(cell(rs, len(rs)))
+		}
+	}
+	return cols.String(), ranks.String()
 }
 
 // colorsShown 回傳要顯示的可能顏色；隱藏反向資訊時只回傳被提示點到的顏色（沒有則為空）。
