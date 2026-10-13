@@ -82,4 +82,4 @@ cmd/hanabi 組裝
 
 - 已完成：規則、console 介面、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits 與 Black (6 Suits) 變體、Level 1–4 AI。
 - 下一步：依使用者指示逐級加入 Level 4+（`hgroup.MaxLevel`、`state.level`）。
-- 使用者目前不想用 git：不要 commit。
+- Git：遠端是使用者的個人 GitHub（`origin` = `git@github-personal:kye8546/hanabi.git`，`github-personal` 是 `~/.ssh/config` 的別名；commit 身分由 `~/.gitconfig` 的 `includeIf` 自動切成個人帳號，不要改 remote 網址或 repo 的 user 設定）。**每完成一個改動就自動 commit**（`go build ./... && go vet ./...` 通過、相關測試跑過之後；一個邏輯改動一個 commit，訊息用繁體中文簡述改了什麼、為什麼）。不要 push，使用者自己 push。
