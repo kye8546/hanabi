@@ -391,6 +391,9 @@ func (s *state) refreshFocus(rec *clueRec) {
 	for _, c := range rec.cands {
 		u |= 1 << c.id
 	}
+	if t, ok := s.see(s.me, rec.focus); ok && !u.has(t) {
+		return // 和 onClue 一樣：我看得到的實際牌面不在推測的解讀中，推測不可靠，不寫進筆記
+	}
 	if p := n.poss & u; p != 0 {
 		n.poss = p
 	}

@@ -797,3 +797,19 @@ func TestPreferClueThatPlaysMoreCards(t *testing.T) {
 		t.Fatalf("Alice 應給 Bob「1」（b1、w1 都能打），卻做了 %+v", a)
 	}
 }
+
+func TestRefreshFocusIgnoresReadingsContradictingVisibleCard(t *testing.T) {
+	// 我（Alice）看得到 Bob 被提示的牌是 b2，但我推測的接收者解讀只剩 y2、w2（例如被別的提示的 layer 誤導）：
+	// 推測不可靠，不能把 Bob 那張的筆記縮成 y2/w2——否則之後我會以為沒有人有 b2，把需要 b2 的提示讀成 finesse 自己
+	g, bots := scenarioAt(t, 2, "", "g4 y4 b4 w4 g3", "b2 r4 g4 y4 w4", "y3 r4 g3 b3 w3")
+	force(t, g, game.HintRankTo(1, 2))
+	bots[0].Act(g.View(0))
+	s := bots[0].s
+	id := g.Hands[1][0].Card.ID
+	before := s.notes[id].poss
+	rec := &clueRec{giver: 2, target: 1, focus: id, cands: []cand{{id: identOf(game.Yellow, 2)}, {id: identOf(game.White, 2)}}}
+	s.refreshFocus(rec)
+	if got := s.notes[id].poss; got != before {
+		t.Fatalf("看得到實際是 b2，筆記不該被縮成 %v（原本 %v）", got.list(), before.list())
+	}
+}
