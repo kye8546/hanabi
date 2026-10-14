@@ -370,6 +370,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 			s.refreshFocus(rec)
 		}
 		if promoted {
+			s.promoteFocus(rec)
 			s.selfMark(rec, rec.target)
 		}
 		if changed && rec.target == s.me {

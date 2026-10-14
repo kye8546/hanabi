@@ -476,3 +476,19 @@ func TestOnlyMyFinesseBeforeMyPlay(t *testing.T) {
 		t.Fatalf("Bob 應先給 Cathy 綠色（只有他能給的 Reverse Finesse），卻做了 %+v", a)
 	}
 }
+
+func TestSelfFinesseNoteAfterFinesseTargetPasses(t *testing.T) {
+	// Level 5 挑戰題 Bob is Lazy 的局面（Level 2 就適用）：Alice 提示 Cathy「2」點到 slot 1 與 slot 4，
+	// Cathy 看到 Bob 的 finesse position 是 r1，先記成 r2。Bob 沒盲打（給了別的提示）→ 改成 Self-Finesse，
+	// 她的 2 要改記成 y2/g2/b2/w2；盲打出 y1 後就是 y2（以前筆記一直停在 r2）
+	g, bots := scenarioAt(t, 2, "", "g1 y4 b4 w4 g3", "r1 y4 g4 b4 w4", "y2 y1 g4 b2 w4")
+	force(t, g, game.HintRankTo(2, 2))
+	force(t, g, game.HintRankTo(0, 1)) // Bob：Alice 的 g1
+	if a := step(t, g, bots); a != game.Play(1) || g.Fireworks[game.Yellow] != 1 {
+		t.Fatalf("Cathy 應盲打 finesse position（slot 2 的 y1），卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	bots[2].s.sync(g.View(2))
+	if got := noteOfCard(t, bots[2], g, 2, "y2"); got != idents(t, "y2") {
+		t.Fatalf("Cathy 盲打出 y1 後，她的 2 應是 y2，筆記卻是 %v", got.list())
+	}
+}

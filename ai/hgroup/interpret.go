@@ -390,6 +390,26 @@ func (s *state) refreshFocus(rec *clueRec) {
 	}
 }
 
+// promoteFocus：其他解讀都不成立、改用 self-prompt / self-finesse 的解讀（fallback 升格）時，焦點的筆記要換成它們。
+// 提示當下的筆記只依當時的解讀寫（例如只有「finesse Bob 的 r1 → r2」），和 fallback 沒有交集，refreshFocus 不會改。
+// 我看得到焦點、而它不在這些解讀中時不寫（推測不可靠）。
+func (s *state) promoteFocus(rec *clueRec) {
+	n, ok := s.note(rec.focus)
+	if !ok || s.holder(rec.focus) < 0 {
+		return
+	}
+	var u idSet
+	for _, c := range rec.cands {
+		u |= 1 << c.id
+	}
+	if t, ok := s.see(s.me, rec.focus); ok && !u.has(t) {
+		return
+	}
+	if n.poss&u == 0 && n.explicit&u != 0 {
+		n.poss = n.explicit & u
+	}
+}
+
 // resetNote 清掉一張牌的隱含筆記，只留 explicit 資訊（被提示過的牌再套 Good Touch）。
 func (s *state) resetNote(id int) {
 	n, ok := s.note(id)
