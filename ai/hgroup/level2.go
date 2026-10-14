@@ -42,6 +42,7 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		return kept
 	}
 	rec.passed = append(rec.passed, e.Player)
+	defer s.saveSim()()
 	s.skipFinesse = rec.passed
 	// 他沒盲打的那張不算「已經有人會打」（這個提示可能已把它記成被 finesse；別的提示的筆記不動）
 	var skip []int
@@ -53,7 +54,6 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		}
 	}
 	s.skipCards = skip
-	defer func() { s.skipFinesse, s.skipCards = nil, nil }()
 	for _, id := range lost {
 		deps, ok := s.connectRec(rec, rec.target, id)
 		if !ok || len(deps) == 0 {
@@ -95,9 +95,8 @@ func (s *state) passMeansMe(rec *clueRec, p int, t ident) bool {
 	if !(pos(p) < pos(rec.target) && pos(rec.target) < pos(s.me)) {
 		return false
 	}
-	skip := s.skipFinesse
+	defer s.saveSim()()
 	s.skipFinesse = nil // 他自己不跳過；他沒打的那張仍不算「已經有人會打」（skipCards 保留）
-	defer func() { s.skipFinesse = skip }()
 	deps, ok := s.connectRec(rec, p, t)
 	if !ok {
 		return false

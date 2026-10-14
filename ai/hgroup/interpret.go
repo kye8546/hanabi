@@ -92,23 +92,21 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		return it
 	}
 
+	defer s.saveSim()()
 	// 我看得到被點到的牌時：這次提示的 Good Touch 推論立刻生效（給提示者看得到我的已提示牌，
 	// 就不會點到和它們一樣的牌），算解讀時就用得上
 	if R != s.me {
 		s.pending, s.pendingGiver = touched, giver
-		defer func() { s.pending = nil }()
 	}
 
 	// 這次被點到的牌不在 finesse position 上（finesseSlot 會跳過）
 	s.touchedNow = touched
-	defer func() { s.touchedNow = nil }()
 
 	// 計算期間把接收者的筆記換成「提示後」的樣子（負向資訊會影響 prompt 候選）
 	s.overlay = map[int]idSet{}
 	for id, ex := range it.explicit {
 		s.overlay[id] = s.notes[id].poss & ex
 	}
-	defer func() { s.overlay = nil }()
 
 	base := s.overlay[it.focus]
 	candsOf := func() []cand {
@@ -130,9 +128,10 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	selfDep := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == R }) }
 	alt := it.cands
 	if giver == s.me && R != s.me {
+		restore := s.saveSim()
 		s.optimistic = true
 		alt = candsOf()
-		s.optimistic = false
+		restore()
 	}
 	notSelf := func(c cand) bool { return !selfDep(c) }
 	if slices.ContainsFunc(it.cands, notSelf) || slices.ContainsFunc(alt, notSelf) {

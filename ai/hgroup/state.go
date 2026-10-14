@@ -74,33 +74,47 @@ type state struct {
 	seq       int  // 目前處理到的事件序號
 	midGame   bool // 已經有人棄過牌（Early Game 結束）
 
-	overlay map[int]idSet                              // 模擬提示時暫時覆蓋的筆記
-	why     string                                     // 最近一次決策的理由（除錯用）
-	trace   func(e game.Event, id int, old, new idSet) // 除錯用：筆記變化時呼叫
+	why   string                                     // 最近一次決策的理由（寫進對局紀錄）
+	trace func(e game.Event, id int, old, new idSet) // 除錯用：筆記變化時呼叫
 
-	// optimistic：模擬接收者時，把我（給提示者）看不到的自己手牌當成「可能就是需要的連接牌」。
-	// 只用來判斷接收者會不會有更簡單的解讀，不能用來判斷他看不看得懂真正的牌
-	optimistic bool
+	sim // 推論時暫時套用的假設情境（見 sim）
 
 	holderOf []int // 牌 ID → 持有者座位（-1 = 不在任何人手上）
 	// vis[obs][i]：obs 看得到（我也知道牌面）的他人手牌中，牌面 i 的張數；visOK 為 false 時要重算
 	vis   [game.MaxPlayers][numIdents]int8
 	visOK bool
 
-	// pending：解讀提示的當下，把這次被點到的牌視為已被 giver 提示（讓 Good Touch 推論立刻生效）
-	pending      []int
-	pendingGiver int
-
-	touchedNow  []int // 解讀提示期間：這次被點到的牌
-	skipFinesse []int // 重新找連接牌時：這次提示已經輪過、沒有盲打的人（不會是他）
-	skipCards   []int // 重新找連接牌時：他沒盲打的那些牌（不算已經有人會打）
-	sameClue    []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
-
 	excused int // Wrong Prompt：這張 finesse 的牌在這次行動不套用 Finesse Urgency（-1 = 無）
 
 	// cmLast：每位玩家最近一次被 Chop Move 的牌。他下一次棄牌若棄掉 critical，表示那次 Chop Move 是誤會，
 	// 撤銷它（Level 4 Critical Discards after a Chop Move）
 	cmLast map[int][]int
+}
+
+// sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
+// 推測別人下一手時才有值，平常全是零值。改它之前一律先 saveSim、結束時整組還原
+// （defer s.saveSim()()），所以可以巢狀使用，也不會漏還原。
+type sim struct {
+	overlay map[int]idSet // 暫時覆蓋的筆記（例如接收者「提示後」的筆記，possOf 先讀它）
+
+	// optimistic：模擬接收者時，把我（給提示者）看不到的自己手牌當成「可能就是需要的連接牌」。
+	// 只用來判斷接收者會不會有更簡單的解讀，不能用來判斷他看不看得懂真正的牌
+	optimistic bool
+
+	// pending：解讀提示的當下，把這次被點到的牌視為已被 pendingGiver 提示（讓 Good Touch 推論立刻生效）
+	pending      []int
+	pendingGiver int
+
+	touchedNow  []int // 解讀提示期間：這次被點到的牌（不在 finesse position 上）
+	skipFinesse []int // 重新找連接牌時：這次提示已經輪過、沒有盲打的人（不會是他）
+	skipCards   []int // 重新找連接牌時：他沒盲打的那些牌（不算已經有人會打）
+	sameClue    []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
+}
+
+// saveSim 存下目前的假設情境，回傳還原它的函式。
+func (s *state) saveSim() (restore func()) {
+	saved := s.sim
+	return func() { s.sim = saved }
 }
 
 func newState(v game.PlayerView, level int) *state {

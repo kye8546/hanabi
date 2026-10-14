@@ -288,7 +288,7 @@ func (s *state) nextMisplaysAfter(slot int) []int {
 // nextMisplay：p 依他自己推得出的筆記（看得到的張數、Good Touch，已打出的牌面也排除）下一手要打的牌，
 // 若是壞掉、實際不能打的牌就回傳它，否則回傳 -1。
 func (s *state) nextMisplay(p int, broken map[int]bool) int {
-	old := s.overlay
+	restore := s.saveSim()
 	s.overlay = map[int]idSet{}
 	for _, y := range s.hands[p] {
 		q := s.deduce(p, y)
@@ -298,7 +298,7 @@ func (s *state) nextMisplay(p int, broken map[int]bool) int {
 		s.overlay[y] = q
 	}
 	y := s.nextPlay(p)
-	s.overlay = old
+	restore()
 	if _, ok := broken[y]; ok && !s.playableNow(identOfCard(s.cards[y])) {
 		return y
 	}

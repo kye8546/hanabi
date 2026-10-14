@@ -50,9 +50,8 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 // connectRec 為已發生的提示 rec 重新找連接牌：同一個提示點到的新牌不能當焦點的連接牌
 // （delayed play clue 只能接之前就被拿到的牌；當時它們也還沒被提示）。
 func (s *state) connectRec(rec *clueRec, obs int, t ident) ([]dep, bool) {
-	old := s.sameClue
+	defer s.saveSim()()
 	s.sameClue = rec.fresh
-	defer func() { s.sameClue = old }()
 	return s.connect(obs, rec.giver, rec.target, rec.focus, t)
 }
 
