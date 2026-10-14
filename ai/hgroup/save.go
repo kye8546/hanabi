@@ -42,8 +42,9 @@ func (s *state) needsSave(p, id int) bool {
 // saveIsOthersJob：要救的 t 可能和我手上不確定的已提示牌重複（`maybeMine`），交給別人決定（Level 12 Duplication
 // Responsibility 第一段：手上有已提示的 2 的人不該負責救 2，以免違反 Good Touch；他看得到我那張，多半根本不用救）：
 //   - 在 R 行動前還有別人手上可能重複的已提示牌比我少：交給他救；
-//   - 另有一位（不是 R）手上沒有可能是 t 的已提示牌：他看得到我的牌和那張 chop，對這件事是全知的，讓他判斷——
-//     就算他輪到前 R 先棄掉了它（不是 critical，還有另一張），期望值仍比冒重複的險高（使用者的判斷）。
+//   - 另有一位（不是 R）手上沒有可能是 t 的已提示牌：他看得到我的牌和那張 chop，對這件事是全知的，讓他判斷。
+//     他在 R 之後才行動也一樣：冒違反 Good Touch 的風險做 2 Save 不算 Early Game 必須做的事（使用者的判斷），
+//     我照一般流程給別的提示或棄牌，R 先棄掉它（不是 critical，還有另一張）也可接受。
 //     2 人局沒有這樣的人，照救。critical 的 t 不會走到這裡（看得到最後一張時，我的牌就不會是它）。
 func (s *state) saveIsOthersJob(R int, t ident) bool {
 	if !s.maybeMine(t) {
