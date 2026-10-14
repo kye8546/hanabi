@@ -2,7 +2,10 @@ package hgroup
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -261,9 +264,119 @@ func TestReplayLog(t *testing.T) {
 	var dumpTurn int
 	fmt.Sscan(os.Getenv("HREPLAY"), &path, &dumpTurn)
 	free, _ := strconv.Atoi(os.Getenv("HFREE")) // 從這回合起 AI 不照紀錄、照自己的決定（看改動後的走向）
-	data, err := os.ReadFile(path)
+	diffs, err := replayLog(path, dumpTurn, free, os.Stdout)
+	for _, d := range diffs {
+		t.Errorf("%s（AI 程式可能已改變）", d)
+	}
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestReplayAll 重播 logs/ 裡所有紀錄，列出 AI 和紀錄不一致的回合，和基準 logs/replay_base.txt 比對
+// （每次改 AI 後都跑：只該出現預期中的差異）。結果另存 logs/replay_new.txt。
+// HREPLAYALL=1 比對；HREPLAYALL=accept 把這次的結果存成新基準（確認差異都是預期的之後）；沒有基準時自動建立。
+// HLOGS 可改紀錄目錄（預設 repo 的 logs/）。
+func TestReplayAll(t *testing.T) {
+	mode := os.Getenv("HREPLAYALL")
+	if mode == "" {
+		t.Skip()
+	}
+	dir := os.Getenv("HLOGS")
+	if dir == "" {
+		dir = filepath.Join("..", "..", "logs")
+	}
+	files, err := filepath.Glob(filepath.Join(dir, "*.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(files)
+	var b strings.Builder
+	for _, f := range files {
+		diffs, err := replayLog(f, 0, 0, io.Discard)
+		if err != nil {
+			diffs = append(diffs, "重播失敗："+err.Error())
+		}
+		if len(diffs) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "== %s\n", filepath.Base(f))
+		for _, d := range diffs {
+			fmt.Fprintf(&b, "  %s\n", d)
+		}
+	}
+	cur := b.String()
+	if err := os.WriteFile(filepath.Join(dir, "replay_new.txt"), []byte(cur), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	basePath := filepath.Join(dir, "replay_base.txt")
+	base, err := os.ReadFile(basePath)
+	if mode == "accept" || err != nil {
+		if err := os.WriteFile(basePath, []byte(cur), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("已把這次結果存成基準 %s（%d 份紀錄）", basePath, len(files))
+		return
+	}
+	if d := diffReplay(string(base), cur); d != "" {
+		t.Errorf("重播結果和基準不同（- 基準、+ 這次；確認都是預期的改變後，用 HREPLAYALL=accept 更新基準）：\n%s", d)
+		return
+	}
+	t.Logf("重播結果和基準相同（%d 份紀錄）", len(files))
+}
+
+// diffReplay 逐份紀錄比較兩次 TestReplayAll 的結果，回傳差異（空字串 = 相同）。
+func diffReplay(base, cur string) string {
+	parse := func(s string) map[string][]string {
+		m := map[string][]string{}
+		name := ""
+		for _, line := range strings.Split(s, "\n") {
+			if n, ok := strings.CutPrefix(line, "== "); ok {
+				name = n
+				m[name] = nil
+			} else if line != "" {
+				m[name] = append(m[name], line)
+			}
+		}
+		return m
+	}
+	a, b := parse(base), parse(cur)
+	var names []string
+	for n := range a {
+		names = append(names, n)
+	}
+	for n := range b {
+		if _, ok := a[n]; !ok {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	var out strings.Builder
+	for _, n := range names {
+		if slices.Equal(a[n], b[n]) {
+			continue
+		}
+		fmt.Fprintf(&out, "== %s\n", n)
+		for _, l := range a[n] {
+			if !slices.Contains(b[n], l) {
+				fmt.Fprintf(&out, "- %s\n", strings.TrimSpace(l))
+			}
+		}
+		for _, l := range b[n] {
+			if !slices.Contains(a[n], l) {
+				fmt.Fprintf(&out, "+ %s\n", strings.TrimSpace(l))
+			}
+		}
+	}
+	return out.String()
+}
+
+// replayLog 照對局紀錄重播：真人照紀錄行動，AI 每手都重新決定，和紀錄不同的回合回傳成 diffs
+// （之後仍照紀錄進行；free > 0 時從第 free 回合起改照 AI 的決定）。逐回合過程與 dumpTurn 回合的筆記寫到 out。
+func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
 	var seed uint64
 	var n, level int
@@ -282,13 +395,14 @@ func TestReplayLog(t *testing.T) {
 		}
 		var turn, seat int
 		var code string
-		if _, err := fmt.Sscanf(line, "t%d P%d %s", &turn, &seat, &code); err == nil {
+		// 結束行（「t64 P0 end」）和最後一手是同一個回合，不能蓋掉那一手的代碼
+		if _, err := fmt.Sscanf(line, "t%d P%d %s", &turn, &seat, &code); err == nil && code != "end" {
 			codes[turn] = code
 		}
 	}
 	g, err := game.NewVariant(n, va, seed)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 	bots := make([]*Bot, n)
 	for i := range bots {
@@ -301,7 +415,10 @@ func TestReplayLog(t *testing.T) {
 		if !ok {
 			break
 		}
-		want := parseCode(t, code)
+		want, err := parseCode(code)
+		if err != nil {
+			return diffs, err
+		}
 		var a game.Action
 		if p == 0 {
 			a = want
@@ -317,71 +434,70 @@ func TestReplayLog(t *testing.T) {
 					c := g.Hands[p][a.Slot].Card
 					extra = fmt.Sprintf("［會打出 %s：%v］", c, c.Rank == g.Fireworks[c.Color]+1)
 				}
-				t.Errorf("t%d P%d：重播得到 %+v，紀錄是 %s（AI 程式可能已改變）%s", turn, p, a, code, extra)
+				diffs = append(diffs, fmt.Sprintf("t%d P%d：重播得到 %+v，紀錄是 %s%s", turn, p, a, code, extra))
 				if free == 0 || turn < free {
 					a = want
 				} else {
-					fmt.Printf("    （HFREE：P%d 改照 AI 行動，之後真人照紀錄行動可能不合理）\n", p)
+					fmt.Fprintf(out, "    （HFREE：P%d 改照 AI 行動，之後真人照紀錄行動可能不合理）\n", p)
 				}
 			}
 		}
 		if turn == dumpTurn && p != 0 {
 			st := bots[p].s
 			for _, ev := range st.allClues() {
-				fmt.Printf("  EV %s→P%d kind=%d focus=#%d und=%v mis=%v danger=%v bad=%d good=%d score=%d\n",
+				fmt.Fprintf(out, "  EV %s→P%d kind=%d focus=#%d und=%v mis=%v danger=%v bad=%d good=%d score=%d\n",
 					evHint(ev.act.Hint), ev.target, ev.kind, ev.focus, ev.understood, ev.misleads, ev.danger, ev.bad, ev.newGood, ev.score)
 				if ev.kind != kindNone {
 					it := st.interpret(st.me, ev.target, ev.act.Hint, ev.touched)
-					fmt.Printf("     cands=%v plan=%+v\n", it.cands, it.plan)
+					fmt.Fprintf(out, "     cands=%v plan=%+v\n", it.cands, it.plan)
 				}
 			}
 		}
 		if turn == dumpTurn {
-			fmt.Printf("=== 第 %d 回合開始前（輪到 P%d）\n", turn, p)
+			fmt.Fprintf(out, "=== 第 %d 回合開始前（輪到 P%d）\n", turn, p)
 			for q := range n {
-				fmt.Printf("  實際 P%d: %s\n", q, handIDs(g, q))
+				fmt.Fprintf(out, "  實際 P%d: %s\n", q, handIDs(g, q))
 			}
 			for q, b := range bots {
 				if b.s == nil {
 					continue
 				}
-				fmt.Printf("  P%d 的筆記：\n", q)
+				fmt.Fprintf(out, "  P%d 的筆記：\n", q)
 				for h := range n {
-					fmt.Printf("    P%d: %s\n", h, dumpHand(b, h))
+					fmt.Fprintf(out, "    P%d: %s\n", h, dumpHand(b, h))
 				}
 				for _, r := range b.s.recs {
-					fmt.Printf("    rec P%d→P%d focus=#%d cands=%+v fallback=%+v plan=%+v\n", r.giver, r.target, r.focus, r.cands, r.fallback, r.plan)
+					fmt.Fprintf(out, "    rec P%d→P%d focus=#%d cands=%+v fallback=%+v plan=%+v\n", r.giver, r.target, r.focus, r.cands, r.fallback, r.plan)
 				}
 			}
 		}
 		evs, err := g.Apply(a)
 		if err != nil {
-			t.Fatalf("t%d: %v", turn, err)
+			return diffs, fmt.Errorf("t%d: %v", turn, err)
 		}
 		why := ""
 		if p != 0 {
 			why = bots[p].s.why
 		}
-		fmt.Printf("t%-3d %-34s %s\n", turn, evStr(evs[0], names), why)
+		fmt.Fprintf(out, "t%-3d %-34s %s\n", turn, evStr(evs[0], names), why)
 	}
+	return diffs, nil
 }
 
-func parseCode(t *testing.T, code string) game.Action {
-	t.Helper()
+func parseCode(code string) (game.Action, error) {
 	switch {
 	case len(code) == 2 && code[0] == 'p':
-		return game.Play(int(code[1]-'0') - 1)
+		return game.Play(int(code[1]-'0') - 1), nil
 	case len(code) == 2 && code[0] == 'd':
-		return game.Discard(int(code[1]-'0') - 1)
+		return game.Discard(int(code[1]-'0') - 1), nil
 	case len(code) == 3 && code[0] == 'h':
 		target := int(code[1] - '0')
 		if c, ok := game.ParseColor(code[2:]); ok {
-			return game.HintColorTo(target, c)
+			return game.HintColorTo(target, c), nil
 		}
-		return game.HintRankTo(target, game.Rank(code[2]-'0'))
+		return game.HintRankTo(target, game.Rank(code[2]-'0')), nil
 	}
-	t.Fatalf("看不懂行動代碼 %q", code)
-	return game.Action{}
+	return game.Action{}, fmt.Errorf("看不懂行動代碼 %q", code)
 }
 
 func evHint(h game.Hint) string {
