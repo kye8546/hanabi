@@ -284,7 +284,7 @@ func endReasonText(reason game.EndReason) string {
 	case game.EndStrikes:
 		return "三道閃電，煙火秀失敗"
 	case game.EndPerfect:
-		return "五色煙火全部完成！"
+		return "所有煙火全部完成！"
 	case game.EndDeckOut:
 		return "牌堆用盡，最後一輪結束"
 	}
