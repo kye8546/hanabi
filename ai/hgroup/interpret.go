@@ -167,7 +167,7 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 			}
 			// 他看不到自己的牌：例如他手上有可能是連接牌的已提示牌時，他會以為是 prompt 而不盲打
 			theirs, ok := s.connect(d.player, giver, R, it.focus, t)
-			if !ok || !slices.Equal(theirs, it.plan) {
+			if !ok || !sameDeps(theirs, it.plan) {
 				it.agreed = false
 			}
 		}
@@ -187,6 +187,12 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		}
 	}
 	return it
+}
+
+// sameDeps：兩個計畫要同樣的人打同樣的牌。layer 的數目不算（Level 5 Layered / Hidden Finesse：盲打的人
+// 看不到自己的牌，不知道前面有 layer，但他第一張打的牌和看得到的人預期的一樣）。
+func sameDeps(a, b []dep) bool {
+	return slices.EqualFunc(a, b, func(x, y dep) bool { x.layers, y.layers = 0, 0; return x == y })
 }
 
 // fresh：不是起手牌（Level 3 Fresh 1's）。
@@ -316,7 +322,7 @@ func (s *state) onClue(e game.Event) {
 	}
 
 	rec := &clueRec{giver: e.Player, target: R, focus: it.focus, cands: it.cands, fallback: it.fallback,
-		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards}
+		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq}
 	var u idSet
 	for _, c := range it.cands {
 		u |= 1 << c.id

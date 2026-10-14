@@ -18,6 +18,7 @@ type note struct {
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
 	touches  int      // 被正向提示點到的次數（Level 4 Order Chop Move：點到次數不同的 1 不算同一組）
+	drawn    int      // 抽到這張牌時的事件序號（起手牌是 0；Level 5 Layered Finesse：提示之後才抽的牌不在 layer 裡）
 	explicit idSet    // 只由提示本身（正向與負向）得到的可能
 	poss     idSet    // 依慣例推論後的可能（隱含資訊）
 	// giverOwn：這張牌第一次被提示時，給提示者自己手上被提示的牌當時的解讀（牌 ID → 解讀），
@@ -31,6 +32,9 @@ type dep struct {
 	card    int // 預期打出的牌 ID
 	id      ident
 	finesse bool // true = finesse（應立即盲打）；false = prompt
+	// layers：我（推論者）看得到、他會先打出的其他能打的牌有幾張（Level 5 Layered Finesse 的 layer，或 Hidden Finesse
+	// 先被當成 prompt 打出的已提示牌）。card 是他第一張會打的牌——他看不到自己的牌，以為它就是 id
+	layers int
 }
 
 // cand 是被提示焦點牌的一種可能解讀。
@@ -54,6 +58,7 @@ type clueRec struct {
 	chop     bool  // 焦點在 chop 上（Level 3 Chop-Focus 例外：這張 1 最先打）
 	fresh    []int // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
 	passed   []int // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
+	seq      int   // 提示時的事件序號
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
@@ -85,6 +90,8 @@ type state struct {
 	visOK bool
 
 	excused int // Wrong Prompt：這張 finesse 的牌在這次行動不套用 Finesse Urgency（-1 = 無）
+	// deferred：Level 5 Urgency Principle 的例外——這次行動（緊急的提示）可以延後盲打，不算沒接 finesse
+	deferred bool
 
 	// cmLast：每位玩家最近一次被 Chop Move 的牌。他下一次棄牌若棄掉 critical，表示那次 Chop Move 是誤會，
 	// 撤銷它（Level 4 Critical Discards after a Chop Move）
@@ -109,6 +116,9 @@ type sim struct {
 	skipFinesse []int // 重新找連接牌時：這次提示已經輪過、沒有盲打的人（不會是他）
 	skipCards   []int // 重新找連接牌時：他沒盲打的那些牌（不算已經有人會打）
 	sameClue    []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
+	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
+	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
+	assumeMine bool
 }
 
 // saveSim 存下目前的假設情境，回傳還原它的函式。
@@ -282,7 +292,9 @@ func (s *state) sync(v game.PlayerView) {
 func (s *state) apply(e game.Event) {
 	switch e.Type {
 	case game.EvHint:
+		s.deferred = s.deferrable(e)
 		s.checkDeps(e, -1)
+		s.deferred = false
 		s.onClue(e)
 		s.hints--
 	case game.EvPlay, game.EvMisplay, game.EvDiscard:
@@ -346,6 +358,7 @@ func (s *state) apply(e game.Event) {
 		s.track(e.Card.ID)
 		s.holderOf[e.Card.ID] = e.Player
 		s.notes[e.Card.ID] = s.newNote()
+		s.notes[e.Card.ID].drawn = s.seq
 	}
 }
 
@@ -394,6 +407,17 @@ func (s *state) chop(p int) int {
 	for i := len(h) - 1; i >= 0; i-- {
 		if !s.gotten(h[i]) && !s.notes[h[i]].cm {
 			return h[i]
+		}
+	}
+	return -1
+}
+
+// layerSlot：rec 提示當下就在 p 手上、還沒被拿到的牌中最左邊那張（不含 skip）。Level 5 Layered / Hidden Finesse：
+// 盲打（或當成 prompt 打出）的牌是別張能打的牌時，真正的牌在這裡（之後才抽到的牌不算）。沒有則回傳 -1。
+func (s *state) layerSlot(rec *clueRec, p, skip int) int {
+	for _, id := range s.hands[p] {
+		if id != skip && s.notes[id].drawn <= rec.seq && !s.gotten(id) {
+			return id
 		}
 	}
 	return -1

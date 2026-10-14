@@ -164,7 +164,13 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.score = -dist
 		return ev, true
 	}
-	if !ev.understood || s.stomps(touched) {
+	if !ev.understood {
+		return ev, true
+	}
+	if s.stomps(touched) {
+		// Level 5：Layered / Hidden Finesse 中，真正要盲打的牌被直接提示後打出，會被當成那個 finesse 兌現了
+		// （例如 Clandestine Finesse 的接收者以為是另一種解讀），拖延時也不能用
+		ev.misleads = ev.misleads || s.knows(lvLayeredFinesse)
 		return ev, true
 	}
 
@@ -181,6 +187,12 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 			ev.misleads = true
 			return ev, true
 		}
+	}
+	// Level 5 的 Layered Finesse，以及要排在同一人另一個還沒打的 finesse 後面的 Queued Finesse：只解讀、不主動給。
+	// 盲打的人要多花好幾回合、接收者也要多等，自我對局 4–5 人局明顯變差（5 人局約 -0.3 分；只給單層、
+	// layer 不和已被拿到的牌重複的也一樣）。Hidden Finesse 照給（分數持平）
+	if s.knows(lvLayeredFinesse) && slices.ContainsFunc(plan, func(d dep) bool { return d.finesse && (d.layers > 0 || s.queuedBehind(d)) }) {
+		return ev, true
 	}
 	// 被 prompt / finesse 叫出來的連接牌，若可能和我手上不確定的已提示牌重複，同樣違反 Good Touch
 	// （Level 10 Sarcastic Finesse：「Normally, potentially duplicating a card is bad」；那種刻意的用法是 Level 10）

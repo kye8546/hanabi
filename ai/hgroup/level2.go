@@ -64,7 +64,7 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		visible := true
 		for _, d := range deps {
 			if d.finesse {
-				if t, ok := s.see(rec.target, d.card); !ok || t != d.id || d.player == s.me {
+				if t, ok := s.see(rec.target, d.card); !ok || t != d.id && d.layers == 0 || d.player == s.me {
 					visible = false
 				}
 			}
@@ -89,20 +89,24 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 }
 
 // passMeansMe：從沒盲打的 p 的角度（不跳過他自己）找 t 的連接時，需要的 finesse 落在他自己或我身上。
+// Level 2 只處理「他在給提示者與接收者之間、我在接收者之後」：他沒打，是因為看到我可能被逆飛。
+// Level 5 The Ambiguous Finesse / Urgency Principle：其他位置也一樣——他看得到我的 finesse position 上有那張而不打，
+// 就是我（大家都會儘快盲打，他不打就表示不是他）；但只限他的角度確實落在我身上。
 func (s *state) passMeansMe(rec *clueRec, p int, t ident) bool {
-	// 只處理「他在給提示者與接收者之間、我在接收者之後」：他沒打，是因為看到我可能被逆飛
 	pos := func(q int) int { return (q - rec.giver + s.n) % s.n }
-	if !(pos(p) < pos(rec.target) && pos(rec.target) < pos(s.me)) {
+	reverse := pos(p) < pos(rec.target) && pos(rec.target) < pos(s.me)
+	if !reverse && !s.knows(lvUrgency) {
 		return false
 	}
 	defer s.saveSim()()
 	s.skipFinesse = nil // 他自己不跳過；他沒打的那張仍不算「已經有人會打」（skipCards 保留）
+	s.assumeMine = !reverse
 	deps, ok := s.connectRec(rec, p, t)
 	if !ok {
 		return false
 	}
 	for _, d := range deps {
-		if d.finesse && (d.player == p || d.player == s.me) {
+		if d.finesse && (d.player == s.me || reverse && d.player == p) {
 			return true
 		}
 	}
@@ -185,6 +189,7 @@ func (s *state) applyWrongPrompt(fp int, ids idSet, rec *clueRec) {
 // 直接提示本來就會被盲打的牌，浪費一個提示）。例如我收到的提示可能是 Reverse Finesse 下一位，
 // 我就該等他盲打，不是直接提示他那張。
 // 只看我是接收者、看不到焦點牌的提示（看得到時，計畫裡的 finesse 牌已經記成被 finesse，不會是新牌）。
+// Level 5：Layered / Hidden Finesse 真正要盲打的牌在 layer 後面，也不能直接提示它（What's Hidden? 挑戰題）。
 func (s *state) stomps(touched []int) bool {
 	for _, rec := range s.recs {
 		if rec.target != s.me {
@@ -192,7 +197,9 @@ func (s *state) stomps(touched []int) bool {
 		}
 		for _, c := range rec.cands {
 			for _, d := range c.deps {
-				if d.finesse && d.player != s.me && !s.notes[d.card].clued && slices.Contains(touched, d.card) {
+				if (d.finesse || d.layers > 0) && d.player != s.me && slices.ContainsFunc(s.depCards(d), func(id int) bool {
+					return !s.notes[id].clued && slices.Contains(touched, id)
+				}) {
 					return true
 				}
 			}

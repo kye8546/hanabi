@@ -43,6 +43,7 @@ type decideStep func(s *state, t *turn) (game.Action, string, bool)
 
 // decideSteps 是決策的優先順序，由上而下第一個成立的就是這手的行動；最後的棄牌一定成立。
 var decideSteps = []decideStep{
+	(*state).stepDeferFinesse,      //    Level 5 Urgency Principle 的例外：下一位要棄掉必須保留的 chop，先救再盲打
 	(*state).stepFinesseBlindPlay,  // 1. 被 finesse 的牌立刻盲打（Finesse Urgency）
 	(*state).stepOrderChopMoveNext, //    Order Chop Move 能保護下一位必須保留的 chop：比給他提示好
 	(*state).stepUrgentSave,        // 2. 下一位要棄掉必須保留的 chop：就算自己有牌可打也先救
@@ -72,10 +73,8 @@ func (s *state) decide(v game.PlayerView) game.Action {
 }
 
 func (s *state) stepFinesseBlindPlay(t *turn) (game.Action, string, bool) {
-	for slot, id := range s.hands[s.me] {
-		if s.notes[id].finessed && s.knownPlayable(id) {
-			return game.Play(slot), "finesse 盲打", true
-		}
+	if ids := s.blindPlayOrder(); len(ids) > 0 {
+		return game.Play(slices.Index(s.hands[s.me], ids[0])), "finesse 盲打", true
 	}
 	return game.Action{}, "", false
 }
