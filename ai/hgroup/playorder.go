@@ -60,7 +60,7 @@ func (s *state) playOrder(p int) []int {
 			}
 		}
 		sub := slot
-		one := s.level >= 3 && poss&^rankSet(1) == 0
+		one := s.knows(lvMultipleOnes) && poss&^rankSet(1) == 0
 		switch {
 		case one:
 			switch {

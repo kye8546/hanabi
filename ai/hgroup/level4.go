@@ -19,7 +19,7 @@ const (
 //   - The 5's Chop Move：不是拖延的情況下（5 Stall 優先），數字 5 點到的最右邊那張新的 5 正好在 chop 左邊一張：
 //     Chop Move chop 上那一張（只有一張）。點到 chop 的是 5 Save；離 chop 兩張以上的 5 仍是 play clue。
 func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it *interp) {
-	if s.level < 4 || len(fresh) == 0 {
+	if !s.knows(lvChopMove) || len(fresh) == 0 {
 		return
 	}
 	// 只用大家都知道的資訊（提示本身、被提示與 Chop Move 的牌）：私下的推論或只有部分人知道的 finesse
@@ -212,7 +212,7 @@ func (s *state) ocmSkip(p, x int) int {
 		return k&^rankSet(1) == 0 && k.count() > 1
 	}
 	n := s.notes[x]
-	if s.level < 4 || !n.clued || n.finessed || n.bad || !unknownOne(x) || s.mayBeFinessed(x) {
+	if !s.knows(lvChopMove) || !n.clued || n.finessed || n.bad || !unknownOne(x) || s.mayBeFinessed(x) {
 		return 0
 	}
 	skip := 0

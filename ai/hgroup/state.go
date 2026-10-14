@@ -274,7 +274,7 @@ func (s *state) apply(e game.Event) {
 	case game.EvPlay, game.EvMisplay, game.EvDiscard:
 		// Level 4 The Order Chop Move：要在打出前（照他打牌前的手牌）算他跳過了幾張 1
 		ocmTarget := -1
-		if e.Type == game.EvPlay && s.level >= 4 {
+		if e.Type == game.EvPlay && s.knows(lvChopMove) {
 			if k := s.ocmSkip(e.Player, e.Card.ID); k > 0 && k < s.n {
 				ocmTarget = (e.Player + k) % s.n
 			}
@@ -282,7 +282,7 @@ func (s *state) apply(e game.Event) {
 		var wpRec *clueRec
 		var wpCard int
 		var wpIDs idSet
-		if e.Type == game.EvMisplay && s.level >= 2 {
+		if e.Type == game.EvMisplay && s.knows(lvWrongPrompt) {
 			wpCard, wpIDs, wpRec = s.wrongPrompt(e.Player, e.Card.ID)
 		}
 		if wpRec != nil {

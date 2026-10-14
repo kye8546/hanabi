@@ -33,7 +33,7 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 				return nil, false
 			}
 		}
-		if len(deps) > 0 && s.level < 2 {
+		if len(deps) > 0 && !s.knows(lvMultiConnect) {
 			return nil, false // 雙重 prompt / finesse 是 Level 2
 		}
 		pos := (d.player - giver + s.n) % s.n
@@ -137,7 +137,7 @@ func (s *state) finesseSlot(p int, used []int) int {
 		if slices.Contains(used, id) || slices.Contains(s.touchedNow, id) {
 			continue
 		}
-		if n := s.notes[id]; n.finessed && !n.clued && s.level >= 2 && s.level < 5 {
+		if n := s.notes[id]; n.finessed && !n.clued && s.knows(lvMultiConnect) && !s.knows(lvQueuedFinesse) {
 			return -1
 		}
 		if !s.gotten(id) {
@@ -155,14 +155,14 @@ func (s *state) findFinesse(obs, giver, R int, m ident, used []int) (dep, bool) 
 	for k := 1; k < s.n; k++ {
 		p := (giver + k) % s.n
 		if p == R {
-			if s.level < 2 {
+			if !s.knows(lvReverseFinesse) {
 				break
 			}
 			continue
 		}
 		order = append(order, p)
 	}
-	if s.level >= 2 {
+	if s.knows(lvSelfFinesse) {
 		order = append(order, R)
 	}
 	var unknown *dep
@@ -211,7 +211,7 @@ func (s *state) selfMark(rec *clueRec, who int) {
 	var ids idSet
 	for _, c := range rec.cands {
 		i := slices.IndexFunc(c.deps, func(d dep) bool { return d.player == who })
-		if i < 0 || s.level < 2 && len(c.deps) != 1 {
+		if i < 0 || !s.knows(lvMultiConnect) && len(c.deps) != 1 {
 			return
 		}
 		d := c.deps[i]
@@ -240,7 +240,7 @@ func (s *state) selfMark(rec *clueRec, who int) {
 // markCommon：我是接收者、看不到焦點牌時，每種解讀都要同一張別人的牌被 finesse，
 // 那張牌就確定被 finesse 了（看得到焦點牌的人也會照 plan 寫下同樣的筆記），之後大家的 finesse position 才一致。
 func (s *state) markCommon(rec *clueRec) {
-	if s.level < 2 || len(rec.cands) == 0 {
+	if !s.knows(lvMultiConnect) || len(rec.cands) == 0 {
 		return
 	}
 	for _, d := range rec.cands[0].deps {
@@ -340,7 +340,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 		// 接收者角度的解讀
 		passedBefore := slices.Clone(rec.cands)
 		kept, changed, done := s.stepCands(rec.cands, e, played, -1)
-		if s.level >= 2 && e.Player != rec.target && e.Player != s.me && !slices.Contains(rec.passed, e.Player) {
+		if s.knows(lvSelfFinesse) && e.Player != rec.target && e.Player != s.me && !slices.Contains(rec.passed, e.Player) {
 			kept = s.retryFinesse(rec, e, played, passedBefore, kept)
 		}
 		// 可能是 save clue 的提示不會觸發 prompt，已提示的連接牌被打出證明不了什麼；

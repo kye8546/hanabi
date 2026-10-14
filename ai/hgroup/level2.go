@@ -19,7 +19,7 @@ func (s *state) mustStall(giver int) bool { return s.hints >= game.MaxHints || s
 // （這張能打），除非給提示者這一手不能棄牌（那只是拖延）：
 // Early Game 中，或給提示者不能棄牌（提示滿 8、或手牌全被拿到）時，只是救下這些 5、拖延時間。
 func (s *state) fiveStall(giver int, h game.Hint) bool {
-	if s.level < 2 || h.Kind != game.HintRank || h.Rank != game.MaxRank {
+	if !s.knows(lvFiveStall) || h.Kind != game.HintRank || h.Rank != game.MaxRank {
 		return false
 	}
 	return !s.midGame || s.hints >= game.MaxHints || s.chop(giver) < 0

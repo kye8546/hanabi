@@ -77,7 +77,7 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		it.focus = it.newCards[0]
 	case slices.Contains(fresh, chop):
 		it.focus, it.chopFocus = chop, true
-	case s.level >= 3 && h.Kind == game.HintRank && h.Rank == 1 && !slices.ContainsFunc(fresh, s.fresh):
+	case s.knows(lvMultipleOnes) && h.Kind == game.HintRank && h.Rank == 1 && !slices.ContainsFunc(fresh, s.fresh):
 		// Level 3 Playing Multiple 1's：焦點是最先打的那張 1；點到的全是起手牌時是最右邊（最舊）那張
 		// （新抽的牌一定在起手牌左邊，有新抽的 1 時就是最左邊的新牌，和一般規則一樣）
 		it.focus = fresh[len(fresh)-1]
@@ -137,7 +137,7 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	notSelf := func(c cand) bool { return !selfDep(c) }
 	if slices.ContainsFunc(it.cands, notSelf) || slices.ContainsFunc(alt, notSelf) {
 		// 只有「樂觀地假設接收者看得到我手上的連接牌」時才有其他解讀：他實際上很可能只剩 self 解讀
-		it.selfRisk = s.level >= 2 && !slices.ContainsFunc(it.cands, notSelf)
+		it.selfRisk = s.knows(lvSelfFinesse) && !slices.ContainsFunc(it.cands, notSelf)
 		// 其他解讀被證實不成立（該打的人沒打）後，才輪到 self-prompt / self-finesse（Lv1 只會有 self-prompt）
 		it.fallback = slices.DeleteFunc(slices.Clone(it.cands), notSelf)
 		it.cands = slices.DeleteFunc(it.cands, selfDep)
@@ -148,7 +148,7 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	selfFin := func(c cand) bool {
 		return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == R && d.finesse })
 	}
-	if s.level >= 2 && slices.ContainsFunc(it.cands, selfFin) && slices.ContainsFunc(it.cands, func(c cand) bool { return !selfFin(c) }) {
+	if s.knows(lvSelfFinesse) && slices.ContainsFunc(it.cands, selfFin) && slices.ContainsFunc(it.cands, func(c cand) bool { return !selfFin(c) }) {
 		it.fallback = append(it.fallback, slices.DeleteFunc(slices.Clone(it.cands), func(c cand) bool { return !selfFin(c) })...)
 		it.cands = slices.DeleteFunc(it.cands, selfFin)
 	}
@@ -366,10 +366,10 @@ func (s *state) onClue(e game.Event) {
 		s.markCommon(rec)
 	} else {
 		s.pruneByMyCards(rec)
-		if s.level >= 2 {
+		if s.knows(lvSelfFinesse) {
 			s.selfMark(rec, R)
 		}
-		if s.level >= 3 {
+		if s.knows(lvInfoLock) {
 			s.lockMine(rec, it)
 		}
 	}

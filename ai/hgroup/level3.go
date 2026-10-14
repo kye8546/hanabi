@@ -12,7 +12,7 @@ import (
 // markExcessOnes（Level 3 Playing Multiple 1's）：手上被提示的 1 比它們可能的牌面種類還多時，
 // 依 Good Touch 多出來的那幾張（照出牌順序排在最後的）永遠不會打出，是已知沒用的牌。
 func (s *state) markExcessOnes() {
-	if s.level < 3 {
+	if !s.knows(lvMultipleOnes) {
 		return
 	}
 	for p := range s.n {
@@ -40,7 +40,7 @@ func (s *state) markExcessOnes() {
 //
 // 「A clue cannot be a Play Clue and a Fix Clue at the same time」：是 fix clue 就沒有 play / save 的解讀。
 func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
-	if s.level < 3 {
+	if !s.knows(lvFixClue) {
 		return
 	}
 	good := func(set idSet, y int) idSet {
@@ -361,7 +361,7 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 // （有好幾張時不保證是哪一張）。鎖手被迫棄牌不算。
 func (s *state) sarcastic(e game.Event) {
 	t := identOfCard(e.Card)
-	if s.level < 3 || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 {
+	if !s.knows(lvSarcastic) || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 {
 		return
 	}
 	holder := -1

@@ -25,7 +25,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 	// Level 4 The Order Chop Move：照順序該打的 1 跳過幾張，就保護後面第幾位的 chop，不花提示。
 	// 能保護下一位必須保留的 chop 時，比給他提示好
 	ocm, ocmTarget := -1, -1
-	if s.level >= 4 {
+	if s.knows(lvChopMove) {
 		ocm, ocmTarget = s.orderChopMove()
 	}
 	ocmWhy := "Order Chop Move：不照順序打 1，保護後面玩家 chop 上必須保留的牌"
@@ -34,7 +34,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 	// 都不行就先不打（之後棄牌換回提示，讓別人修）。ok 為 false 表示這手不打牌
 	playOrFix := func(slot int, why string) (game.Action, bool) {
 		risky := s.nextMisplaysAfter(slot)
-		if s.level < 3 || len(risky) == 0 {
+		if !s.knows(lvFixClue) || len(risky) == 0 {
 			s.why = why
 			return game.Play(slot), true
 		}
@@ -65,7 +65,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		return a
 	}
 
-	if s.level >= 3 {
+	if s.knows(lvSarcastic) {
 		// Level 3 The Sarcastic Discard：我確定手上被拿到的牌和別人已被拿到的牌重複，棄掉它讓那人知道他有這張
 		if slot := s.sarcasticSlot(v); slot >= 0 {
 			s.why = "Sarcastic Discard：這張和別人已被提示的牌重複"
@@ -87,7 +87,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		}
 	}
 	if slot := s.bestPlay(); slot >= 0 {
-		if s.level >= 3 && len(s.nextMisplaysAfter(slot)) > 0 {
+		if s.knows(lvFixClue) && len(s.nextMisplaysAfter(slot)) > 0 {
 			if a, ok := playOrFix(slot, "打出確定能打的牌"); ok {
 				return a
 			}
@@ -136,7 +136,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 	}
 
 	// Level 3：違反 Good Touch 的牌要儘早修正，不論會不會馬上被打錯
-	if s.level >= 3 {
+	if s.knows(lvFixClue) {
 		if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindFix && e.fixes > 0 && !e.misleads }); ok {
 			s.why = "Fix Clue：修正違反 Good Touch 的牌"
 			return ev.act

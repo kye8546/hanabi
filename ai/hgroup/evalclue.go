@@ -139,7 +139,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if it.stray {
 		ev.misleads, ev.danger = true, true // 計畫外的玩家會盲打（或打已提示的牌），多半打錯
 	}
-	if s.level >= 3 && len(it.newCards) == 0 && !slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
+	if s.knows(lvFixClue) && len(it.newCards) == 0 && !slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
 		// 不給任何新資訊的提示：接收者若已經（私下推得）知道其中某張是他下一手要打的牌，就會當成 Stop Clue
 		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險
 		ev.misleads = true
@@ -345,7 +345,7 @@ func (s *state) misleads(R int, it interp, touched []int) (wrong, danger, costly
 	var ids idSet
 	for _, c := range it.cands {
 		i := slices.IndexFunc(c.deps, func(d dep) bool { return d.player == R })
-		if i < 0 || s.level < 2 && len(c.deps) != 1 || card >= 0 && c.deps[i].card != card {
+		if i < 0 || !s.knows(lvMultiConnect) && len(c.deps) != 1 || card >= 0 && c.deps[i].card != card {
 			return wrong, danger, costly
 		}
 		card = c.deps[i].card
@@ -367,7 +367,7 @@ func (s *state) finesseClear(R int, plan []dep) bool {
 		for k := 1; k < s.n; k++ {
 			p := (s.me + k) % s.n
 			if p == R {
-				if s.level < 2 {
+				if !s.knows(lvReverseFinesse) {
 					break
 				}
 				continue

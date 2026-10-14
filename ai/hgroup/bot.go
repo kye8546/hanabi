@@ -34,6 +34,24 @@ var Levels = [...]string{
 	"優先順序 Priority",
 }
 
+// 各技巧從哪個 H-Group 等級開始。低於該等級的 AI 不給、也不那樣解讀（s.knows）。
+const (
+	lvMultiConnect   = 2 // 一個提示多張連接牌：Double / Triple Prompt、Double Finesse、Prompt + Finesse
+	lvReverseFinesse = 2 // Reverse Finesse：finesse 接收者之後的人
+	lvSelfFinesse    = 2 // Self-Finesse：finesse 接收者自己（以及 finesse 對象讓給看得到的後一位）
+	lvFiveStall      = 2 // 5 Stall
+	lvWrongPrompt    = 2 // Wrong Prompt
+	lvMultipleOnes   = 3 // Playing Multiple 1's（出牌順序、焦點、多出來的 1）
+	lvFixClue        = 3 // Fix Clue（含 Stop Clue；Misplay Cost Principle 的修正）
+	lvSarcastic      = 3 // Sarcastic Discard
+	lvInfoLock       = 3 // Information Lock on In-Between Cards
+	lvChopMove       = 4 // Chop Moves：Trash / 5's / Order Chop Move
+	lvQueuedFinesse  = 5 // Queued Finesse（還沒實作；在那之前不 finesse 手上已有待打 finesse 牌的人）
+)
+
+// knows：這個 AI 的等級已經學到從 lv 開始的技巧。
+func (s *state) knows(lv int) bool { return s.level >= lv }
+
 // Bot 是依 H-Group 慣例行動的 AI。只透過 PlayerView 取得資訊。
 type Bot struct {
 	name  string

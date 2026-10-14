@@ -64,7 +64,7 @@ cmd/hanabi 組裝
 ## H-Group AI（[ai/hgroup](ai/hgroup)）
 
 使用者要求**嚴格遵照 H-Group 規範**（https://hanabi.github.io/ ，原文 mdx 在 GitHub `hanabi/hanabi.github.io` 的 `docs/`）。
-各等級只能用該等級以下的技巧（`state.level`）：Level 2 的技巧 Lv1 AI 不能給也不會那樣解讀；Level 3 起的（Playing Multiple 1's、Fix Clue、Sarcastic Discard…）Lv2 AI 也一樣，Level 4 起的（Chop Moves、Queued Finesse…）Lv3 AI 也一樣。
+各等級只能用該等級以下的技巧（判斷一律寫成 `s.knows(lvXxx)`，各技巧從哪一級開始的常數在 [bot.go](ai/hgroup/bot.go)；加新技巧就加一個常數，不要寫裸數字）：Level 2 的技巧 Lv1 AI 不能給也不會那樣解讀；Level 3 起的（Playing Multiple 1's、Fix Clue、Sarcastic Discard…）Lv2 AI 也一樣，Level 4 起的（Chop Moves、Queued Finesse…）Lv3 AI 也一樣。
 
 - 檔案分法（混合式）：Level 1 的核心照主題分，自成一塊的技巧照等級 / 變體分（對應 H-Group 的頁面與 `levelN_test.go`）；加新等級時，它自成一塊的技巧放新的 `levelN.go`，只是核心推論多一個分支的就放在核心檔案裡。
   核心：[state.go](ai/hgroup/state.go)（筆記結構、重播事件、chop / finesse position 等基本查詢）、[goodtouch.go](ai/hgroup/goodtouch.go)（被拿到的牌互相排除、給提示者知不知道自己的牌、`deduce`）、[interpret.go](ai/hgroup/interpret.go)（焦點、play / save 解讀、`onClue`）、[connect.go](ai/hgroup/connect.go)（找 prompt / finesse、追蹤兌現；Level 2 的多重連接也在這）、[evalclue.go](ai/hgroup/evalclue.go)（給提示前模擬解讀、打分數）、[save.go](ai/hgroup/save.go)（必須保留的牌、`urgentSave`）、[playorder.go](ai/hgroup/playorder.go)（多張能打的牌先打哪張）、[decide.go](ai/hgroup/decide.go)（決策主流程、打牌 / 棄牌 / 拖延）、[ident.go](ai/hgroup/ident.go)（牌面與 `idSet`）。
@@ -86,5 +86,5 @@ cmd/hanabi 組裝
 ## Status & next steps
 
 - 已完成：規則、console 介面、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits 與 Black (6 Suits) 變體、Level 1–4 AI。
-- 下一步：依使用者指示逐級加入 Level 4+（`hgroup.MaxLevel`、`state.level`）。
+- 下一步：依使用者指示逐級加入 Level 4+（`hgroup.MaxLevel`、`lvXxx` 常數）。
 - Git：遠端是使用者的個人 GitHub（`origin` = `git@github-personal:kye8546/hanabi.git`，`github-personal` 是 `~/.ssh/config` 的別名；commit 身分由 `~/.gitconfig` 的 `includeIf` 自動切成個人帳號，不要改 remote 網址或 repo 的 user 設定）。**每完成一個改動就自動 commit**（`go build ./... && go vet ./...` 通過、相關測試跑過之後；一個邏輯改動一個 commit，訊息用繁體中文簡述改了什麼、為什麼）。不要 push，使用者自己 push。
