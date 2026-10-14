@@ -813,3 +813,16 @@ func TestRefreshFocusIgnoresReadingsContradictingVisibleCard(t *testing.T) {
 		t.Fatalf("看得到實際是 b2，筆記不該被縮成 %v（原本 %v）", got.list(), before.list())
 	}
 }
+
+func TestLeaveSaveToPlayerWhoSeesEverything(t *testing.T) {
+	// 使用者回報 20261014-162711：AI-1 用「2」救了 Cathy（AI-2）chop 上的 g2（Double Chop 2's，Alice 的 chop 也是 g2）。
+	// Cathy 不知道自己兩張 2 是哪張，可能就是 g2：她不該冒重複的險去救 Alice 的 g2——Bob 手上沒有被提示的 2，
+	// 看得到兩邊，交給他判斷（他看到 Cathy 的 g2，依 Visible Rule 就不會救）。2 人局沒有這樣的人，照救
+	g, bots := scenarioAt(t, 5, "", "r3 y2 w5 g4 g2", "y2 r1 r3 y1 y1", "r1 b2 w3 w3 g2")
+	force(t, g, game.HintColorTo(1, game.Red))
+	force(t, g, game.HintRankTo(2, 2))
+	a := step(t, g, bots)
+	if a.Type == game.ActHint && a.Target == 0 && (a.Hint.Matches(g.Hands[0][4].Card)) {
+		t.Fatalf("Cathy 的 2 可能是 g2，不該救 Alice 的 g2（Bob 看得到兩邊），卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
