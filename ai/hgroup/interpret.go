@@ -402,11 +402,13 @@ func (s *state) playCands(obs, giver, R, focus int, base idSet) []cand {
 // saveCands 列出焦點在 chop 上時，作為 save clue 可能的牌面：
 // 數字 5 → 任何 5（5 Save；不在 chop 上的是 5 Stall）；數字 2 → 任何 2（2 Save，依 Visible Rule 排除別人手上看得到的）；
 // 其他 → critical 牌（5 只能用數字 5 救）。黑色的牌另有慣例（blackColorSave、florratSave）。
+// 現在就能打的牌面不算 save：那種可能本身就是 play clue（playCands 已列入），接收者會直接打出，
+// 不需要「留著」——例如「1」點到 chop 永遠不是 save clue，就算 Black 變體的 k1 是 critical。
 func (s *state) saveCands(obs, giver, R int, it *interp, h game.Hint, base idSet) []cand {
 	var out []cand
 	focus := it.focus
 	for _, t := range base.list() {
-		if s.trash(t) || s.gottenAs(obs, giver, t, focus) {
+		if s.trash(t) || s.playableNow(t) || s.gottenAs(obs, giver, t, focus) {
 			continue
 		}
 		ok := false

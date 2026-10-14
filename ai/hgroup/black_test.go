@@ -95,3 +95,21 @@ func TestOnesOnChopStillDistinctAfterOnePlays(t *testing.T) {
 		t.Fatalf("另外兩張 1 依 Good Touch 不是 y1、都能打，Bob 應打出其中一張，卻做了 %+v", a)
 	}
 }
+
+// 現在就能打的牌面不算 save：「1」點到 chop 永遠是 play clue，就算 Black 的 k1 是 critical
+// （那種可能本身就是 play clue，接收者會直接打出）
+func TestOneOnChopIsNeverSave(t *testing.T) {
+	g, bots := blackScenario(t, "", "g4 r4 b4 w4 g3", "g4 r4 y4 b4 k1", "r3 y3 g3 b3 w3")
+	bots[0].Act(g.View(0))
+	s := bots[0].s
+	h := game.Hint{Kind: game.HintRank, Rank: 1}
+	it := s.interpret(0, 1, h, []int{g.Hands[1][4].Card.ID})
+	for _, c := range it.cands {
+		if c.save {
+			t.Errorf("「1」點到 chop 不該有 save 解讀，cands=%+v", it.cands)
+		}
+	}
+	if len(it.cands) == 0 {
+		t.Error("「1」點到 chop 應是 play clue")
+	}
+}
