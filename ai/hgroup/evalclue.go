@@ -205,37 +205,37 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		for _, d := range plan {
 			ev.nextPlays = ev.nextPlays || d.player == next && s.playableNow(d.id)
 		}
-		ev.score = 100*ev.gets + 10*ev.newGood + 3*ev.trashMarked
+		ev.score = scorePerPlay*ev.gets + scoreNewGood*ev.newGood + scoreTrashMarked*ev.trashMarked
 		// 接收者自己就知道能接著打的非焦點新牌：比只是「有用」的新牌值錢（例如「1」一次讓兩張 1 能打，勝過藍色點到 b1 與 b4）
-		ev.score += extraPlayBonus * s.knownExtraPlays(it, t, plan)
+		ev.score += scoreExtraPlay * s.knownExtraPlays(it, t, plan)
 		if it.chopFocus && s.needsSave(R, it.focus) {
-			ev.score += 30
+			ev.score += scoreChopSaved
 		}
 		if len(plan) == 0 && s.playableNow(t) {
-			ev.score += 3
+			ev.score += scoreImmediate
 		}
 	case it.chopFocus && s.needsSave(R, it.focus) && !s.saveIsOthersJob(R, t):
 		// 接收者知道要保留（就算還不確定是 play 還是 save）就算救下來了
 		ev.kind = kindSave
-		ev.score = 50 + 10*ev.newGood - 15*ev.bad
+		ev.score = scoreSave + scoreNewGood*ev.newGood - scoreBadTouch*ev.bad
 		if ev.misleads {
-			ev.score -= 10
+			ev.score -= scoreSaveMisleads
 		}
 	case it.saveOK && !it.chopFocus && ev.bad == 0 && !ev.misleads:
 		// 5 Stall：點到的都是將來要用的 5，不會被誤會成 play clue
 		ev.kind = kindStall
-		ev.score = 10 * (1 + ev.newGood)
+		ev.score = scoreStall * (1 + ev.newGood)
 	default:
 		return ev, true
 	}
 	if h.Kind == game.HintColor {
-		ev.score += 2 // 能選的話優先用顏色提示
+		ev.score += scoreColor
 	}
 	// 給下一位的提示：提示後他的 chop 往左移到必須保留的牌上，而他又沒有能立刻打的牌，
 	// 他下一手就會棄掉那張牌（Check Team Chops 要看提示之後的 chop）
 	if R == (s.me+1)%s.n && !s.willPlay(R) && !s.knowsPlayNow(it) {
 		if nc := s.chopAfter(R, touched); nc >= 0 && s.needsSave(R, nc) {
-			ev.score -= 100
+			ev.score -= scoreNextChopNeeds
 		}
 	}
 	ev.score -= dist
@@ -304,8 +304,28 @@ func (s *state) knownExtraPlays(it interp, t ident, plan []dep) int {
 	return n
 }
 
-// 接收者自己就知道能接著打的非焦點新牌，每張的加分（另外已算在 newGood 裡）。
-var extraPlayBonus = 50
+// 提示的評分。同一步驟裡選分數最高的提示；不同種類（play / save / fix…）的先後由 decide 的步驟順序決定，
+// 不靠分數互相比較。dist（接收者離我幾個座位）最後再扣，同分時先給近的人。
+const (
+	scorePerPlay       = 100 // play clue：每張會被打出的牌（焦點 + prompt / finesse）
+	scoreExtraPlay     = 50  // 接收者自己就知道能接著打的非焦點新牌（另外已算在 newGood 裡）
+	scoreNewGood       = 10  // 其他有用的非焦點新牌（各種提示共用）
+	scoreTrashMarked   = 3   // 接收者推得出是垃圾的非焦點新牌：多知道一張可以先棄的牌
+	scoreChopSaved     = 30  // play clue 順便救下 chop 上必須保留的牌
+	scoreImmediate     = 3   // play clue 的焦點現在就能打（不用等連接牌）
+	scoreSave          = 50  // save clue 的底分
+	scoreSaveMisleads  = 10  // save clue 會讓接收者對某張牌寫下錯誤筆記
+	scoreBadTouch      = 15  // 每張違反 Good Touch 的新牌
+	scoreStall         = 10  // 5 Stall：（1 + 有用的新牌）× 這個分數
+	scoreColor         = 2   // 能選的話優先用顏色提示
+	scoreNextChopNeeds = 100 // 給下一位的提示讓他的新 chop 落在必須保留的牌上、他又不能立刻打牌
+	scoreFixNow        = 100 // Fix Clue：每張原本會被打錯的牌
+	scoreFix           = 30  // Fix Clue：每張修正的牌
+	scoreCMFirstSave   = 45  // Chop Move：保護到 chop 上必須保留的牌（第一張）
+	scoreCMMoreSave    = 40  // Chop Move：每多保護一張必須保留的牌
+	scoreCMUseful      = 10  // Chop Move：其他被保護的有用牌
+	scoreCMWaste       = 20  // Chop Move：每張白白被保護的沒用牌
+)
 
 // misleads：提示後接收者會不會對某張牌寫下錯誤的筆記（實際牌面被排除），之後可能因此打錯；
 // danger 表示錯誤的筆記全是現在就能打的牌（他下一回合就會打錯）；costly 表示那張牌還有用。

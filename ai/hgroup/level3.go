@@ -195,9 +195,9 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 		}
 	}
 	ev.understood = !ev.misleads
-	ev.score = 100*ev.fixesNow + 30*ev.fixes + 10*ev.newGood - 15*ev.bad - dist
+	ev.score = scoreFixNow*ev.fixesNow + scoreFix*ev.fixes + scoreNewGood*ev.newGood - scoreBadTouch*ev.bad - dist
 	if h.Kind == game.HintColor {
-		ev.score += 2
+		ev.score += scoreColor
 	}
 	return ev
 }

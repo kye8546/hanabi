@@ -6,184 +6,261 @@ import (
 	"hanabi/game"
 )
 
-func (s *state) decide(v game.PlayerView) game.Action {
-	hand := s.hands[s.me]
-
-	// 1. 被 finesse 的牌要立刻盲打（Finesse Urgency）
-	for slot, id := range hand {
-		if s.notes[id].finessed && s.knownPlayable(id) {
-			s.why = "finesse 盲打"
-			return game.Play(slot)
-		}
-	}
-
-	var evs []clueEval
-	if v.Hints > 0 {
-		evs = s.allClues()
-	}
-
-	// Level 4 The Order Chop Move：照順序該打的 1 跳過幾張，就保護後面第幾位的 chop，不花提示。
-	// 能保護下一位必須保留的 chop 時，比給他提示好
-	ocm, ocmTarget := -1, -1
-	if s.knows(lvChopMove) {
-		ocm, ocmTarget = s.orderChopMove()
-	}
-	ocmWhy := "Order Chop Move：不照順序打 1，保護後面玩家 chop 上必須保留的牌"
-	// Level 3 Misplay Cost Principle：我打出這張後，下一位手上壞掉的牌會看起來能打（他下一手就打錯，
-	// 輪到他之前沒人能修）：先給 Fix Clue，我的牌晚點打。沒有提示可修時，改打別張不會害他打錯的牌；
-	// 都不行就先不打（之後棄牌換回提示，讓別人修）。ok 為 false 表示這手不打牌
-	playOrFix := func(slot int, why string) (game.Action, bool) {
-		risky := s.nextMisplaysAfter(slot)
-		if !s.knows(lvFixClue) || len(risky) == 0 {
-			s.why = why
-			return game.Play(slot), true
-		}
-		if ev, ok := best(evs, func(e clueEval) bool {
-			return e.kind == kindFix && !e.misleads &&
-				slices.ContainsFunc(risky, func(y int) bool { return e.covers(e.target, y) })
-		}); ok {
-			s.why = "Fix Clue：我打出能打的牌後，下一位會把壞掉的牌當成能打而打錯，先修正"
-			return ev.act, true
-		}
-		for _, id := range s.playOrder(s.me) {
-			if sl := slices.Index(s.hands[s.me], id); sl != slot && s.ocmSkip(s.me, id) == 0 && len(s.nextMisplaysAfter(sl)) == 0 {
-				s.why = why + "（另一張會讓下一位把壞掉的牌當成能打，晚點再打）"
-				return game.Play(sl), true
-			}
-		}
-		return game.Action{}, false
-	}
-	if ocm >= 0 && ocmTarget == (s.me+1)%s.n {
-		if a, ok := playOrFix(ocm, ocmWhy); ok {
-			return a
-		}
-	}
-
-	// 2. 檢查隊友的 chop：下一位要棄牌而 chop 上是必須保留的牌，就算自己有牌可打也先救
-	if a, why, ok := s.urgentSave(evs, v.Hints, true); ok {
-		s.why = why
-		return a
-	}
-
-	if s.knows(lvSarcastic) {
-		// Level 3 The Sarcastic Discard：我確定手上被拿到的牌和別人已被拿到的牌重複，棄掉它讓那人知道他有這張
-		if slot := s.sarcasticSlot(v); slot >= 0 {
-			s.why = "Sarcastic Discard：這張和別人已被提示的牌重複"
-			return game.Discard(slot)
-		}
-		// Misplay Cost Principle：用一個提示阻止一次打錯是值得的
-		if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindFix && e.fixesNow > 0 && !e.misleads }); ok {
-			s.why = "Fix Clue：阻止隊友打錯"
-			return ev.act
-		}
-	}
-
-	// 3. 打出確定能打的牌。但有一次讓多張牌能打、又不違反 Good Touch 的 play clue，而晚一步就會因為
-	// 別人先提示了其中某張的另一份而變得違反 Good Touch，或是只有我能給的 finesse 時，先給提示：
-	// 我的牌留著不會跑掉（除非別人已提示的牌正等著接我這張）
-	if ocm >= 0 {
-		if a, ok := playOrFix(ocm, ocmWhy); ok {
-			return a
-		}
-	}
-	if slot := s.bestPlay(); slot >= 0 {
-		if s.knows(lvFixClue) && len(s.nextMisplaysAfter(slot)) > 0 {
-			if a, ok := playOrFix(slot, "打出確定能打的牌"); ok {
-				return a
-			}
-		} else {
-			if ev, ok := s.clueBeforePlay(evs, v, slot); ok {
-				if s.onlyMyFinesse(ev) {
-					s.why = "先給只有我能給的 finesse（自己確定能打的牌晚點打）"
-				} else {
-					s.why = "先給讓多張牌能打的 play clue（晚一步就會因重複而違反 Good Touch），自己確定能打的牌晚點打"
-				}
-				return ev.act
-			}
-			s.why = "打出確定能打的牌"
-			return game.Play(slot)
-		}
-	}
-
-	// 4. Play clue 優先於 save clue；5. save clue
-	for _, k := range []clueKind{kindPlay, kindSave} {
-		if ev, ok := best(evs, func(e clueEval) bool {
-			return (e.kind == k || k == kindSave && s.cmSave(evs, e)) && !s.starvesLockedNext(e, v.Hints)
-		}); ok {
-			// 剛才相信下一位會先給提示而沒救他的 chop；若我這個提示正好用掉他能給的提示，就改成先救
-			if s.takesNextsClue(ev, v.Hints) {
-				if a, why, ok := s.urgentSave(evs, v.Hints, false); ok {
-					s.why = why + "（我要給的提示會用掉他唯一能給的提示）"
-					return a
-				}
-			}
-			// 我用掉最後一個提示後，後面某位的 chop 就沒人能救了：那只能由我現在救（Check Team Chops）
-			if p, ok := s.doomsLaterChop(ev, v.Hints); ok {
-				chop := s.chop(p)
-				if sv, ok := best(evs, func(e clueEval) bool {
-					return e.target == p && (e.focus == chop && (e.kind == kindPlay || e.kind == kindSave) || s.cmSave(evs, e))
-				}); ok {
-					s.why = "救後面玩家的 chop：我用掉最後一個提示的話，輪到他之前沒人能救"
-					return sv.act
-				}
-			}
-			s.why = map[clueKind]string{kindPlay: "play clue", kindSave: "save clue"}[k]
-			if ev.kind == kindChopMove {
-				s.why = map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move"}[ev.cmKind] + "：保護 chop 上必須保留的牌"
-			}
-			return ev.act
-		}
-	}
-
-	// Level 3：違反 Good Touch 的牌要儘早修正，不論會不會馬上被打錯
-	if s.knows(lvFixClue) {
-		if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindFix && e.fixes > 0 && !e.misleads }); ok {
-			s.why = "Fix Clue：修正違反 Good Touch 的牌"
-			return ev.act
-		}
-	}
-
-	// Early Game 沒有 play / save clue 可給時，可以用 5 Stall 代替棄牌，延長 Early Game（Level 2）。
-	// 但手上有已被提示的已知垃圾時先棄它：不會結束 Early Game，還換回一個提示
-	if !s.midGame && v.CanDiscard() {
-		if slot := s.trashSlot(true); slot >= 0 {
-			s.why = "棄已知沒用的牌（不會結束 Early Game，先於 5 Stall）"
-			return game.Discard(slot)
-		}
-	}
-	if !s.midGame && v.Hints >= fiveStallHints {
-		if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindStall }); ok {
-			s.why = "5 Stall：Early Game 沒有其他提示可給，救下不在 chop 上的 5 代替棄牌"
-			return ev.act
-		}
-	}
-
-	// 牌堆已空的最後一輪：棄牌換不到新牌，閃電還夠時就賭一張最可能能打的被提示牌
-	if v.DeckSize == 0 && v.Strikes < game.MaxStrikes-1 {
-		if slot := s.likelyPlay(0.5); slot >= 0 {
-			s.why = "最後一輪，打出最可能能打的牌"
-			return game.Play(slot)
-		}
-	}
-
-	// 6. 提示 8 個不能棄牌：只好給影響最小的提示
-	if v.Hints >= game.MaxHints {
-		s.why = "提示滿 8，拖延提示"
-		return s.stall(evs)
-	}
-
-	// 7. 棄牌；但終局時棄牌會讓滿分變得不可能，就改給不會造成誤解的提示拖延（Level 8 Burning，所有等級都用）
-	if s.mustBurn(v) {
-		if ev, ok := s.burnClue(evs); ok {
-			s.why = "終局拖延：棄牌會抽掉牌堆、來不及滿分"
-			return ev.act
-		}
-	}
-	s.why = "棄牌"
-	return s.discard(evs)
+// turn 是一次決策中各步驟共用的資料（需要時才算）。
+type turn struct {
+	v         game.PlayerView
+	evs       []clueEval // 所有可給的提示的評估（沒有提示 token 時是空的）
+	evsDone   bool
+	ocm       int // Level 4 Order Chop Move 要打的牌的位置（-1 = 沒有）
+	ocmTarget int // 它保護的是誰的 chop
+	ocmDone   bool
 }
 
-// clueBeforePlay：見 decide 第 3 步。
+func (t *turn) clues(s *state) []clueEval {
+	if !t.evsDone {
+		t.evsDone = true
+		if t.v.Hints > 0 {
+			t.evs = s.allClues()
+		}
+	}
+	return t.evs
+}
+
+// orderChopMove 回傳這手能做的 Order Chop Move（Level 4：照順序該打的 1 跳過幾張，就保護後面第幾位的 chop，不花提示）。
+func (t *turn) orderChopMove(s *state) (slot, target int) {
+	if !t.ocmDone {
+		t.ocmDone = true
+		t.ocm, t.ocmTarget = -1, -1
+		if s.knows(lvChopMove) {
+			t.ocm, t.ocmTarget = s.orderChopMove()
+		}
+	}
+	return t.ocm, t.ocmTarget
+}
+
+// decideStep 是決策的一步：成立時回傳要做的行動與理由（寫進對局紀錄），不成立就輪到下一步。
+type decideStep func(s *state, t *turn) (game.Action, string, bool)
+
+// decideSteps 是決策的優先順序，由上而下第一個成立的就是這手的行動；最後的棄牌一定成立。
+var decideSteps = []decideStep{
+	(*state).stepFinesseBlindPlay,  // 1. 被 finesse 的牌立刻盲打（Finesse Urgency）
+	(*state).stepOrderChopMoveNext, //    Order Chop Move 能保護下一位必須保留的 chop：比給他提示好
+	(*state).stepUrgentSave,        // 2. 下一位要棄掉必須保留的 chop：就算自己有牌可打也先救
+	(*state).stepSarcasticDiscard,  //    Level 3 Sarcastic Discard
+	(*state).stepFixMisplay,        //    Level 3 Misplay Cost Principle：隊友會打錯
+	(*state).stepOrderChopMove,     //    Order Chop Move 保護後面其他人的 chop
+	(*state).stepPlay,              // 3. 打出確定能打的牌（例外：先給有時效的 play clue）
+	(*state).stepPlayOrSaveClue,    // 4. play clue 優先於 5. save clue
+	(*state).stepFixGoodTouch,      //    Level 3：其他違反 Good Touch 的牌
+	(*state).stepEarlyTrash,        //    Early Game：先棄已被提示的已知垃圾（先於 5 Stall）
+	(*state).stepFiveStall,         //    Early Game：5 Stall 代替棄牌
+	(*state).stepLastRoundGamble,   //    最後一輪賭一張最可能能打的被提示牌
+	(*state).stepStallAtMaxHints,   // 6. 提示滿 8 不能棄牌：拖延提示
+	(*state).stepEndgameBurn,       //    終局被迫拖延（Level 8 Burning，所有等級都用）
+	(*state).stepDiscard,           // 7. 棄牌
+}
+
+func (s *state) decide(v game.PlayerView) game.Action {
+	t := &turn{v: v}
+	for _, step := range decideSteps {
+		if a, why, ok := step(s, t); ok {
+			s.why = why
+			return a
+		}
+	}
+	panic("decide：棄牌那一步一定成立")
+}
+
+func (s *state) stepFinesseBlindPlay(t *turn) (game.Action, string, bool) {
+	for slot, id := range s.hands[s.me] {
+		if s.notes[id].finessed && s.knownPlayable(id) {
+			return game.Play(slot), "finesse 盲打", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+const ocmWhy = "Order Chop Move：不照順序打 1，保護後面玩家 chop 上必須保留的牌"
+
+func (s *state) stepOrderChopMoveNext(t *turn) (game.Action, string, bool) {
+	t.clues(s)
+	if ocm, target := t.orderChopMove(s); ocm >= 0 && target == (s.me+1)%s.n {
+		return s.playOrFix(t, ocm, ocmWhy)
+	}
+	return game.Action{}, "", false
+}
+
+func (s *state) stepOrderChopMove(t *turn) (game.Action, string, bool) {
+	if ocm, _ := t.orderChopMove(s); ocm >= 0 {
+		return s.playOrFix(t, ocm, ocmWhy)
+	}
+	return game.Action{}, "", false
+}
+
+// playOrFix（Level 3 Misplay Cost Principle）：我打出這張後，下一位手上壞掉的牌會看起來能打（他下一手就打錯，
+// 輪到他之前沒人能修）：先給 Fix Clue，我的牌晚點打。沒有提示可修時，改打別張不會害他打錯的牌；
+// 都不行就先不打（之後棄牌換回提示，讓別人修），回傳 false。
+func (s *state) playOrFix(t *turn, slot int, why string) (game.Action, string, bool) {
+	risky := s.nextMisplaysAfter(slot)
+	if !s.knows(lvFixClue) || len(risky) == 0 {
+		return game.Play(slot), why, true
+	}
+	if ev, ok := best(t.clues(s), func(e clueEval) bool {
+		return e.kind == kindFix && !e.misleads &&
+			slices.ContainsFunc(risky, func(y int) bool { return e.covers(e.target, y) })
+	}); ok {
+		return ev.act, "Fix Clue：我打出能打的牌後，下一位會把壞掉的牌當成能打而打錯，先修正", true
+	}
+	for _, id := range s.playOrder(s.me) {
+		if sl := slices.Index(s.hands[s.me], id); sl != slot && s.ocmSkip(s.me, id) == 0 && len(s.nextMisplaysAfter(sl)) == 0 {
+			return game.Play(sl), why + "（另一張會讓下一位把壞掉的牌當成能打，晚點再打）", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepUrgentSave：檢查隊友的 chop——下一位要棄牌而 chop 上是必須保留的牌（細節見 urgentSave）。
+func (s *state) stepUrgentSave(t *turn) (game.Action, string, bool) {
+	return s.urgentSave(t.clues(s), t.v.Hints, true)
+}
+
+// stepSarcasticDiscard（Level 3 The Sarcastic Discard）：我確定手上被拿到的牌和別人已被拿到的牌重複，棄掉它讓那人知道他有這張。
+func (s *state) stepSarcasticDiscard(t *turn) (game.Action, string, bool) {
+	if s.knows(lvSarcastic) {
+		if slot := s.sarcasticSlot(t.v); slot >= 0 {
+			return game.Discard(slot), "Sarcastic Discard：這張和別人已被提示的牌重複", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepFixMisplay（Level 3 Misplay Cost Principle）：用一個提示阻止一次打錯是值得的。
+func (s *state) stepFixMisplay(t *turn) (game.Action, string, bool) {
+	if s.knows(lvFixClue) {
+		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindFix && e.fixesNow > 0 && !e.misleads }); ok {
+			return ev.act, "Fix Clue：阻止隊友打錯", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepPlay：打出確定能打的牌。但有一次讓多張牌能打、又不違反 Good Touch 的 play clue，而晚一步就會因為
+// 別人先提示了其中某張的另一份而變得違反 Good Touch，或是只有我能給的 finesse 時，先給提示：
+// 我的牌留著不會跑掉（除非別人已提示的牌正等著接我這張）。
+func (s *state) stepPlay(t *turn) (game.Action, string, bool) {
+	slot := s.bestPlay()
+	if slot < 0 {
+		return game.Action{}, "", false
+	}
+	if s.knows(lvFixClue) && len(s.nextMisplaysAfter(slot)) > 0 {
+		return s.playOrFix(t, slot, "打出確定能打的牌")
+	}
+	if ev, ok := s.clueBeforePlay(t.clues(s), t.v, slot); ok {
+		if s.onlyMyFinesse(ev) {
+			return ev.act, "先給只有我能給的 finesse（自己確定能打的牌晚點打）", true
+		}
+		return ev.act, "先給讓多張牌能打的 play clue（晚一步就會因重複而違反 Good Touch），自己確定能打的牌晚點打", true
+	}
+	return game.Play(slot), "打出確定能打的牌", true
+}
+
+// stepPlayOrSaveClue：play clue 優先於 save clue（Chop Move 也算 save 的一種）。
+func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
+	evs, hints := t.clues(s), t.v.Hints
+	for _, k := range []clueKind{kindPlay, kindSave} {
+		ev, ok := best(evs, func(e clueEval) bool {
+			return (e.kind == k || k == kindSave && s.cmSave(evs, e)) && !s.starvesLockedNext(e, hints)
+		})
+		if !ok {
+			continue
+		}
+		// 剛才相信下一位會先給提示而沒救他的 chop；若我這個提示正好用掉他能給的提示，就改成先救
+		if s.takesNextsClue(ev, hints) {
+			if a, why, ok := s.urgentSave(evs, hints, false); ok {
+				return a, why + "（我要給的提示會用掉他唯一能給的提示）", true
+			}
+		}
+		// 我用掉最後一個提示後，後面某位的 chop 就沒人能救了：那只能由我現在救（Check Team Chops）
+		if p, ok := s.doomsLaterChop(ev, hints); ok {
+			chop := s.chop(p)
+			if sv, ok := best(evs, func(e clueEval) bool {
+				return e.target == p && (e.focus == chop && (e.kind == kindPlay || e.kind == kindSave) || s.cmSave(evs, e))
+			}); ok {
+				return sv.act, "救後面玩家的 chop：我用掉最後一個提示的話，輪到他之前沒人能救", true
+			}
+		}
+		if ev.kind == kindChopMove {
+			return ev.act, map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move"}[ev.cmKind] + "：保護 chop 上必須保留的牌", true
+		}
+		return ev.act, map[clueKind]string{kindPlay: "play clue", kindSave: "save clue"}[k], true
+	}
+	return game.Action{}, "", false
+}
+
+// stepFixGoodTouch（Level 3）：違反 Good Touch 的牌要儘早修正，不論會不會馬上被打錯。
+func (s *state) stepFixGoodTouch(t *turn) (game.Action, string, bool) {
+	if s.knows(lvFixClue) {
+		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindFix && e.fixes > 0 && !e.misleads }); ok {
+			return ev.act, "Fix Clue：修正違反 Good Touch 的牌", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepEarlyTrash：Early Game 手上有已被提示的已知垃圾時先棄它（不會結束 Early Game，還換回一個提示），先於 5 Stall。
+func (s *state) stepEarlyTrash(t *turn) (game.Action, string, bool) {
+	if !s.midGame && t.v.CanDiscard() {
+		if slot := s.trashSlot(true); slot >= 0 {
+			return game.Discard(slot), "棄已知沒用的牌（不會結束 Early Game，先於 5 Stall）", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepFiveStall（Level 2）：Early Game 沒有 play / save clue 可給時，用 5 Stall 代替棄牌，延長 Early Game。
+func (s *state) stepFiveStall(t *turn) (game.Action, string, bool) {
+	if !s.midGame && t.v.Hints >= fiveStallHints {
+		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindStall }); ok {
+			return ev.act, "5 Stall：Early Game 沒有其他提示可給，救下不在 chop 上的 5 代替棄牌", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepLastRoundGamble：牌堆已空的最後一輪，棄牌換不到新牌，閃電還夠時就賭一張最可能能打的被提示牌（非慣例，常識）。
+func (s *state) stepLastRoundGamble(t *turn) (game.Action, string, bool) {
+	if t.v.DeckSize == 0 && t.v.Strikes < game.MaxStrikes-1 {
+		if slot := s.likelyPlay(0.5); slot >= 0 {
+			return game.Play(slot), "最後一輪，打出最可能能打的牌", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+// stepStallAtMaxHints：提示 8 個不能棄牌，只好給影響最小的提示。
+func (s *state) stepStallAtMaxHints(t *turn) (game.Action, string, bool) {
+	if t.v.Hints >= game.MaxHints {
+		return s.stall(t.clues(s)), "提示滿 8，拖延提示", true
+	}
+	return game.Action{}, "", false
+}
+
+// stepEndgameBurn：終局時棄牌會讓滿分變得不可能，改給不會造成誤解的提示拖延（Level 8 Burning，所有等級都用）。
+func (s *state) stepEndgameBurn(t *turn) (game.Action, string, bool) {
+	if s.mustBurn(t.v) {
+		if ev, ok := s.burnClue(t.clues(s)); ok {
+			return ev.act, "終局拖延：棄牌會抽掉牌堆、來不及滿分", true
+		}
+	}
+	return game.Action{}, "", false
+}
+
+func (s *state) stepDiscard(t *turn) (game.Action, string, bool) {
+	a, why := s.discard(t.clues(s))
+	return a, why, true
+}
+
+// clueBeforePlay：見 stepPlay。
 func (s *state) clueBeforePlay(evs []clueEval, v game.PlayerView, slot int) (clueEval, bool) {
 	if v.Hints < 2 {
 		return clueEval{}, false
@@ -302,21 +379,18 @@ func (s *state) trashSlot(clued bool) int {
 }
 
 // discard：先棄已知沒用的牌，再棄 chop；手牌全被提示（鎖手）時給個提示，
-// 真的不行才棄最不可能是 critical 的那張。
-func (s *state) discard(evs []clueEval) game.Action {
+// 真的不行才棄最不可能是 critical 的那張。回傳行動與理由。
+func (s *state) discard(evs []clueEval) (game.Action, string) {
 	hand := s.hands[s.me]
 	if slot := s.trashSlot(false); slot >= 0 {
-		s.why = "棄已知沒用的牌"
-		return game.Discard(slot)
+		return game.Discard(slot), "棄已知沒用的牌"
 	}
 	if chop := s.chop(s.me); chop >= 0 {
-		return game.Discard(slices.Index(hand, chop))
+		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
 	if len(evs) > 0 {
-		s.why = "鎖手，給提示"
-		return s.stall(evs)
+		return s.stall(evs), "鎖手，給提示"
 	}
-	s.why = "鎖手棄牌"
 	bestSlot, bestRisk := len(hand)-1, 2.0
 	for slot := len(hand) - 1; slot >= 0; slot-- {
 		p := s.myPoss(hand[slot]).list()
@@ -330,5 +404,5 @@ func (s *state) discard(evs []clueEval) game.Action {
 			bestSlot, bestRisk = slot, risk
 		}
 	}
-	return game.Discard(bestSlot)
+	return game.Discard(bestSlot), "鎖手棄牌"
 }

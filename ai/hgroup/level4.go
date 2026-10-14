@@ -166,9 +166,10 @@ func (s *state) evalChopMove(it interp, ev clueEval, h game.Hint, dist int) clue
 		}
 	}
 	ev.understood = !ev.misleads && ev.cmWaste == 0
-	ev.score = 45 + 40*(ev.cmSaves-1) + 10*ev.cmUseful + 10*ev.newGood - 15*ev.bad - 20*ev.cmWaste - dist
+	ev.score = scoreCMFirstSave + scoreCMMoreSave*(ev.cmSaves-1) + scoreCMUseful*ev.cmUseful + scoreNewGood*ev.newGood -
+		scoreBadTouch*ev.bad - scoreCMWaste*ev.cmWaste - dist
 	if h.Kind == game.HintColor {
-		ev.score += 2
+		ev.score += scoreColor
 	}
 	return ev
 }
