@@ -236,7 +236,7 @@ func (s *state) layered(obs, p, fp int, t, m ident, used []int) (dep, []int, boo
 	took := []int{fp}
 	var seen idSet
 	for {
-		if !s.playableNow(t) || seen.has(t) || t.color() == m.color() {
+		if !s.playableNow(t) || seen.has(t) || t.color() == m.color() || s.gottenElsewhere(obs, t, took[len(took)-1]) {
 			return dep{}, nil, false
 		}
 		seen |= setOf(t)
@@ -254,6 +254,22 @@ func (s *state) layered(obs, p, fp int, t, m ident, used []int) (dep, []int, boo
 		}
 		t = u
 	}
+}
+
+// gottenElsewhere：obs 看得到 card 以外有一張被拿到的 t（例如別人已提示、確定的 r4）。layer 是它的話，那人先打出它，
+// layer 就打不出去；layer 先打出，那張就成了重複的牌、持有者依 Good Touch 不會知道——給提示者不會這樣 layered finesse。
+func (s *state) gottenElsewhere(obs int, t ident, card int) bool {
+	for _, h := range s.hands {
+		for _, id := range h {
+			if id == card || !s.gotten(id) {
+				continue
+			}
+			if u, ok := s.see(obs, id); ok && u == t {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // depCards：照這個連接會被打出的牌——第一張 d.card，加上後面 d.layers 張還沒被拿到的牌（Level 5 的 layer 與真正的牌）。

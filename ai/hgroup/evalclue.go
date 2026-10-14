@@ -188,10 +188,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 			return ev, true
 		}
 	}
-	// Level 5 的 Layered Finesse，以及要排在同一人另一個還沒打的 finesse 後面的 Queued Finesse：只解讀、不主動給。
-	// 盲打的人要多花好幾回合、接收者也要多等，自我對局 4–5 人局明顯變差（5 人局約 -0.3 分；只給單層、
-	// layer 不和已被拿到的牌重複的也一樣）。Hidden Finesse 照給（分數持平）
-	if s.knows(lvLayeredFinesse) && slices.ContainsFunc(plan, func(d dep) bool { return d.finesse && (d.layers > 0 || s.queuedBehind(d)) }) {
+	if bad := s.unsafeFinesse(R, plan); bad {
 		return ev, true
 	}
 	// 被 prompt / finesse 叫出來的連接牌，若可能和我手上不確定的已提示牌重複，同樣違反 Good Touch
@@ -505,4 +502,26 @@ func (s *state) chopAfter(R int, touched []int) int {
 		}
 	}
 	return -1
+}
+
+// unsafeFinesse：計畫裡的 finesse 雖然照慣例解讀得通，但這樣給容易讓人搞錯，不給。
+//   - 我收到的提示還在等某人盲打時，不給要他盲打的提示：他的 finesse position 有沒有被佔走還不確定，
+//     我以為的位置可能和他自己認定的不同（等待時只做無關的動作，所有等級）。
+//   - Level 5 Queued Finesse（排在同一人另一個還沒打的 finesse 後面）只解讀、不主動給：前一個若是 Layered Finesse，
+//     給提示者知道哪幾張是 layer、別人不知道，「下一張 finesse position」各說各話（自我對局 5 人局 -0.08，打錯變多）。
+//   - Layered Finesse 只在 layer 後面那張一輪到就能打時給（他得先等別的牌時，layer 可能先被別人打掉或提示），
+//     而且不用在接收者自己身上（他看不到自己的 layer，盲打出它就會以為焦點是接上它的那張，Bob is Lazy）。
+func (s *state) unsafeFinesse(R int, plan []dep) bool {
+	return slices.ContainsFunc(plan, func(d dep) bool {
+		if !d.finesse {
+			return false
+		}
+		if s.awaitedFinesse(d.player) {
+			return true
+		}
+		if !s.knows(lvLayeredFinesse) {
+			return false
+		}
+		return s.queuedBehind(d) || d.layers > 0 && (!s.playableNow(d.id) || d.player == R)
+	})
 }

@@ -1,6 +1,7 @@
 package hgroup
 
 import (
+	"slices"
 	"testing"
 
 	"hanabi/game"
@@ -267,5 +268,65 @@ func TestL5UrgencyPrinciple(t *testing.T) {
 	force(t, g, game.Discard(3)) // Bob
 	if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.Red] != 2 {
 		t.Fatalf("Cathy 現在應盲打 r2，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
+
+func TestL5GivesLayeredFinesse(t *testing.T) {
+	// Bob 的 finesse position 是 b1、後面是 r1，Cathy 有 r2：Alice 提示 Cathy 紅色，Bob 會盲打出 b1、再盲打 r1（Layered Finesse），
+	// 一個提示打出三張；比直接提示 Bob 的「1」好
+	g, bots := scenarioAt(t, 5, "", "g4 y4 b4 w4 g3", "b1 r1 g3 y3 w4", "r2 g4 y4 b3 w3")
+	if a := step(t, g, bots); a != game.HintColorTo(2, game.Red) && a != game.HintRankTo(2, 2) {
+		t.Fatalf("Alice 應給 Cathy 的 r2 play clue（Layered Finesse Bob），卻做了 %+v（%s）", a, bots[0].Why())
+	}
+	if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.Blue] != 1 {
+		t.Fatalf("Bob 應盲打 finesse position（打出 b1），卻做了 %+v", a)
+	}
+	step(t, g, bots) // Cathy 等
+	step(t, g, bots) // Alice
+	if a := step(t, g, bots); a != game.Play(1) || g.Fireworks[game.Red] != 1 {
+		t.Fatalf("Bob 應繼續盲打 r1，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
+
+func TestL5NoLayeredSelfFinesse(t *testing.T) {
+	// Bob 的 finesse position 是 b1、後面是 r1，slot 3 是 r2：「2」點到 r2 要 Bob 自己 Layered Finesse。
+	// Bob 看不到自己的牌，盲打出 b1 就會以為他的 2 是 b2——不能這樣給（改用紅色直接點 r1、r2）
+	g, bots := scenarioAt(t, 5, "", "g4 y4 b4 w4 g3", "b1 r1 r2 g4 y3", "y4 g4 w4 b3 w3")
+	bots[0].Act(g.View(0))
+	ev, ok := bots[0].s.evalClue(1, game.Hint{Kind: game.HintRank, Rank: 2}, 1)
+	if !ok || ev.kind == kindPlay {
+		t.Fatalf("「2」要 Bob 自己 Layered Finesse，不該當成 play clue 給：%+v", ev)
+	}
+}
+
+// layeredOn：ev 是 play clue，計畫要 p Layered Finesse。
+func layeredOn(ev clueEval, p int) bool {
+	return ev.kind == kindPlay && slices.ContainsFunc(ev.plan, func(d dep) bool { return d.player == p && d.layers > 0 })
+}
+
+func TestL5NoLayerThroughGottenCard(t *testing.T) {
+	// r3 已打出，Donald 已被提示、確定的 r4。Bob 的 finesse position 是 r4、後面是 w1：Layered Finesse 不能拿 r4 當 layer——
+	// Donald 先打出他的 r4，Bob 輪到時盲打 r4 就打錯了（反過來，Donald 的 r4 會變成他不知道的重複牌）
+	g, bots := scenarioAt(t, 5, "r3", "g4 y4 b4 g3", "r4 w1 g3 y3", "w2 g4 y4 b3", "r4 b2 g2 y2")
+	g.Hints = 5
+	g.Current = 2
+	force(t, g, game.HintColorTo(3, game.Red)) // Cathy：Donald 的 r4
+	force(t, g, game.Discard(3))               // Donald
+	bots[0].Act(g.View(0))
+	if ev, _ := bots[0].s.evalClue(2, game.Hint{Kind: game.HintColor, Color: game.White}, 2); layeredOn(ev, 1) {
+		t.Fatalf("Bob 的 r4 是 Donald 已提示的牌的重複，不能當 layer：%+v", ev)
+	}
+}
+
+func TestL5NoFinesseOnPlayerIAmWaitingFor(t *testing.T) {
+	// Alice 提示 Bob 紅色點到 r2：Bob 的牌可能是 r1，也可能是 Reverse Finesse Cathy 的 r1，他在等 Cathy。
+	// 這時 Bob 不能給要 Cathy 盲打的提示（例如提示 Donald 的 y2，Layered Finesse Cathy 的 r1 → y1）：
+	// Cathy 的 finesse position 有沒有被佔走還不確定，兩人認定的位置可能不同（等待時只做無關的動作）
+	g, bots := scenarioAt(t, 5, "", "g4 b4 w4 g3", "r2 g4 b4 w4", "r1 y1 g3 b3", "y2 g4 b4 w3")
+	g.Hints = 5
+	force(t, g, game.HintColorTo(1, game.Red))
+	bots[1].Act(g.View(1))
+	if ev, _ := bots[1].s.evalClue(3, game.Hint{Kind: game.HintColor, Color: game.Yellow}, 2); ev.kind == kindPlay {
+		t.Fatalf("Bob 還在等 Cathy 盲打，不該給要她盲打的提示：%+v", ev)
 	}
 }

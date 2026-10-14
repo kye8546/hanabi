@@ -359,6 +359,22 @@ func (s *state) awaited(c ident, card int) bool {
 	return false
 }
 
+// awaitedFinesse：我收到的提示還有未定的解讀要 p 盲打——他的 finesse position 有沒有被佔走還不確定，
+// 等待時不給要他盲打的提示（我以為的 finesse position 可能和他自己認定的不同）。
+func (s *state) awaitedFinesse(p int) bool {
+	for _, rec := range s.recs {
+		if rec.target != s.me || s.holder(rec.focus) != s.me || len(rec.cands) < 2 {
+			continue
+		}
+		for _, cd := range rec.cands {
+			if slices.ContainsFunc(cd.deps, func(d dep) bool { return d.player == p && d.finesse }) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // focusSingle 回傳接收者在提示後確定的焦點牌面（不確定則為空集合）。
 func (s *state) focusSingle(it interp) idSet {
 	var u idSet

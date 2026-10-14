@@ -587,3 +587,66 @@ func TestDebugChopMoveAgreement(t *testing.T) {
 	}
 	t.Logf("被 Chop Move 的牌 %d 張，各家看法不一致 %d 張", total, dis)
 }
+
+// HLAYER="n games"：Lv5 自我對局中，列出 AI 給出 Layered Finesse（HKIND=queued：Queued Finesse）後 12 回合內有人打錯的案例
+func TestDebugLayered(t *testing.T) {
+	if os.Getenv("HLAYER") == "" {
+		t.Skip()
+	}
+	var n, games int
+	fmt.Sscan(os.Getenv("HLAYER"), &n, &games)
+	names := func(p int) string { return fmt.Sprintf("P%d", p) }
+	given, bad, shown := 0, 0, 0
+	for seed := range uint64(games) {
+		g, _ := game.NewVariant(n, game.NoVariant, seed)
+		bots := make([]*Bot, n)
+		for i := range bots {
+			bots[i] = New(fmt.Sprint(i), 5)
+		}
+		var lines []string
+		layeredAt := -1
+		var snap []string
+		for !g.Over {
+			p := g.Current
+			a := bots[p].Act(g.View(p))
+			why := bots[p].s.why
+			tag := ""
+			if a.Type == game.ActHint {
+				for _, ev := range bots[p].s.allClues() {
+					if ev.act == a && slices.ContainsFunc(ev.plan, func(d dep) bool {
+						if os.Getenv("HKIND") == "queued" {
+							return d.finesse && bots[p].s.queuedBehind(d)
+						}
+						return d.layers > 0 && d.finesse
+					}) {
+						tag = fmt.Sprintf(" [LAYERED plan=%+v]", ev.plan)
+						given++
+						layeredAt = len(lines)
+						snap = nil
+						for q := range n {
+							snap = append(snap, fmt.Sprintf("    P%d: %s", q, handIDs(g, q)))
+						}
+						snap = append(snap, fmt.Sprintf("    stacks %v", g.Fireworks))
+					}
+				}
+			}
+			evs, _ := g.Apply(a)
+			lines = append(lines, fmt.Sprintf("  t%d %s (%s)%s", evs[0].Turn, evStr(evs[0], names), why, tag))
+			if evs[0].Type == game.EvMisplay && layeredAt >= 0 && len(lines)-1-layeredAt <= 12 {
+				bad++
+				if shown < 8 {
+					shown++
+					fmt.Printf("=== seed %d\n", seed)
+					for _, l := range snap {
+						fmt.Println(l)
+					}
+					for _, l := range lines[max(0, layeredAt-2):] {
+						fmt.Println(l)
+					}
+				}
+				layeredAt = -1
+			}
+		}
+	}
+	fmt.Printf("給出 %d 次，之後 12 回合內有人打錯 %d 次\n", given, bad)
+}
