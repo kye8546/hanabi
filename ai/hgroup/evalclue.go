@@ -242,7 +242,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	// 給下一位的提示：提示後他的 chop 往左移到必須保留的牌上，而他又沒有能立刻打的牌，
 	// 他下一手就會棄掉那張牌（Check Team Chops 要看提示之後的 chop）
-	if R == (s.me+1)%s.n && !s.willPlay(R) && !s.knowsPlayNow(it) {
+	if R == (s.me+1)%s.n && !s.keepsChop(R) && !s.knowsPlayNow(it) {
 		if nc := s.chopAfter(R, touched); nc >= 0 && s.needsSave(R, nc) {
 			ev.score -= scoreNextChopNeeds
 		}

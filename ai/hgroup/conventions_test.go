@@ -826,3 +826,15 @@ func TestLeaveSaveToPlayerWhoSeesEverything(t *testing.T) {
 		t.Fatalf("Cathy 的 2 可能是 g2，不該救 Alice 的 g2（Bob 看得到兩邊），卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestNoUrgentSaveWhenNextHasKnownTrash(t *testing.T) {
+	// 使用者回報 20261014-175719 t23：1 都打出了。Cathy 手上有被「1」點到、大家都知道是垃圾的牌，chop 是 y5。
+	// 她下一手會先棄那張垃圾，不會棄 y5——Bob 不必急著 5 Save，先打自己確定能打的 r2
+	g, bots := scenarioAt(t, 3, allOnes, "g4 y4 b4 w4 g3", "r2 g4 b3 w3 y3", "w4 r1 g4 b4 y5")
+	g.Current = 2
+	force(t, g, game.HintColorTo(1, game.Red)) // Cathy：Bob 的 r2
+	force(t, g, game.HintRankTo(2, 1))         // Alice：Cathy 的 r1（垃圾）
+	if a := step(t, g, bots); a.Type != game.ActPlay {
+		t.Fatalf("Cathy 會先棄已知垃圾，Bob 應先打 r2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

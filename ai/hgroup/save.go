@@ -126,6 +126,21 @@ func (s *state) willPlay(p int) bool {
 	return false
 }
 
+// keepsChop：p 下一手不會棄 chop——他知道手上有牌可打（willPlay），或有大家都知道是垃圾的牌（會先棄它，
+// 例如藍色全打出後他那幾張已提示的藍牌）。
+func (s *state) keepsChop(p int) bool {
+	if s.willPlay(p) {
+		return true
+	}
+	for _, id := range s.hands[p] {
+		n := s.notes[id]
+		if n.bad || s.gotten(id) && n.poss != 0 && n.poss&s.useful() == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // failsOnMyTurn：這個解讀需要我現在盲打（finesse），但我推論出的計畫裡沒有，我不會打，它就會被排除。
 func (s *state) failsOnMyTurn(rec *clueRec, c cand) bool {
 	for _, d := range c.deps {
@@ -137,14 +152,14 @@ func (s *state) failsOnMyTurn(rec *clueRec, c cand) bool {
 	return false
 }
 
-// urgentSave：下一位玩家 chop 上有必須保留的牌、而他沒有牌可打（會棄牌）時，現在就處理。
+// urgentSave：下一位玩家 chop 上有必須保留的牌、而他沒有牌可打、也沒有已知垃圾可棄（會棄 chop）時，現在就處理。
 // 能讓他下一手就打牌（直接提示、prompt 或 finesse 他）就優先給（Give Play Clues Over Save Clues：讓他忙著打牌就不會棄 chop），
 // 否則救 chop。
 // trust 為 true 時，Early Game 中相信下一位會先給提示而不棄牌。
 func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, string, bool) {
 	next := (s.me + 1) % s.n
 	chop := s.chop(next)
-	if chop < 0 || !s.needsSave(next, chop) || s.willPlay(next) || trust && s.nextWillClue(next, hints, nil) ||
+	if chop < 0 || !s.needsSave(next, chop) || s.keepsChop(next) || trust && s.nextWillClue(next, hints, nil) ||
 		s.playLetsNextPlay(next) {
 		return game.Action{}, "", false
 	}
@@ -248,7 +263,7 @@ func (s *state) doomsLaterChop(ev clueEval, hints int) (int, bool) {
 	for k := 2; k < s.n; k++ {
 		p := (s.me + k) % s.n
 		chop := s.chop(p)
-		if chop < 0 || !s.needsSave(p, chop) || s.willPlay(p) || ev.covers(p, chop) {
+		if chop < 0 || !s.needsSave(p, chop) || s.keepsChop(p) || ev.covers(p, chop) {
 			continue
 		}
 		regen := false
@@ -299,7 +314,7 @@ func (s *state) cleanClueFor(p, id int) bool {
 // 留給我棄牌把提示換回來（讓他能拖延）。
 func (s *state) starvesLockedNext(ev clueEval, hints int) bool {
 	next := (s.me + 1) % s.n
-	if hints > 1 || s.chop(next) >= 0 || s.willPlay(next) || ev.nextPlays || s.chop(s.me) < 0 {
+	if hints > 1 || s.chop(next) >= 0 || s.keepsChop(next) || ev.nextPlays || s.chop(s.me) < 0 {
 		return false
 	}
 	return true
@@ -310,7 +325,7 @@ func (s *state) starvesLockedNext(ev clueEval, hints int) bool {
 func (s *state) takesNextsClue(ev clueEval, hints int) bool {
 	next := (s.me + 1) % s.n
 	chop := s.chop(next)
-	if chop < 0 || !s.needsSave(next, chop) || s.willPlay(next) || !s.nextWillClue(next, hints, nil) {
+	if chop < 0 || !s.needsSave(next, chop) || s.keepsChop(next) || !s.nextWillClue(next, hints, nil) {
 		return false
 	}
 	if ev.nextPlays || ev.covers(next, chop) {
