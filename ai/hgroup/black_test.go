@@ -79,3 +79,19 @@ func TestSaveBlackWithRightClue(t *testing.T) {
 		}
 	}
 }
+
+// 「1」點到 chop 時可能是救 k1 的 save clue，但同一個提示點到的牌照樣依 Good Touch 不會重複：
+// Bob 打出 chop 上的 y1 後，另外兩張 1 就不是 y1，都能打（Save Principle 一節：接收者照樣依 Good Touch 寫筆記）
+func TestOnesOnChopStillDistinctAfterOnePlays(t *testing.T) {
+	g, bots := scenarioVariant(t, game.BlackSix, 4, "", "g4 r4 b4 w4 g3", "g4 k1 r4 b1 y1", "r3 y3 g3 b3 w3")
+	g.Hints = 6
+	force(t, g, game.HintRankTo(1, 1))
+	if a := step(t, g, bots); a != game.Play(4) {
+		t.Fatalf("Bob 應先打 chop 上的 1（y1），卻做了 %+v", a)
+	}
+	force(t, g, game.Discard(4)) // Cathy
+	force(t, g, game.Discard(4)) // Alice
+	if a := step(t, g, bots); a.Type != game.ActPlay {
+		t.Fatalf("另外兩張 1 依 Good Touch 不是 y1、都能打，Bob 應打出其中一張，卻做了 %+v", a)
+	}
+}

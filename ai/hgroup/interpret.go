@@ -690,10 +690,6 @@ func (s *state) onClue(e game.Event) {
 
 	rec := &clueRec{giver: e.Player, target: R, focus: it.focus, cands: it.cands, fallback: it.fallback,
 		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards}
-	mayBeSave := slices.ContainsFunc(it.cands, func(c cand) bool { return c.save })
-	for _, id := range it.newCards {
-		s.notes[id].bySave = mayBeSave
-	}
 	var u idSet
 	for _, c := range it.cands {
 		u |= 1 << c.id

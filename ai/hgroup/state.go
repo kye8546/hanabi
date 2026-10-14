@@ -14,7 +14,6 @@ type note struct {
 	willPlay bool     // 是 play clue 的焦點（或被 prompt / finesse），持有者遲早會打
 	giver    int      // 第一次「拿到」這張牌（提示或 finesse）的給提示者；-1 = 還沒被拿到
 	seq      int      // 第一次被拿到時的事件序號
-	bySave   bool     // 第一次被點到的那個提示可能是 save clue（救牌時允許點到重複的牌）
 	start    bool     // 起手牌（Level 3 Playing Multiple 1's：起手牌的 1 由舊到新打）
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
@@ -408,7 +407,7 @@ func (s *state) finessePos(p int) int {
 }
 
 // revealGTP：被拿到的牌 x 打出後公開了牌面 t。依 Good Touch，跟它互相「看得到」的其他被拿到的牌都不會是 t
-// （後拿到的那張，給提示者當時看得到先拿到的那張；同一個 play clue 點到的牌也不會重複）。
+// （後拿到的那張，給提示者當時看得到先拿到的那張；同一個提示點到的牌也不會重複）。
 func (s *state) revealGTP(x int, t ident) {
 	xn := s.notes[x]
 	hx := s.holder(x)
@@ -421,9 +420,12 @@ func (s *state) revealGTP(x int, t ident) {
 			if id == x || n.giver < 0 || n.bad || !n.poss.has(t) || n.poss.count() == 1 {
 				continue
 			}
-			// 同一個 play clue 點到的也不會重複；save clue 則允許（Save Principle 可以違反 Good Touch）
+			// 同一個提示點到的也不會重複——save clue 也一樣：Save Principle 允許給提示者違反 Good Touch，
+			// 但接收者照樣依 Good Touch 寫筆記（Beginner's Guide Save Principle：「From Good Touch Principle,
+			// Bob will write "b2, b3, b4, b5" on his two other blue cards」）。Black 變體裡「1」點到 chop 總是
+			// 可能是救 k1，以前把它當成可能重複，打出一張 1 之後就不敢打其他的 1
 			if xn.seq > n.seq && xn.giver != p || n.seq > xn.seq && (n.giver != hx || p == s.me && s.giverKnew(id, x, t)) ||
-				n.seq == xn.seq && !n.bySave {
+				n.seq == xn.seq {
 				n.poss &^= setOf(t)
 			}
 		}
@@ -761,7 +763,7 @@ func (s *state) gtpExcluded(h, card int, i ident) bool {
 				return true
 			}
 			if o.seq < m.seq && (m.giver != q || h == s.me && s.giverKnew(card, id, i)) || m.seq < o.seq && o.giver != h ||
-				o.seq == m.seq && !m.bySave {
+				o.seq == m.seq {
 				return true
 			}
 		}
