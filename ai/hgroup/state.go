@@ -58,14 +58,15 @@ type clueRec struct {
 
 // state 是 AI 依公開資訊重播整局後的認知。
 type state struct {
-	n, me     int
-	level     int          // 使用的 H-Group 慣例等級
-	colors    []game.Color // 這局用到的顏色（Variant.Colors）
-	all       idSet        // 這局所有可能的牌面（新牌的筆記從這裡開始）
-	hints     int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
-	hands     [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
-	notes     map[int]*note
-	cards     map[int]game.Card // 我看得到、或已經公開的牌面
+	n, me  int
+	level  int          // 使用的 H-Group 慣例等級
+	colors []game.Color // 這局用到的顏色（Variant.Colors）
+	all    idSet        // 這局所有可能的牌面（新牌的筆記從這裡開始）
+	hints  int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
+	hands  [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
+	// 以下三個都用牌 ID 索引（track 讓長度涵蓋看過的每張牌；用 slice 而不是 map，查找是熱點）
+	notes     []*note     // 每張牌的筆記（沒看過的牌是 nil）
+	cards     []game.Card // 我看得到、或已經公開的牌面（Rank 0 = 不知道；讀 ok 用 card）
 	stacks    [game.NumColors]game.Rank
 	discarded [numIdents]int // 已進棄牌堆（含打錯）的張數
 	recs      []*clueRec
@@ -81,7 +82,7 @@ type state struct {
 	// 只用來判斷接收者會不會有更簡單的解讀，不能用來判斷他看不看得懂真正的牌
 	optimistic bool
 
-	holderOf map[int]int // 牌 ID → 持有者座位
+	holderOf []int // 牌 ID → 持有者座位（-1 = 不在任何人手上）
 	// vis[obs][i]：obs 看得到（我也知道牌面）的他人手牌中，牌面 i 的張數；visOK 為 false 時要重算
 	vis   [game.MaxPlayers][numIdents]int8
 	visOK bool
@@ -112,8 +113,6 @@ func newState(v game.PlayerView, level int) *state {
 		hints:   game.MaxHints,
 		excused: -1,
 		hands:   make([][]int, v.NumPlayers),
-		notes:   map[int]*note{},
-		cards:   map[int]game.Card{},
 		cmLast:  map[int][]int{},
 	}
 	for p, h := range v.Hands {
@@ -141,9 +140,9 @@ func newState(v game.PlayerView, level int) *state {
 		}
 	}
 	s.hints = initialHints(v)
-	s.holderOf = map[int]int{}
 	for p, h := range s.hands {
 		for _, id := range h {
+			s.track(id)
 			s.notes[id] = s.newNote()
 			s.notes[id].start = true
 			s.holderOf[id] = p
@@ -179,6 +178,37 @@ func initialHints(v game.PlayerView) int {
 	return h
 }
 
+// track 讓用牌 ID 索引的 slice 涵蓋 id。
+func (s *state) track(id int) {
+	for len(s.notes) <= id {
+		s.notes = append(s.notes, nil)
+		s.cards = append(s.cards, game.Card{})
+		s.holderOf = append(s.holderOf, -1)
+	}
+}
+
+// setCard 記下看得到或已公開的牌面。
+func (s *state) setCard(c game.Card) {
+	s.track(c.ID)
+	s.cards[c.ID] = c
+}
+
+// note 回傳牌 id 的筆記（沒看過的牌回傳 false）。
+func (s *state) note(id int) (*note, bool) {
+	if id < 0 || id >= len(s.notes) || s.notes[id] == nil {
+		return nil, false
+	}
+	return s.notes[id], true
+}
+
+// card 回傳我知不知道牌 id 的牌面。
+func (s *state) card(id int) (game.Card, bool) {
+	if id < 0 || id >= len(s.cards) || s.cards[id].Rank == 0 {
+		return game.Card{}, false
+	}
+	return s.cards[id], true
+}
+
 func (s *state) newNote() *note { return &note{explicit: s.all, poss: s.all, giver: -1} }
 
 // got 記錄這張牌第一次被拿到（提示或 finesse）的人與時間。
@@ -193,7 +223,7 @@ func (s *state) sync(v game.PlayerView) {
 	for p, h := range v.Hands {
 		for _, vc := range h {
 			if p != s.me && vc.Visible {
-				s.cards[vc.Card.ID] = vc.Card
+				s.setCard(vc.Card)
 			}
 		}
 	}
@@ -204,20 +234,22 @@ func (s *state) sync(v game.PlayerView) {
 	}
 	for _, e := range v.Log[s.processed:] {
 		if e.Card.Rank != 0 && !mine(e) {
-			s.cards[e.Card.ID] = e.Card
+			s.setCard(e.Card)
 		}
 	}
 	s.visOK = false
 	for _, e := range v.Log[s.processed:] {
 		if e.Card.Rank != 0 && mine(e) {
-			s.cards[e.Card.ID] = e.Card
+			s.setCard(e.Card)
 		}
 		s.seq++
 		var before map[int]idSet
 		if s.trace != nil {
 			before = map[int]idSet{}
 			for id, n := range s.notes {
-				before[id] = n.poss
+				if n != nil {
+					before[id] = n.poss
+				}
 			}
 		}
 		s.apply(e)
@@ -297,6 +329,7 @@ func (s *state) apply(e game.Event) {
 		s.afterPlay()
 	case game.EvDraw:
 		s.hands[e.Player] = slices.Insert(s.hands[e.Player], 0, e.Card.ID)
+		s.track(e.Card.ID)
 		s.holderOf[e.Card.ID] = e.Player
 		s.notes[e.Card.ID] = s.newNote()
 	}
@@ -306,14 +339,14 @@ func (s *state) removeCard(p, id int) {
 	if i := slices.Index(s.hands[p], id); i >= 0 {
 		s.hands[p] = slices.Delete(s.hands[p], i, i+1)
 	}
-	delete(s.holderOf, id)
+	s.holderOf[id] = -1
 }
 
 func (s *state) holder(id int) int {
-	if p, ok := s.holderOf[id]; ok {
-		return p
+	if id < 0 || id >= len(s.holderOf) {
+		return -1
 	}
-	return -1
+	return s.holderOf[id]
 }
 
 // see 回傳 obs 這個座位能否看到牌 id 的牌面（以我知道的資訊為限）。
@@ -321,7 +354,7 @@ func (s *state) see(obs, id int) (ident, bool) {
 	if s.holder(id) == obs {
 		return 0, false
 	}
-	c, ok := s.cards[id]
+	c, ok := s.card(id)
 	if !ok {
 		return 0, false
 	}
@@ -390,7 +423,7 @@ func (s *state) undoChopMove(e game.Event) {
 		return
 	}
 	for _, id := range ids {
-		if n, ok := s.notes[id]; ok && !n.clued {
+		if n, ok := s.note(id); ok && !n.clued {
 			n.cm = false
 		}
 	}
@@ -446,7 +479,7 @@ func (s *state) sarcastic(e game.Event) {
 			continue
 		}
 		for _, id := range h {
-			if c, ok := s.cards[id]; ok && s.live(id) && identOfCard(c) == t {
+			if c, ok := s.card(id); ok && s.live(id) && identOfCard(c) == t {
 				holder = p
 			}
 		}
@@ -709,7 +742,7 @@ func (s *state) remainingFor(obs int, i ident) int {
 		s.vis = [game.MaxPlayers][numIdents]int8{}
 		for p, h := range s.hands {
 			for _, id := range h {
-				if c, ok := s.cards[id]; ok {
+				if c, ok := s.card(id); ok {
 					for o := range s.n {
 						if o != p {
 							s.vis[o][identOfCard(c)]++
@@ -749,7 +782,7 @@ func (s *state) gtpExcluded(h, card int, i ident) bool {
 			if q == h || q == s.me {
 				t, ok := s.notes[id].poss.single()
 				known = ok && t == i
-			} else if c, ok := s.cards[id]; ok {
+			} else if c, ok := s.card(id); ok {
 				known = identOfCard(c) == i
 			}
 			if !known {
@@ -792,7 +825,7 @@ func (s *state) giverKnew(nc, x int, t ident) bool {
 			if d.player != s.me {
 				continue // 別人的牌他和我都看得到，這個解讀對他確實成立
 			}
-			if c, ok := s.cards[d.card]; ok {
+			if c, ok := s.card(d.card); ok {
 				possible = possible && identOfCard(c) == d.id // 已經公開
 			} else if !s.notes[d.card].poss.has(d.id) || d.id == t && s.remaining(t) <= 1 {
 				possible = false // 我的牌不是它；或 nc 是 t 的話 t 已沒有多的張數

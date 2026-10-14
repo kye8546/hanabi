@@ -154,8 +154,8 @@ func TestL3FixRevealsDuplicatesInSameHand(t *testing.T) {
 	}
 	bad := 0
 	for _, hc := range g.Hands[2] {
-		n := bots[2].s.notes[hc.Card.ID]
-		if n == nil {
+		n, ok := bots[2].s.note(hc.Card.ID)
+		if !ok {
 			continue // 剛抽的牌，Cathy 還沒處理到
 		}
 		if hc.Card.Rank == 1 && bots[2].s.knownTrash(hc.Card.ID) {

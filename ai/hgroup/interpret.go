@@ -1293,7 +1293,7 @@ func (s *state) applyWrongPrompt(fp int, ids idSet, rec *clueRec) {
 
 // refreshFocus 依剩下的解讀更新焦點牌的筆記。
 func (s *state) refreshFocus(rec *clueRec) {
-	n, ok := s.notes[rec.focus]
+	n, ok := s.note(rec.focus)
 	if !ok || s.holder(rec.focus) < 0 {
 		return
 	}
@@ -1308,7 +1308,7 @@ func (s *state) refreshFocus(rec *clueRec) {
 
 // resetNote 清掉一張牌的隱含筆記，只留 explicit 資訊（被提示過的牌再套 Good Touch）。
 func (s *state) resetNote(id int) {
-	n, ok := s.notes[id]
+	n, ok := s.note(id)
 	if !ok {
 		return
 	}
