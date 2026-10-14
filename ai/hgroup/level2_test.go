@@ -492,3 +492,36 @@ func TestSelfFinesseNoteAfterFinesseTargetPasses(t *testing.T) {
 		t.Fatalf("Cathy 盲打出 y1 後，她的 2 應是 y2，筆記卻是 %v", got.list())
 	}
 }
+
+func TestWaitingReceiverDoesNotClueFinessedCardsCopy(t *testing.T) {
+	// r2、b1 已打出。Alice 提示 Bob「3」點到 b3：Bob 的牌可能是 r3（直接），也可能是 b3（Reverse Finesse Cathy 的 b2），
+	// 他要等 Cathy。等的時候只能做無關的動作：提示 Alice 的 b2，Cathy 一盲打 b2 它就是重複的牌（違反 Good Touch）
+	g, bots := scenarioAt(t, 2, "r2 b1", "b2 g4 y4 w4 r4", "b3 r4 g4 y4 w4", "b2 r4 g4 y4 w4")
+	force(t, g, game.HintRankTo(1, 3))
+	a := step(t, g, bots)
+	if a.Type == game.ActPlay {
+		t.Fatalf("Bob 應先等 Cathy 盲打，卻做了 %+v", a)
+	}
+	if a.Type == game.ActHint && a.Target == 0 && a.Hint.Matches(g.Hands[0][0].Card) {
+		t.Fatalf("Bob 不該提示 Alice 的 b2（Cathy 的 b2 可能正被 finesse），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
+
+func TestReceiverCountsCopiesToKnowFinesse(t *testing.T) {
+	// 4 人。Cathy 提示 Alice 黃色點到 y2：Alice 的牌可能是 y1，也可能是 Reverse Finesse Bob 的 y1 → y2。
+	// Donald 接著抽到第三張 y1：三張 y1 都看得到，Alice 的黃牌只能是 y2——Bob 的 y1 確定被 finesse
+	// （看得到 Alice 那張的人本來就知道），Alice 要記下，也就不能提示 Donald 的 y1（重複）
+	g, bots := scenarioAt(t, 2, "", "y2 r4 g4 b4", "y1 r4 g3 b3", "g4 b4 w4 r3", "y1 w3 g3 w4")
+	g.Hints = 5
+	g.Current = 2
+	force(t, g, game.HintColorTo(0, game.Yellow)) // Cathy
+	topDeck(t, g, "y1")
+	force(t, g, game.Discard(3)) // Donald 抽到 y1
+	a := step(t, g, bots)
+	if n := bots[0].s.notes[g.Hands[1][0].Card.ID]; !n.finessed || n.poss != idents(t, "y1") {
+		t.Fatalf("Alice 推得出自己是 y2，Bob 的 y1 應記成被 finesse，筆記卻是 %v（finessed=%v）", n.poss.list(), n.finessed)
+	}
+	if a.Type == game.ActHint && a.Target == 3 && (a.Hint.Matches(g.Hands[3][0].Card) || a.Hint.Matches(g.Hands[3][1].Card)) {
+		t.Fatalf("Alice 不該提示 Donald 的 y1，卻做了 %+v（%s）", a, bots[0].Why())
+	}
+}

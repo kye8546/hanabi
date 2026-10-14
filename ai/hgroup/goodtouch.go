@@ -340,6 +340,25 @@ func (s *state) maybeMine(c ident) bool {
 	return false
 }
 
+// awaited：我收到的提示還有未定的解讀，其中某種要別人 prompt / finesse 出牌面 c（我在等他打），而 card 不是那張牌。
+// 等待時要做無關的動作：點到另一張 c，finesse 一兌現它就是重複的牌，同樣違反 Good Touch
+// （和 maybeMine 一樣，只是重複的那張在別人手上、要等他打出才確定）。用到同一張牌（例如也靠它接上）不算重複。
+func (s *state) awaited(c ident, card int) bool {
+	for _, rec := range s.recs {
+		if rec.target != s.me || s.holder(rec.focus) != s.me {
+			continue
+		}
+		for _, cd := range rec.cands {
+			if slices.ContainsFunc(cd.deps, func(d dep) bool {
+				return d.player != s.me && d.id == c && !slices.Contains(s.depCards(d), card)
+			}) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // focusSingle 回傳接收者在提示後確定的焦點牌面（不確定則為空集合）。
 func (s *state) focusSingle(it interp) idSet {
 	var u idSet

@@ -315,17 +315,25 @@ func (s *state) selfMark(rec *clueRec, who int) {
 
 // markCommon：我是接收者、看不到焦點牌時，每種解讀都要同一張別人的牌被 finesse，
 // 那張牌就確定被 finesse 了（看得到焦點牌的人也會照 plan 寫下同樣的筆記），之後大家的 finesse position 才一致。
+// 「每種解讀」只算我對焦點的筆記還容許的：例如我數到三張 Y1 都在別人手上，我的黃牌就不是直接能打的 Y1，
+// 只剩「Y2，finesse P1 的 Y1」——P1 那張就確定被 finesse 了（看得到我這張的人本來就知道）。
 func (s *state) markCommon(rec *clueRec) {
 	if !s.knows(lvMultiConnect) || len(rec.cands) == 0 {
 		return
 	}
-	for _, d := range rec.cands[0].deps {
+	cands := rec.cands
+	if n, ok := s.note(rec.focus); ok && s.holder(rec.focus) == s.me {
+		if cs := slices.DeleteFunc(slices.Clone(cands), func(c cand) bool { return !n.poss.has(c.id) }); len(cs) > 0 {
+			cands = cs
+		}
+	}
+	for _, d := range cands[0].deps {
 		if !d.finesse || d.player == s.me || s.notes[d.card].finessed {
 			continue
 		}
 		ids := setOf(d.id)
 		all := true
-		for _, c := range rec.cands[1:] {
+		for _, c := range cands[1:] {
 			i := slices.IndexFunc(c.deps, func(o dep) bool { return o.card == d.card && o.finesse })
 			if i < 0 {
 				all = false

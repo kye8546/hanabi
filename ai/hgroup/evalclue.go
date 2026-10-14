@@ -121,7 +121,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		case id != it.focus && (s.trash(c) || seen.has(c)) && s.seenAsTrash(it, id):
 			// 接收者推得出它不可能有用（垃圾，或只可能是焦點的重複）：不會造成誤解，還多知道一張可以先棄的牌
 			ev.trashMarked++
-		case s.trash(c) || seen.has(c) || s.gottenAs(s.me, s.me, c, id) || s.maybeMine(c):
+		case s.trash(c) || seen.has(c) || s.gottenAs(s.me, s.me, c, id) || s.maybeMine(c) || s.awaited(c, id):
 			ev.bad++
 		case id != it.focus:
 			ev.newGood++
@@ -197,7 +197,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	// 被 prompt / finesse 叫出來的連接牌，若可能和我手上不確定的已提示牌重複，同樣違反 Good Touch
 	// （Level 10 Sarcastic Finesse：「Normally, potentially duplicating a card is bad」；那種刻意的用法是 Level 10）
 	for _, d := range plan {
-		if s.holder(d.card) != s.me && s.maybeMine(d.id) {
+		if s.holder(d.card) != s.me && (s.maybeMine(d.id) || s.awaited(d.id, d.card)) {
 			ev.bad++
 		}
 	}

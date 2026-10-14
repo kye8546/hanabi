@@ -279,6 +279,12 @@ func (s *state) sync(v game.PlayerView) {
 		s.apply(e)
 		s.visOK = false
 		s.commitNotes()
+		// 我對自己焦點牌的推論（commitNotes）可能排除了某些解讀，剩下的都要同一張別人的 finesse 牌時，記下它
+		for _, rec := range s.recs {
+			if rec.target == s.me {
+				s.markCommon(rec)
+			}
+		}
 		s.markExcessOnes()
 		for id, old := range before {
 			if n := s.notes[id]; n.poss != old && s.holder(id) >= 0 {
