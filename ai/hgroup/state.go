@@ -327,6 +327,7 @@ func (s *state) apply(e game.Event) {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
 		}
 		if e.Type == game.EvDiscard {
+			s.focusDiscarded(e.Card.ID)
 			s.sarcastic(e)
 			s.undoChopMove(e)
 		}

@@ -359,6 +359,12 @@ func (s *state) onClue(e game.Event) {
 			// 他也這麼想之後（selfMark）才寫他那張牌的筆記
 			rec.plan = slices.DeleteFunc(slices.Clone(rec.plan), func(d dep) bool { return d.player == R })
 		}
+		if it.tempo && s.maybeMine(it.truth) {
+			// 只重新點到已提示的牌、揭露的牌面可能和我不確定的已提示牌重複：這可能是修正那個重複的 Fix Clue
+			// （接收者看得到我的牌，我看不到），不急著照「要我盲打」的讀法行動，等接收者的行動確認
+			// （使用者回報 20261015-173634 t16：綠色修正了使用者重複的 g2，AI-1 以為自己要 Reverse Finesse g1）
+			rec.plan = slices.DeleteFunc(slices.Clone(rec.plan), func(d dep) bool { return d.player == s.me })
+		}
 		for _, d := range rec.plan {
 			s.markDep(rec, d)
 		}

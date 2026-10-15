@@ -562,6 +562,28 @@ func (s *state) replan(rec *clueRec) {
 	rec.plan = deps
 }
 
+// focusDiscarded：某個提示的焦點被持有者棄掉了——他知道那張沒用（例如被 Fix Clue 修正後的重複牌，或 Sarcastic
+// Discard），那個提示就不是要人打牌的 play clue，為它寫下的 prompt / finesse 筆記全部作廢（使用者回報
+// 20261015-173634：綠色修正了使用者重複的 g2，AI-1 卻當成 tempo clue、以為自己要 Reverse Finesse g1；
+// 使用者接著棄掉 g2，AI-1 仍照舊盲打而打錯）。
+func (s *state) focusDiscarded(card int) {
+	for _, rec := range s.recs {
+		if rec.focus != card {
+			continue
+		}
+		for _, ds := range append([][]dep{rec.plan}, append(depsOf(rec.cands), depsOf(rec.fallback)...)...) {
+			for _, d := range ds {
+				if d.card != card && s.holder(d.card) >= 0 && slices.Contains(rec.changed, d.card) {
+					if n := s.notes[d.card]; n.finRec == rec || !n.finessed && n.poss == setOf(d.id) {
+						s.resetNote(d.card)
+					}
+				}
+			}
+		}
+		rec.plan, rec.cands, rec.fallback = nil, nil, nil
+	}
+}
+
 // release：rec 要的牌已經由別張打出，原本為它寫下的筆記（被 finesse / prompt 成那張）作廢——
 // 但這個提示的其他解讀還要這張牌（當成別的牌面）時不動。
 func (s *state) release(rec *clueRec, d dep) {

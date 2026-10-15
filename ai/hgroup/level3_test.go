@@ -1,6 +1,8 @@
 package hgroup
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"hanabi/game"
@@ -373,5 +375,52 @@ func TestL3NoFixWhenHolderSeesTheCopy(t *testing.T) {
 	}
 	if a.Type != game.ActPlay {
 		t.Fatalf("Cathy 的兩張 5 都能打，應打出其中一張，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
+
+// replayCodes 照紀錄的種子與行動代碼重現局面（座位 0 是真人；AI 每回合都先行動過，狀態和實際對局一致）。
+func replayCodes(t *testing.T, n int, seed uint64, level int, codes string) (*game.Game, []*Bot) {
+	t.Helper()
+	g, err := game.NewVariant(n, game.NoVariant, seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bots := make([]*Bot, n)
+	for i := range bots {
+		bots[i] = New(fmt.Sprint(i), level)
+	}
+	for _, code := range strings.Fields(codes) {
+		if p := g.Current; p != 0 {
+			bots[p].Act(g.View(p))
+		}
+		a, err := parseCode(code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		force(t, g, a)
+	}
+	return g, bots
+}
+
+const fixedDupG2 = "h15 h31 h3B p3 h25 h03 h12 p4 p4 h24 p4 h22 d4 d1 h02 h0G"
+
+func TestL3FocusDiscardedCancelsFinesse(t *testing.T) {
+	// 使用者回報 20261015-173634：t15「2」救使用者 chop 上的 y2，也點到 slot 1 的 g2——AI-1 手上已提示的 2 就是 g2，重複了；
+	// t16 AI-3 用綠色修正（Fix Clue），t17 使用者知道 g2 是重複的而棄掉（Sarcastic Discard）。
+	// AI-1 不能把綠色當成要他 Reverse Finesse g1 的 tempo clue：焦點被棄掉，那個 play 解讀就不成立
+	g, bots := replayCodes(t, 4, 1792056994110306000, 5, fixedDupG2+" d1")
+	if a := step(t, g, bots); g.Strikes != 0 {
+		t.Fatalf("AI-1 不該照「g1 被 finesse」盲打，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
+
+func TestL3TempoThatMayFixMyDuplicateIsNotMyFinesse(t *testing.T) {
+	// 同上，但使用者 t17 棄的是別張、g2 還留著：AI-1 自己已提示的 2 可能就是 g2，綠色可能是修正重複的 Fix Clue，
+	// 不急著照「要我盲打 g1」行動
+	g, bots := replayCodes(t, 4, 1792056994110306000, 5, fixedDupG2+" d2")
+	fp := g.Hands[1][0].Card.ID
+	step(t, g, bots)
+	if bots[1].s.notes[fp].finessed {
+		t.Fatalf("AI-1 不該把 finesse position 記成被 finesse 的 g1（%s）", bots[1].Why())
 	}
 }
