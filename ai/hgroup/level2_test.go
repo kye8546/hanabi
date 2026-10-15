@@ -560,3 +560,53 @@ func TestReplanWhenSomeoneElsePlaysMyPromptedCard(t *testing.T) {
 		t.Fatalf("Cathy 的黃牌應記成 y3，筆記卻是 %v", n.poss.list())
 	}
 }
+
+func TestFinesseChainAgainstSeatOrder(t *testing.T) {
+	// 使用者回報 20261015-161229 t45：w1 已打出。Alice 提示 Bob 白色點到 w5：Cathy 的 finesse position 是 w3、w4，
+	// Donald 的是 w2。w2 要先打，但 Donald 在 Cathy 之後——Cathy 和 Reverse Finesse 的接收者一樣先等 Donald 盲打 w2，
+	// 再依序盲打 w3、w4，Bob 最後打 w5（原文沒有「連接牌要照座位順序」的限制）
+	g, bots := scenarioAt(t, 2, "w1", "r4 g4 b4 y4", "w5 r3 g3 b3", "w3 w4 r1 y3", "w2 g1 b2 y2")
+	g.Hints = 5
+	force(t, g, game.HintColorTo(1, game.White))
+	if a := step(t, g, bots); a.Type == game.ActPlay && a.Slot == 0 {
+		t.Fatalf("Bob 的白牌要等 w2、w3、w4，不該打，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	if a := step(t, g, bots); a.Type == game.ActPlay && (a.Slot == 0 || a.Slot == 1) {
+		t.Fatalf("Cathy 的 w3 要等 Donald 的 w2，不該先盲打，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.White] != 2 {
+		t.Fatalf("Donald 應盲打 finesse position 的 w2，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	force(t, g, game.Discard(3)) // Alice
+	step(t, g, bots)             // Bob
+	if a := step(t, g, bots); a.Type != game.ActPlay || g.Fireworks[game.White] != 3 {
+		t.Fatalf("Cathy 現在應盲打 w3，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
+
+func TestNoChainWaitingOnReceiversOwnCard(t *testing.T) {
+	// 重播紀錄 20261006-143640（Lv2）到 t20：Alice 的「4」點到 Cathy 的 b4。Bob 不能讀成「Cathy 先 self-prompt 出 b2、
+	// 我再盲打 b3」——排在接收者前面的人不會等接收者自己先打連接牌。以前放寬座位順序時 Bob 這樣讀，b2 由 Cathy 的
+	// 另一張打出後，他照計畫盲打 finesse position，實際是 b2 而打錯
+	g, err := game.NewVariant(3, game.NoVariant, 1791268600458482000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bots := make([]*Bot, 3)
+	for i := range bots {
+		bots[i] = New(fmt.Sprint(i), 2)
+	}
+	for _, code := range strings.Fields("h11 p2 h01 h22 p3 h15 p3 h0B p1 h24 h2B h05 p1 d4 h0G d3 d3 p1 h1R") {
+		if p := g.Current; p != 0 {
+			bots[p].Act(g.View(p))
+		}
+		a, err := parseCode(code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		force(t, g, a)
+	}
+	if a := step(t, g, bots); g.Strikes != 0 {
+		t.Fatalf("Bob 不該照「等 Cathy 先打 b2」的計畫盲打，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

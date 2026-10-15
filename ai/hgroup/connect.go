@@ -11,15 +11,18 @@ import (
 
 // connect 找出讓 t 能打出所需的連接牌。已被拿到且確定的牌不需要動作；
 // 其餘依序找 prompt（優先）或 finesse。Level 1 只允許一個 prompt 或 finesse；
-// Level 2 允許多個（Double Prompt / Double Finesse / Prompt + Finesse），但連接牌要依座位順序打出
-// （不依順序的 Out-of-Order Finesse 是 Level 20）。
+// Level 2 允許多個（Double Prompt / Double Finesse / Prompt + Finesse）。連接牌不必照座位順序：
+// 要先等後面的人打出前一張的人，和 Reverse Finesse 的接收者一樣先等（他的牌還不能打，不算沒接 finesse）——
+// 例如 w5 要後面那位盲打 w2、前面那位再打 w3、w4（原文沒有這種限制；Level 20 的 Out-of-Order Finesse 是另一回事）。
+// 但不讓排在接收者前面的人等接收者自己先打連接牌（接收者的 self-prompt / self-finesse 只在沒有其他解讀時才成立，
+// 大家對它沒有共識；放寬後實測會讓人照這種計畫盲打而打錯）。
 func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 	if s.trash(t) {
 		return nil, false
 	}
 	var deps []dep
 	used := append([]int{focus}, s.sameClue...)
-	last := 0
+	pos := func(p int) int { return (p - giver + s.n) % s.n }
 	c := t.color()
 	for r := s.stacks[c] + 1; r < t.rank(); r++ {
 		m := identOf(c, r)
@@ -36,11 +39,9 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 		if len(deps) > 0 && !s.knows(lvMultiConnect) {
 			return nil, false // 雙重 prompt / finesse 是 Level 2
 		}
-		pos := (d.player - giver + s.n) % s.n
-		if pos < last {
-			return nil, false
+		if d.player != R && slices.ContainsFunc(deps, func(o dep) bool { return o.player == R && pos(d.player) < pos(R) }) {
+			return nil, false // 他排在接收者前面，卻要等接收者自己先打連接牌
 		}
-		last = pos
 		deps = append(deps, d)
 		used = append(used, took...)
 	}
