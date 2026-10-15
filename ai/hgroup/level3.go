@@ -202,6 +202,66 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 	return ev
 }
 
+// certainMine：我手上一定有的牌面（張數）。我的 k 張已被拿到的牌合起來只可能是 k 種牌面、而每種都只剩 1 張時，
+// 這 k 種一定都在我手上（例如兩張被「5」點到、都是「g5 或 w5」的牌，就是一張 g5、一張 w5）。
+func (s *state) certainMine() [numIdents]int {
+	var out [numIdents]int
+	var cards []int
+	for _, id := range s.hands[s.me] {
+		if s.gotten(id) {
+			cards = append(cards, id)
+		}
+	}
+	for mask := 1; mask < 1<<len(cards); mask++ {
+		var u idSet
+		k := 0
+		for i, id := range cards {
+			if mask&(1<<i) != 0 {
+				u |= s.myPoss(id)
+				k++
+			}
+		}
+		ids := u.list()
+		if len(ids) != k || slices.ContainsFunc(ids, func(i ident) bool { return s.trash(i) || i.copies()-s.discarded[i] != 1 }) {
+			continue
+		}
+		for _, i := range ids {
+			out[i] = 1
+		}
+	}
+	return out
+}
+
+// holderView：y 的持有者自己推得出的可能——共同筆記再扣掉他看得到所有剩下張數的牌面
+// （別人手上我看得到的牌，加上我手上一定有的牌面，他都看得到）。
+func (s *state) holderView(y int, mine [numIdents]int) idSet {
+	q := s.holder(y)
+	p := s.notes[y].poss
+	var seen [numIdents]int
+	for r, h := range s.hands {
+		if r == q {
+			continue
+		}
+		if r == s.me {
+			for i, c := range mine {
+				seen[i] += c
+			}
+			continue
+		}
+		for _, id := range h {
+			if c, ok := s.card(id); ok {
+				seen[identOfCard(c)]++
+			}
+		}
+	}
+	for _, i := range p.list() {
+		if !s.trash(i) && seen[i] >= i.copies()-s.discarded[i] {
+			p &^= setOf(i)
+		}
+	}
+	return p
+}
+
 // brokenCards 找出隊友手上違反 Good Touch、需要 Fix Clue 的牌（值為 true 表示他會把它當成能打的牌而打錯）：
 // 他以為能打但其實不能打、其實是垃圾、筆記和實際牌面矛盾，或和別處被拿到的牌重複
 // （兩張的持有者都不知道時；有人知道的話他會 Sarcastic Discard）。
@@ -213,6 +273,7 @@ func (s *state) brokenCards() map[int]bool {
 		}
 		return s.notes[z].poss == setOf(t)
 	}
+	mine := s.certainMine()
 	for q, h := range s.hands {
 		if q == s.me {
 			continue
@@ -223,7 +284,13 @@ func (s *state) brokenCards() map[int]bool {
 			}
 			t := identOfCard(s.cards[y])
 			p := s.notes[y].poss
-			wrongPlay := s.holderKnowsPlayable(y) && !s.playableNow(t)
+			// 他看得到的牌能排除掉的可能，他自己就知道（例如共同筆記只剩 w5，但他看得到我手上的 w5）：
+			// 推得出是垃圾就會自己棄掉，不必修；剩下的可能才決定他會不會打錯
+			hv := s.holderView(y, mine)
+			if hv == 0 || hv&s.useful() == 0 && s.trash(t) {
+				continue
+			}
+			wrongPlay := !s.notes[y].bad && !s.playableNow(t) && !slices.ContainsFunc(hv.list(), func(i ident) bool { return !s.playableNow(i) })
 			dup := false
 			if z := s.dupOf(y); z >= 0 && !knows(y, t) && !knows(z, t) {
 				dup = true

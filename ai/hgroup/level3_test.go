@@ -355,3 +355,23 @@ func TestClueOnesWhenDuplicateIsDeducible(t *testing.T) {
 		t.Error("Bob 剩下的那張 1 應是已知垃圾")
 	}
 }
+
+func TestL3NoFixWhenHolderSeesTheCopy(t *testing.T) {
+	// 使用者回報 20261015-100922 t51：r5 y5 b5 已打出、w4 g4 也是。Cathy 兩張被「5」點到的牌都是「g5 或 w5」——
+	// 兩張、兩種、各只剩 1 張，所以一張是 g5、一張是 w5。Bob 被白色點到的牌共同筆記只剩 w5（其實是 w2），
+	// 但他看得到 Cathy 的 w5，自己就知道那張是垃圾、不會打：不必 Fix Clue，Cathy 打出自己的 5
+	g, bots := scenarioAt(t, 5, "r5 y5 b5 g4 w4", "r1 y1 b1 g1 r2", "w2 r3 y3 b3 g3", "g5 w5 r4 y4 b4")
+	g.Hints = 5
+	force(t, g, game.HintRankTo(2, 5))           // Alice：Cathy 的 g5、w5
+	force(t, g, game.Discard(4))                 // Bob
+	force(t, g, game.Discard(4))                 // Cathy
+	force(t, g, game.HintColorTo(1, game.White)) // Alice：Bob 的 w2
+	force(t, g, game.Discard(4))                 // Bob
+	a := step(t, g, bots)
+	if a.Type == game.ActHint && a.Target == 1 {
+		t.Fatalf("Bob 看得到 Cathy 的 w5，知道自己的白牌是垃圾，Cathy 不必修，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	if a.Type != game.ActPlay {
+		t.Fatalf("Cathy 的兩張 5 都能打，應打出其中一張，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
