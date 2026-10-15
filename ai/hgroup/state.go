@@ -59,6 +59,7 @@ type clueRec struct {
 	fresh    []int // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
 	passed   []int // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
 	seq      int   // 提示時的事件序號
+	stale    bool  // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。

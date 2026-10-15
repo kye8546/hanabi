@@ -509,7 +509,12 @@ func (s *state) checkDeps(e game.Event, played int) {
 
 		// 我自己推論出的連接
 		var plan []dep
+		stale := false
 		for _, d := range rec.plan {
+			// 別人打出了我計畫要某人打的牌面（例如我以為自己被提示的黃牌是 y2，卻是別人盲打出 y2）：計畫要重算
+			if e.Type == game.EvPlay && e.Player != d.player && identOfCard(e.Card) == d.id {
+				stale = true
+			}
 			nd, st := s.stepDep(rec, d, e, played, false)
 			switch st {
 			case depFail:
@@ -524,7 +529,36 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 		rec.plan = plan
+		rec.stale = rec.stale || stale // 煙火更新後（afterPlay）才重算
 	}
+}
+
+// replan：照現在的煙火重新找我看得到的焦點需要的連接：先撤掉舊計畫寫下的筆記，再照新計畫寫
+// （例如 Bob 盲打出 y2，證明給提示者用的是他的 finesse，我被提示的黃牌就是 y3 的 prompt，不是 y2）。
+func (s *state) replan(rec *clueRec) {
+	t, ok := s.see(s.me, rec.focus)
+	if !ok || s.holder(rec.focus) < 0 || s.trash(t) {
+		return
+	}
+	for _, d := range rec.plan {
+		if s.holder(d.card) >= 0 && slices.Contains(rec.changed, d.card) {
+			if n := s.notes[d.card]; n.finRec == rec || !n.finessed {
+				s.resetNote(d.card)
+			}
+		}
+	}
+	deps, ok := s.connectRec(rec, s.me, t)
+	if !ok {
+		rec.plan = nil
+		return
+	}
+	if !slices.ContainsFunc(rec.cands, func(c cand) bool { return c.id == t }) {
+		deps = slices.DeleteFunc(deps, func(d dep) bool { return d.player == rec.target })
+	}
+	for _, d := range deps {
+		s.markDep(rec, d)
+	}
+	rec.plan = deps
 }
 
 // release：rec 要的牌已經由別張打出，原本為它寫下的筆記（被 finesse / prompt 成那張）作廢——
@@ -634,6 +668,12 @@ func (s *state) recheckDelayed() {
 
 // afterPlay 重新檢查還在追蹤的提示，並丟掉已經沒有東西要追蹤的紀錄。
 func (s *state) afterPlay() {
+	for _, rec := range s.recs {
+		if rec.stale {
+			rec.stale = false
+			s.replan(rec)
+		}
+	}
 	s.recheckDelayed()
 	s.recs = slices.DeleteFunc(s.recs, func(r *clueRec) bool {
 		if len(r.plan) > 0 || s.holder(r.focus) >= 0 {

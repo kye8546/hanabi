@@ -1,7 +1,9 @@
 package hgroup
 
 import (
+	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"hanabi/game"
@@ -523,5 +525,38 @@ func TestReceiverCountsCopiesToKnowFinesse(t *testing.T) {
 	}
 	if a.Type == game.ActHint && a.Target == 3 && (a.Hint.Matches(g.Hands[3][0].Card) || a.Hint.Matches(g.Hands[3][1].Card)) {
 		t.Fatalf("Alice 不該提示 Donald 的 y1，卻做了 %+v（%s）", a, bots[0].Why())
+	}
+}
+
+func TestReplanWhenSomeoneElsePlaysMyPromptedCard(t *testing.T) {
+	// 使用者回報 20261015-160004 t31（照紀錄重現）：Cathy（座位 2）被救的黃牌是 y3（她不知道，記成 y2 或 y3）。
+	// t29 Alice 提示 Donald「4」點到 y4：Cathy 看不到自己的牌，先以為自己的黃牌是 y2（prompt）、finesse position 是 y3。
+	// t30 Bob 盲打出 y2——他看得到 Cathy 的黃牌是 y3，只有「finesse Bob 的 y2、prompt Cathy 的 y3」時才會盲打。
+	// Cathy 要照現在的煙火重算：她的黃牌是 y3 的 prompt，finesse position 不再被 finesse（那張是 b3）
+	g, err := game.NewVariant(4, game.NoVariant, 1792051204766149000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bots := make([]*Bot, 4)
+	for i := range bots {
+		bots[i] = New(fmt.Sprint(i), 5)
+	}
+	for _, code := range strings.Fields("h3G h21 p3 p4 h3W h2B p2 p2 h1W d2 p2 p2 d4 p4 h1R h24 d4 h2Y d1 h0Y p1 p1 h0B d2 p2 p1 p2 h15 h34 p1") {
+		if p := g.Current; p != 0 {
+			bots[p].Act(g.View(p)) // AI 每回合都行動過，狀態和實際對局一致
+		}
+		a, err := parseCode(code)
+		if err != nil {
+			t.Fatal(err)
+		}
+		force(t, g, a)
+	}
+	yellow := g.Hands[2][3].Card.ID
+	a := step(t, g, bots)
+	if a.Type == game.ActPlay && a.Slot == 0 {
+		t.Fatalf("Cathy 不該盲打 finesse position（y2 已由 Bob 打出，她的黃牌是 y3 的 prompt），卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	if n := bots[2].s.notes[yellow]; n.poss != idents(t, "y3") {
+		t.Fatalf("Cathy 的黃牌應記成 y3，筆記卻是 %v", n.poss.list())
 	}
 }
