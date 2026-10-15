@@ -414,13 +414,14 @@ func TestL3FocusDiscardedCancelsFinesse(t *testing.T) {
 	}
 }
 
-func TestL3TempoThatMayFixMyDuplicateIsNotMyFinesse(t *testing.T) {
-	// 同上，但使用者 t17 棄的是別張、g2 還留著：AI-1 自己已提示的 2 可能就是 g2，綠色可能是修正重複的 Fix Clue，
-	// 不急著照「要我盲打 g1」行動
+func TestL3AssumeOwnCardsGoodUntilShownOtherwise(t *testing.T) {
+	// 同上，但使用者 t17 棄的是別張、g2 還留著：AI-1 預設自己的牌都是好的（Level 3 Fix Clue：「we assume by default
+	// that all of our cards are good unless it is explicitly demonstrated otherwise」），不認為自己已提示的 2 和使用者的
+	// g2 重複，綠色就是要使用者打 g2 的 play clue、g1 由他 Reverse Finesse。他不盲打的話，使用者會以為是 self-finesse
 	g, bots := replayCodes(t, 4, 1792056994110306000, 5, fixedDupG2+" d2")
 	fp := g.Hands[1][0].Card.ID
-	step(t, g, bots)
-	if bots[1].s.notes[fp].finessed {
-		t.Fatalf("AI-1 不該把 finesse position 記成被 finesse 的 g1（%s）", bots[1].Why())
+	bots[1].Act(g.View(1))
+	if !bots[1].s.notes[fp].finessed {
+		t.Fatalf("AI-1 應照 play clue 的讀法把 finesse position 記成被 finesse 的 g1（%s）", bots[1].Why())
 	}
 }
