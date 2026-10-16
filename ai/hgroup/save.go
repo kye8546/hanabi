@@ -280,7 +280,8 @@ func (s *state) doomsLaterChop(ev clueEval, hints int) (int, bool) {
 }
 
 // cleanClueFor：有沒有一個顏色或數字提示能點到 p 的牌 id，而且點到的新牌都不違反 Good Touch
-// （不是垃圾、彼此不重複、別處也沒被拿到）。
+// （不是垃圾、彼此不重複、別處也沒被拿到，也不可能和我手上不確定的已提示牌重複——使用者回報 20261016-164435 t2：
+// 我被「1」點到的牌可能是 w1 或 g1，下一位看得到它，不一定能給點到使用者 w1、g1 的「1」）。
 // 焦點也必須是那張牌（點到 chop 時焦點在 chop；否則是最左邊的新牌），否則對方不會打它。
 func (s *state) cleanClueFor(p, id int) bool {
 	c := s.cards[id]
@@ -303,8 +304,8 @@ func (s *state) cleanClueFor(p, id int) bool {
 				focus = o
 			}
 			t := identOfCard(s.cards[o])
-			if s.trash(t) || seen.has(t) || s.gottenAs(s.me, s.me, t, o) {
-				ok = false
+			if s.trash(t) || seen.has(t) || s.gottenAs(s.me, s.me, t, o) || s.maybeMine(t) {
+				ok = false // 可能和我手上不確定的已提示牌重複：他看得到我那張，不一定會給
 			}
 			seen |= setOf(t)
 		}

@@ -858,3 +858,13 @@ func TestLockedHandDiscardsRatherThanMislead(t *testing.T) {
 		t.Fatalf("鎖手又只剩誤導的提示時應棄牌，卻 %+v（%s）", a, bots[0].s.why)
 	}
 }
+
+func TestNextPlayerMayNotClueMyPossibleDuplicate(t *testing.T) {
+	// 使用者回報 20261016-164435（Rainbow、Lv5）：t1 使用者用「1」點到 AI-1 的 w1。AI-2 chop 上是 m2（唯一看得到的那張）。
+	// AI-1 不能以為 AI-2 會先給使用者「1」（點到 g1、w1）而不救：AI-1 那張 1 可能就是 w1 或 g1，AI-2 看得到它，
+	// 那個提示可能違反 Good Touch（實際上 w1 就是重複的）。Early Game 中他沒有確定能給的提示，就要 2 Save 他
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1792140275979048000, 5, "h11")
+	if a := step(t, g, bots); a != game.HintRankTo(2, 2) {
+		t.Fatalf("AI-1 應 2 Save AI-2 chop 上的 m2，卻 %+v（%s）", a, bots[1].s.why)
+	}
+}
