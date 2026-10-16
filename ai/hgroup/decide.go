@@ -335,6 +335,12 @@ var clueFirstCards = 2
 
 // stall：不能棄牌時，依序選 tempo clue（讓對方知道能打）、不違反 Good Touch 的提示、影響最小的提示。
 func (s *state) stall(evs []clueEval) game.Action {
+	a, _ := s.stallTier(evs)
+	return a
+}
+
+// stallTier 同 stall，另外回傳選中提示的等級（≤ 2 是會誤導或讓人打錯的提示）。
+func (s *state) stallTier(evs []clueEval) (game.Action, int) {
 	tier := func(e clueEval) int {
 		switch {
 		case e.danger && e.costly:
@@ -362,7 +368,7 @@ func (s *state) stall(evs []clueEval) game.Action {
 			b, bt = e, t
 		}
 	}
-	return b.act
+	return b.act, bt
 }
 
 // trashSlot 回傳我手上已知沒用的牌（由右而左找第一張）；clued 為 true 時只找已被拿到的牌
@@ -388,7 +394,9 @@ func (s *state) discard(evs []clueEval) (game.Action, string) {
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
 	if len(evs) > 0 {
-		return s.stall(evs), "鎖手，給提示"
+		if a, tier := s.stallTier(evs); tier > 2 {
+			return a, "鎖手，給提示"
+		}
 	}
 	bestSlot, bestRisk := len(hand)-1, 2.0
 	for slot := len(hand) - 1; slot >= 0; slot-- {

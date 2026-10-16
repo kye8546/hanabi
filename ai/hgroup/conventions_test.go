@@ -848,3 +848,13 @@ func TestMyClueRulesOutReadingsThatNeedMyBlindPlay(t *testing.T) {
 		t.Fatalf("AI-2 應提示 AI-1 藍色（prompt AI-3 的 b4），卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestLockedHandDiscardsRatherThanMislead(t *testing.T) {
+	// Rainbow 2 人局 seed 0（Lv4）t39：P0 鎖手，能給的提示都會誤導——例如紅色點到 P1 的 r4、m2、r2，
+	// P1 會把 r4 當成 r3（之後打錯）。這時寧可棄掉最不可能 critical 的已提示牌，也不給誤導的拖延提示
+	g, bots := replayCodesVariant(t, 2, game.RainbowSix, 0, 4,
+		"h11 p5 d5 p5 h1G p1 h12 p1 d5 h0R p1 d5 d5 h05 d5 h0G d5 h02 h1B d2 h1W h0R d3 h03 h13 p1 h1G h0Y h14 h0G d4 h0W d4 h04 p2 d3 d2 h05")
+	if a := step(t, g, bots); a.Type != game.ActDiscard {
+		t.Fatalf("鎖手又只剩誤導的提示時應棄牌，卻 %+v（%s）", a, bots[0].s.why)
+	}
+}
