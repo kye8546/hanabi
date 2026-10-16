@@ -123,3 +123,13 @@ func TestRainbowTwoSave(t *testing.T) {
 		t.Fatalf("「2」點到 chop 上的 m2 是 2 Save，Bob 不該盲打：%+v", a)
 	}
 }
+
+func TestBlindPlayRulesOutMyPromptedCard(t *testing.T) {
+	// 使用者回報 20261016-181213（Lv5）：t1 使用者黃色點到 AI-2 全部的牌；t7「3」點到 AI-2 的 m3，AI-2 以為是 self-prompt
+	// 自己黃色的 slot 3（m4）當 m2 → m3（或 y2 → y3）。t8 AI-1 盲打出 m2：給「3」的使用者看得到 AI-2 那張牌，不會 finesse 和它重複的 m2，
+	// 所以那張不是 m2。之後白色把它縮成「m2」以外的彩虹牌，AI-2 不能當成已打出的 m2 而在 t18 棄掉
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1792145533378154000, 5, "h2Y h05 p5 h11 p4 h02 h23 p1 h1B h2W p4 p4 h1R p4 p1 p4 p4")
+	if a := step(t, g, bots); a == game.Discard(2) {
+		t.Fatalf("AI-2 的 slot 3 是 m4，不該當成 m2 棄掉（%s）", bots[2].s.why)
+	}
+}

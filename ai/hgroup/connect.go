@@ -492,6 +492,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 		}
 		return false
 	}
+	proved := s.blindProves(e, played, explained)
 	for _, rec := range s.recs {
 		// 接收者角度的解讀
 		passedBefore := slices.Clone(rec.cands)
@@ -518,12 +519,23 @@ func (s *state) checkDeps(e game.Event, played int) {
 		} else if hit {
 			kept, changed = onlyWith(kept, done, peeled), true
 		}
+		var freed []dep
+		if rec == proved {
+			kept, freed = provedBy(kept, identOfCard(e.Card))
+			changed = true
+		}
 		// 還沒輪到的 self-prompt / self-finesse 解讀也照樣追蹤；接收者自己的 finesse 不必急著打
 		fb, _, fdone, fpeeled := s.stepCands(rec, rec.fallback, e, played, rec.target)
 		if fdone >= 0 {
 			fb = onlyWith(fb, fdone, fpeeled)
 		}
 		rec.cands, rec.fallback = kept, fb
+		for _, d := range freed {
+			// 這個提示寫在那張已提示牌上的推論（「y2 或 m2」）全部作廢
+			if s.holder(d.card) >= 0 && slices.Contains(rec.changed, d.card) && !s.notes[d.card].finessed {
+				s.resetNote(d.card)
+			}
+		}
 		promoted := false
 		if len(rec.cands) == 0 && len(rec.fallback) > 0 {
 			// 其他解讀都不成立了：輪到 self-prompt / self-finesse（Level 2 The Self-Finesse）
@@ -569,6 +581,52 @@ func (s *state) checkDeps(e game.Event, played int) {
 		rec.plan = plan
 		rec.stale = rec.stale || stale // 煙火更新後（afterPlay）才重算
 	}
+}
+
+// blindProves：有人盲打出一張沒被提示、我也沒記成被 finesse、沒有任何計畫解釋的牌 t——它是某個提示的 finesse。
+// 只有一個提示的某些解讀要 t、卻是靠別人（例如接收者自己）的已提示牌 prompt 出來時，就是那個提示：給提示者看得到
+// 那張已提示牌不是 t，所以改用 finesse（使用者回報 20261016-181213：AI-2 以為「3」是 self-prompt 自己黃色的牌當 y2 / m2，
+// AI-1 盲打出 m2 就證明是 m3，那張黃色的牌和這個提示無關；以前仍記成「y2 或 m2」，之後被縮成 m2 當垃圾棄掉）。
+func (s *state) blindProves(e game.Event, played int, explained map[*clueRec]bool) *clueRec {
+	if e.Type != game.EvPlay || played < 0 || len(explained) > 0 {
+		return nil
+	}
+	if n := s.notes[played]; n.clued || n.finessed {
+		return nil
+	}
+	t := identOfCard(e.Card)
+	var found *clueRec
+	for _, rec := range s.recs {
+		if rec.seq <= s.notes[played].drawn {
+			continue
+		}
+		for _, c := range rec.cands {
+			if slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == played }) {
+				return nil // 這個提示本來就要他盲打這張，照一般流程處理
+			}
+			if slices.ContainsFunc(c.deps, func(d dep) bool { return d.id == t && !d.finesse && d.player != e.Player }) {
+				if found != nil && found != rec {
+					return nil // 不只一個提示可能，分不出是哪個
+				}
+				found = rec
+			}
+		}
+	}
+	return found
+}
+
+// provedBy：t 已由別人盲打出來，只留需要 t 的解讀，並拿掉靠已提示牌 prompt 出 t 的那個連接（回傳它們，筆記要作廢）。
+func provedBy(cs []cand, t ident) (kept []cand, freed []dep) {
+	for _, c := range cs {
+		i := slices.IndexFunc(c.deps, func(d dep) bool { return d.id == t })
+		if i < 0 {
+			continue
+		}
+		freed = append(freed, c.deps[i])
+		c.deps = slices.Delete(slices.Clone(c.deps), i, i+1)
+		kept = append(kept, c)
+	}
+	return kept, freed
 }
 
 // replan：照現在的煙火重新找我看得到的焦點需要的連接：先撤掉舊計畫寫下的筆記，再照新計畫寫
