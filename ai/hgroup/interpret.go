@@ -107,6 +107,30 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	for id, ex := range it.explicit {
 		s.overlay[id] = s.notes[id].poss & ex
 	}
+	if giver == s.me {
+		// 我給這個提示就表示這手不盲打：之前的提示裡要我盲打、但我知道不是的解讀，在大家看來也就被排除了
+		// （例如 Cathy「b3 或 b4」的牌，b4 那種要我盲打 b3；我改給提示後她就知道是 b3）
+		for _, rec := range s.recs {
+			if s.holder(rec.focus) < 0 || rec.target == s.me {
+				continue
+			}
+			if _, ok := s.overlay[rec.focus]; ok {
+				continue
+			}
+			var u idSet
+			dropped := false
+			for _, c := range rec.cands {
+				if s.failsOnMyTurn(rec, c) {
+					dropped = true
+					continue
+				}
+				u |= setOf(c.id)
+			}
+			if p := s.notes[rec.focus].poss & u; dropped && p != 0 {
+				s.overlay[rec.focus] = p
+			}
+		}
+	}
 
 	base := s.overlay[it.focus]
 	candsOf := func() []cand {

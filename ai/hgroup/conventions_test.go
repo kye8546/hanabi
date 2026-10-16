@@ -838,3 +838,13 @@ func TestNoUrgentSaveWhenNextHasKnownTrash(t *testing.T) {
 		t.Fatalf("Cathy 會先棄已知垃圾，Bob 應先打 r2，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestMyClueRulesOutReadingsThatNeedMyBlindPlay(t *testing.T) {
+	// 使用者回報 20261016-094141 t7：AI-3 chop 上的藍牌（play clue 的焦點）是「b3 或 b4」——b4 那種要 AI-2 盲打 b3。
+	// AI-1 新抽到 b5，AI-2 提示藍色就是 prompt AI-3 另一張藍牌當 b4。AI-2 給提示（不盲打），大家就排除了要他盲打的那種解讀，
+	// AI-3 知道那張是 b3。以前模擬 AI-3 的角度時還用「b3 或 b4」，以為他不會被 prompt、提示會誤導而改給 5 Stall
+	g, bots := replayCodes(t, 4, 1792092289206223300, 5, "h12 h2B p3 h15 h3B p4")
+	if a := step(t, g, bots); a != game.HintColorTo(1, game.Blue) {
+		t.Fatalf("AI-2 應提示 AI-1 藍色（prompt AI-3 的 b4），卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
