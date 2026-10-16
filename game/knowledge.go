@@ -21,20 +21,6 @@ func NewKnowledge(va Variant) Knowledge {
 	return k
 }
 
-// PositiveColors 回傳只看正向提示（被點到的顏色）時可能的顏色：沒被顏色點到是空的；
-// 被兩種以上的顏色點到一定是彩虹色；被一種點到就是那種，還可能是彩虹色時（這局有彩虹色、
-// 也沒被別的顏色提示排除）再加上彩虹色。
-func (k Knowledge) PositiveColors() []Color {
-	c, ok := k.HintedColor()
-	switch {
-	case !ok:
-		return nil
-	case c != Rainbow && k.CanBeColor(Rainbow):
-		return []Color{c, Rainbow}
-	}
-	return []Color{c}
-}
-
 func (k Knowledge) CanBeColor(c Color) bool { return k.Colors&(1<<c) != 0 }
 func (k Knowledge) CanBeRank(r Rank) bool   { return k.Ranks&(1<<(r-1)) != 0 }
 

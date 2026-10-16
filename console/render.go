@@ -155,8 +155,7 @@ func (r *Renderer) hand(v game.PlayerView, seat int) {
 	var actual, known strings.Builder
 	for _, vc := range cards {
 		actual.WriteString(cell(r.card(vc.Card), 2))
-		ks, n := r.knownShort(vc.Know)
-		known.WriteString(cell(ks, n))
+		known.WriteString(cell(r.knownShort(vc.Know), 2))
 	}
 	r.printf("     手牌  %s\n", actual.String())
 	if !r.showNeg {
@@ -201,7 +200,12 @@ func (r *Renderer) colorsShown(k game.Knowledge) []game.Color {
 	if r.showNeg {
 		return k.PossibleColors()
 	}
-	return k.PositiveColors()
+	// 只看正向提示：被一種顏色點到就顯示那種顏色（Rainbow 變體中它也可能是彩虹色，和 Hanab Live 一樣只標點到的顏色）；
+	// 被兩種以上的顏色點到才顯示成彩虹色（HintedColor）
+	if c, ok := k.HintedColor(); ok {
+		return []game.Color{c}
+	}
+	return nil
 }
 
 // ranksShown 同 colorsShown，針對數字。
@@ -215,20 +219,16 @@ func (r *Renderer) ranksShown(k game.Knowledge) []game.Rank {
 	return nil
 }
 
-// knownShort 把認知縮寫成短字串，例如 "R3"、"R?"、"?3"、"??"；Rainbow 變體中被一種顏色點到的牌
-// 是「那種顏色或彩虹色」，例如 "RM3"。回傳字串與可見長度。
-func (r *Renderer) knownShort(k game.Knowledge) (string, int) {
+// knownShort 把認知縮寫成兩個字元，例如 "R3"、"R?"、"?3"、"??"。
+func (r *Renderer) knownShort(k game.Knowledge) string {
 	cs, rs := "?", "?"
 	if ranks := r.ranksShown(k); len(ranks) == 1 {
 		rs = strconv.Itoa(int(ranks[0]))
 	}
-	switch cols := r.colorsShown(k); {
-	case len(cols) == 1:
-		return r.paint(cols[0], cols[0].Letter()+rs), 2
-	case len(cols) == 2 && cols[1] == game.Rainbow:
-		return r.paint(cols[0], cols[0].Letter()) + r.paint(cols[1], cols[1].Letter()+rs), 3
+	if cols := r.colorsShown(k); len(cols) == 1 {
+		return r.paint(cols[0], cols[0].Letter()+rs)
 	}
-	return r.style(ansiDim, cs+rs), 2
+	return r.style(ansiDim, cs+rs)
 }
 
 func (r *Renderer) hintText(h game.Hint) string {
