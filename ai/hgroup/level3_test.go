@@ -381,7 +381,12 @@ func TestL3NoFixWhenHolderSeesTheCopy(t *testing.T) {
 // replayCodes 照紀錄的種子與行動代碼重現局面（座位 0 是真人；AI 每回合都先行動過，狀態和實際對局一致）。
 func replayCodes(t *testing.T, n int, seed uint64, level int, codes string) (*game.Game, []*Bot) {
 	t.Helper()
-	g, err := game.NewVariant(n, game.NoVariant, seed)
+	return replayCodesVariant(t, n, game.NoVariant, seed, level, codes)
+}
+
+func replayCodesVariant(t *testing.T, n int, va game.Variant, seed uint64, level int, codes string) (*game.Game, []*Bot) {
+	t.Helper()
+	g, err := game.NewVariant(n, va, seed)
 	if err != nil {
 		t.Fatal(err)
 	}

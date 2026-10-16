@@ -330,3 +330,53 @@ func TestL5NoFinesseOnPlayerIAmWaitingFor(t *testing.T) {
 		t.Fatalf("Bob 還在等 Cathy 盲打，不該給要她盲打的提示：%+v", ev)
 	}
 }
+
+// ambiguousPass：5 人局 Lv5 自我對局重播到 codes 之後，下一位不能打錯（他誤以為沒盲打的人是在讓 finesse 給他）。
+func ambiguousPass(t *testing.T, seed uint64, codes, why string) {
+	t.Helper()
+	g, bots := replayCodes(t, 5, seed, 5, codes)
+	p := g.Current
+	if a := step(t, g, bots); g.Strikes != 0 {
+		t.Fatalf("P%d %+v 打錯（%s）：%s", p, a, bots[p].s.why, why)
+	}
+}
+
+func TestL5PassIsQueuedBlindPlay(t *testing.T) {
+	// t3 白色點到 P3 的 w3：可能是直接的 w2，也可能是 finesse P1 的 w2（P3 還沒記成被 finesse）；t8 綠色要 P1 盲打 g1。
+	// t12 P1 先盲打 w2（Queued Finesse 照提示先後），不是沒接 g1 的 finesse——P3 不能以為 g1 在自己身上
+	ambiguousPass(t, 514, "h3B p1 h3W h05 h0W h2B p2 h4G p4 h3R h21 p2 p4",
+		"P1 盲打的是另一個提示的 finesse")
+}
+
+func TestL5PassIsOtherBlindPlay(t *testing.T) {
+	// t4 白色點到 P4 的 w3，P2 的 finesse position 是 w1、後面是 w2（Double Finesse）。t11 藍色要 P2 盲打 b2，
+	// t13 P2 盲打出 w2（P4 已排除了 Double Finesse 的解讀）：他是在接他認為的 finesse，不是沒接藍色的
+	ambiguousPass(t, 507, "h3R p1 h14 h4W p1 h3W h4B p1 p3 p1 h3B p4 p2 h1R",
+		"盲打沒被提示的牌就是在接某個 finesse")
+}
+
+func TestL5PassBecauseItLooksLikeASave(t *testing.T) {
+	// t1「2」點到 P3 chop 上的 g2。P1 的 finesse position 是 g1、手上另有 g2——P2 看得到 P1 的 g2，知道不是 2 Save、
+	// 要 P1 盲打 g1；但 P1 看不到自己的 g2，從他的角度是 2 Save，不盲打是對的，P2 不能因此以為 g1 在自己身上
+	ambiguousPass(t, 1025, "h32 h01 d4 d3 h3B p4 h4G",
+		"從沒盲打的人的角度可能是 save clue")
+}
+
+func TestL5PassWhenHisFinessePositionIsNotTheCard(t *testing.T) {
+	ambiguousPass(t, 500, "h11 p1 h31 p2 h0Y p4 p4 h4B p2 h0R h4G p4 h04 p2",
+		"他的 finesse position 不是那張時，他不打另有原因")
+}
+
+func TestL5PassAfterFinessedCardWasClued(t *testing.T) {
+	// t10 紅色點到 P2 的 r4：finesse P3 的 r2、P0 的 r3。P3 盲打 r2 後，t15 P4 用紅色直接點到 P0 的 r3，
+	// t16 P0 先打確定的 y1——r3 已經是被提示的牌，他照一般順序打就好，不是沒接 finesse，P1 不能以為 r3 在自己身上
+	ambiguousPass(t, 1249, "h3G h4W h01 d2 h21 p1 h43 p4 p2 h2R p4 h3Y h35 p1 h0R p4",
+		"被 finesse 的牌後來被直接提示了")
+}
+
+func TestL5PassWhileQueued(t *testing.T) {
+	// t9 綠色點到 P2 的 g5：prompt P1 的 g2、finesse 他的 g3、g4；t11 黃色點到 P4 chop 上的 y2，要 P1 盲打 y1。
+	// t12 P1 先打 g2（Queued Finesse：之前那個提示的牌先打完），不是沒接 y1 的 finesse，P3 不能以為 y1 在自己身上
+	ambiguousPass(t, 1271, "h22 p1 h31 p3 h12 h4R h05 p1 h2G p4 h4Y p3 p3",
+		"他還有排在前面的 finesse")
+}

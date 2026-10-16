@@ -75,7 +75,7 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 	}
 	// 我的計畫（我看得到焦點）：只有在他的角度確實需要 finesse、而且他能看到的人裡只可能是我（或他自己）時，
 	// 他沒打才代表「是我」——若他看得到連接牌已在別處（被提示 / 會被打），他不打另有理由
-	if t, ok := s.see(s.me, rec.focus); ok && slices.Contains(lost, t) && s.passMeansMe(rec, e.Player, t) {
+	if t, ok := s.see(s.me, rec.focus); ok && slices.Contains(lost, t) && s.passMeansMe(rec, e.Player, t, s.onFinessePos(rec, before, e.Player, t)) {
 		if deps, ok := s.connectRec(rec, s.me, t); ok {
 			for _, d := range deps {
 				if !slices.ContainsFunc(rec.plan, func(p dep) bool { return p.card == d.card }) && d.player != e.Player {
@@ -88,14 +88,39 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 	return kept
 }
 
+// onFinessePos：解讀 t 要 p 盲打的牌，我看得到確實就是 t 需要的那張、是他在提示當下的 finesse position（沒有 layer）。
+// Level 5 The Ambiguous Finesse 的前提是「兩人的 finesse position 都是那張」：他明明有卻不打，才表示他看到我也有；
+// 他的 finesse position 不是那張（例如我以為的 layer、或我記的 finesse position 和他不同）時，他不打另有原因。
+func (s *state) onFinessePos(rec *clueRec, cs []cand, p int, t ident) bool {
+	for _, c := range cs {
+		if c.id != t {
+			continue
+		}
+		for _, d := range c.deps {
+			if d.player == p && d.finesse {
+				if x, ok := s.see(s.me, d.card); ok && x == d.id && d.layers == 0 && rec.fpAt != nil && d.card == rec.fpAt[p] {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
 // passMeansMe：從沒盲打的 p 的角度（不跳過他自己）找 t 的連接時，需要的 finesse 落在他自己或我身上。
 // Level 2 只處理「他在給提示者與接收者之間、我在接收者之後」：他沒打，是因為看到我可能被逆飛。
 // Level 5 The Ambiguous Finesse / Urgency Principle：其他位置也一樣——他看得到我的 finesse position 上有那張而不打，
-// 就是我（大家都會儘快盲打，他不打就表示不是他）；但只限他的角度確實落在我身上。
-func (s *state) passMeansMe(rec *clueRec, p int, t ident) bool {
+// 就是我（大家都會儘快盲打，他不打就表示不是他）；但只限他的角度確實落在我身上，而且他的 finesse position
+// 確實是那張（exact，原文的例子是兩人都有）。
+func (s *state) passMeansMe(rec *clueRec, p int, t ident, exact bool) bool {
 	pos := func(q int) int { return (q - rec.giver + s.n) % s.n }
 	reverse := pos(p) < pos(rec.target) && pos(rec.target) < pos(s.me)
-	if !reverse && !s.knows(lvUrgency) {
+	if !reverse && !(s.knows(lvUrgency) && exact) {
+		return false
+	}
+	// 從他的角度這可能是 save clue（例如他看不到自己手上的另一張 2，以為 chop 上的 2 是 2 Save）：
+	// save clue 不會讓人盲打，他不打不代表是我
+	if rec.saveView != nil && rec.saveView[p] {
 		return false
 	}
 	defer s.saveSim()()

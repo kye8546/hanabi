@@ -610,3 +610,13 @@ func TestNoChainWaitingOnReceiversOwnCard(t *testing.T) {
 		t.Fatalf("Bob 不該照「等 Cathy 先打 b2」的計畫盲打，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestFinesseCardLaterCluedOtherwise(t *testing.T) {
+	// 使用者紀錄 20261014-095355（Black、Lv4）：t39 黃色點到使用者的 y3，從接收者的角度也可能是 y4（finesse AI-1 的 y3）；
+	// t40 使用者用藍色點到 AI-1 那張牌——它不可能是 y3，y4 的解讀就不成立。AI-1 在 t44 不能還以為使用者會把 y3 當 y4 打而給 Fix Clue
+	g, bots := replayCodesVariant(t, 3, game.BlackSix, 1791942835598568000, 4,
+		"h11 p3 h12 h21 p3 p4 d5 d4 d5 h2R d2 h03 h23 p1 p4 h2K p3 p1 p1 h2W d5 d5 h04 d4 p3 h25 d2 d5 h0G d2 p1 h2R p1 h2G p5 p2 h1G p4 h0Y h1B p5 p1 h1K")
+	if a := step(t, g, bots); a.Type != game.ActPlay {
+		t.Fatalf("AI-1 應該打出確定的 b4，卻 %+v（%s）", a, bots[1].s.why)
+	}
+}

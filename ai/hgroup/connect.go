@@ -424,15 +424,35 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 	if !slices.Contains(s.hands[d.player], d.card) {
 		return d, depFail
 	}
+	if n := s.notes[d.card]; n.clued {
+		// 那張後來被直接提示了：提示資訊還容許它是那張，他就會當成已提示的牌照順序打，不必再急著盲打；
+		// 不容許（例如要它是 y3，卻被點了藍色）就不是這個連接
+		if n.explicit.has(d.id) {
+			return d, depPending
+		}
+		return d, depFail
+	}
+	if s.knows(lvQueuedFinesse) && s.queuedBehind(d) {
+		return d, depPending // Queued Finesse：他得先打完之前被 finesse 的牌（可能還在等前一張打出）
+	}
 	// finesse 要立刻盲打：牌已經可以打了，他卻做了別的事（不是去打另一張被 finesse 的牌）。
 	// 但他自己的筆記還不確定那張現在能打（例如 self-finesse 可能是 b2 或 w2，b1 還沒打出）時，等是對的
-	if s.playableNow(d.id) && !(played >= 0 && s.notes[played].finessed) {
+	if s.playableNow(d.id) && !(played >= 0 && s.blindForOther(e, played)) {
 		if n := s.notes[d.card]; n.finessed && !s.holderKnowsPlayable(d.card) {
 			return d, depPending
 		}
 		return d, depFail
 	}
 	return d, depPending
+}
+
+// blindForOther：他打的是已記成被 finesse 的別張牌——他是在接另一個 finesse，不是沒接這個。
+// Level 5 起（finesse 可以排隊），盲打任何沒被提示的牌都算：他是在接他認為的某個 finesse。例如 Queued Finesse
+// 照提示先後盲打：我收到的提示可能是直接的 w2、也可能是 finesse 他的 w2，我還沒記成被 finesse，他先盲打 w2
+// 再打這個提示的 g1；或是我已經排除的 Double Finesse 的第二張。
+func (s *state) blindForOther(e game.Event, played int) bool {
+	n := s.notes[played]
+	return n.finessed || s.knows(lvQueuedFinesse) && !n.clued && (e.Type == game.EvPlay || e.Type == game.EvMisplay)
 }
 
 // checkDeps 在每個行動「之前」呼叫，驗證所有待兌現的 prompt / finesse。

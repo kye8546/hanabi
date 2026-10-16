@@ -36,6 +36,9 @@ type interp struct {
 	planOK   bool
 	agreed   bool // 每個要打連接牌的玩家，從自己角度推出的連接都和 plan 一樣
 	stray    bool // 計畫外的玩家會從自己的角度以為要打他的牌（他看不到自己的牌，會打錯）
+	// saveView[q]：從看得到焦點的旁觀者 q 的角度，這個提示可能是救它的 save clue
+	// （例如 q 看不到自己手上的另一張 2，以為 chop 上的 2 是 2 Save；passMeansMe 用）
+	saveView []bool
 }
 
 // interpret 依 H-Group 慣例（目前的等級）解讀 giver 給 R 的提示。touched 是被點到的牌 ID。
@@ -133,9 +136,10 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	}
 
 	base := s.overlay[it.focus]
+	maySave := it.chopFocus || it.cmKind == cmFive || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
 	candsOf := func() []cand {
 		cs := s.playCands(R, giver, R, it.focus, base)
-		if it.chopFocus || it.cmKind == cmFive || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver)) {
+		if maySave {
 			cs = append(cs, s.saveCands(R, giver, R, &it, h, base)...)
 		}
 		return cs
@@ -181,6 +185,14 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		for _, c := range it.cands {
 			if c.save && c.id == t {
 				it.saveOK = true
+			}
+		}
+		if maySave {
+			it.saveView = make([]bool, s.n)
+			for q := range s.n {
+				if q != giver && q != R && q != s.me {
+					it.saveView[q] = len(s.saveCands(q, giver, R, &it, h, setOf(t))) > 0
+				}
 			}
 		}
 		it.plan, it.planOK = s.connect(s.me, giver, R, it.focus, t)
@@ -346,7 +358,7 @@ func (s *state) onClue(e game.Event) {
 	}
 
 	rec := &clueRec{giver: e.Player, target: R, focus: it.focus, cands: it.cands, fallback: it.fallback,
-		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq}
+		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq, saveView: it.saveView}
 	var u idSet
 	for _, c := range it.cands {
 		u |= 1 << c.id

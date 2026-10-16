@@ -60,6 +60,7 @@ type clueRec struct {
 	passed   []int // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
 	seq      int   // 提示時的事件序號
 	stale    bool  // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
+	saveView []bool // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
