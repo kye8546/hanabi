@@ -169,6 +169,16 @@ func TestRainbowVariant(t *testing.T) {
 	if c, ok := g.Hands[1][0].Know.HintedColor(); !ok || c != Rainbow {
 		t.Errorf("只看正向提示也看得出是彩虹色：%v %v", c, ok)
 	}
+	// 紅 1 被紅色點到、沒被藍色點到：反向資訊排除了彩虹色，正向資訊的顯示也不再列彩虹色
+	if cs := g.Hands[1][1].Know.PositiveColors(); !slices.Equal(cs, []Color{Red}) {
+		t.Errorf("被藍色排除彩虹色後應只顯示紅色：%v", cs)
+	}
+	g.Hands[1] = append(g.Hands[1], HandCard{Card: c(Red, 3), Know: k()})
+	g.Current = 0
+	mustApply(t, g, HintColorTo(1, Red))
+	if cs := g.Hands[1][3].Know.PositiveColors(); !slices.Equal(cs, []Color{Red, Rainbow}) {
+		t.Errorf("只被紅色點到、彩虹色沒被排除時應顯示紅色或彩虹色：%v", cs)
+	}
 }
 
 func TestSameSeedSameGame(t *testing.T) {

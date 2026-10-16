@@ -10,8 +10,6 @@ type Knowledge struct {
 	// 只記正向提示（被點到）的值，不含「不是 X」的推論；介面隱藏反向資訊時使用
 	HintedColors uint8
 	HintedRanks  uint8
-
-	rainbow bool // 這局有彩虹色（PositiveColors 用：只看正向提示時，被一種顏色點到的牌也可能是彩虹色）
 }
 
 // NewKnowledge 回傳變體 va 中一張剛抽到、毫無資訊的牌的認知。
@@ -20,18 +18,18 @@ func NewKnowledge(va Variant) Knowledge {
 	for _, c := range va.Colors() {
 		k.Colors |= 1 << c
 	}
-	k.rainbow = va.HasColor(Rainbow)
 	return k
 }
 
 // PositiveColors 回傳只看正向提示（被點到的顏色）時可能的顏色：沒被顏色點到是空的；
-// 被兩種以上的顏色點到一定是彩虹色；被一種點到就是那種，這局有彩虹色時也可能是彩虹色。
+// 被兩種以上的顏色點到一定是彩虹色；被一種點到就是那種，還可能是彩虹色時（這局有彩虹色、
+// 也沒被別的顏色提示排除）再加上彩虹色。
 func (k Knowledge) PositiveColors() []Color {
 	c, ok := k.HintedColor()
 	switch {
 	case !ok:
 		return nil
-	case c != Rainbow && k.rainbow:
+	case c != Rainbow && k.CanBeColor(Rainbow):
 		return []Color{c, Rainbow}
 	}
 	return []Color{c}
