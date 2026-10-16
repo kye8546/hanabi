@@ -15,7 +15,7 @@ import (
 type Settings struct {
 	Players int          // 總人數（含自己）
 	Level   int          // H-Group 慣例等級
-	Variant game.Variant // 變體（Hanab Live 的 No Variant、6 Suits、Black (6 Suits)）
+	Variant game.Variant // 變體（Hanab Live 的 No Variant、6 Suits、Black (6 Suits)、Rainbow (6 Suits)）
 	Seed    uint64       // 洗牌種子；0 = 隨機
 }
 
@@ -67,6 +67,7 @@ var variants = []struct {
 	{"標準（No Variant）：5 色、滿分 25", game.NoVariant},
 	{"6 Suits：多一個青色（T），每色 10 張、共 60 張，滿分 30", game.SixSuits},
 	{"Black (6 Suits)：多一個黑色（K），每個數字只有 1 張（全都是 critical）、共 55 張，滿分 30", game.BlackSix},
+	{"Rainbow (6 Suits)：多一個彩虹色（M），每種顏色提示都會點到它、不能用彩虹色提示，共 60 張，滿分 30", game.RainbowSix},
 }
 
 // askVariant 詢問變體；空白 = 標準。

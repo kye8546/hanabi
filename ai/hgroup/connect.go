@@ -4,6 +4,7 @@
 package hgroup
 
 import (
+	"math/bits"
 	"slices"
 
 	"hanabi/game"
@@ -53,6 +54,7 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 func (s *state) connectRec(rec *clueRec, obs int, t ident) ([]dep, bool) {
 	defer s.saveSim()()
 	s.sameClue = rec.fresh
+	s.free = rec.free
 	return s.connect(obs, rec.giver, rec.target, rec.focus, t)
 }
 
@@ -113,9 +115,10 @@ func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) bool {
 func (s *state) findPrompt(obs, giver int, m ident, used []int) (d dep, took []int, ok bool) {
 	for k := 1; k < s.n; k++ {
 		p := (giver + k) % s.n
-		for _, id := range s.hands[p] {
+		for _, id := range s.promptOrder(p) {
 			n := s.notes[id]
-			if slices.Contains(used, id) || !n.clued || !s.possOf(id).has(m) || n.willPlay || s.holderKnowsPlayable(id) {
+			if slices.Contains(used, id) || !n.clued || !s.possOf(id).has(m) || n.willPlay || s.holderKnowsPlayable(id) ||
+				s.freeChoiceFinesse(obs, id, m) {
 				continue
 			}
 			// 看得到它不是 m（或我推得出自己的牌不是 m）：給提示者也看得到，不會想 prompt 它，
@@ -132,6 +135,20 @@ func (s *state) findPrompt(obs, giver int, m ident, used []int) (d dep, took []i
 		}
 	}
 	return dep{}, nil, false
+}
+
+// promptOrder 是 p 的已提示牌被 prompt 時的先後：由左而右。Level 5 Prompts in Multi-Color Variants：
+// 彩虹等多色變體中，正向資訊（點到它的提示值）多的先（例如「紅色 + 3」先於只有「紅色」的牌），一樣多才由左而右；
+// 負向資訊不算（原文：Players are not supposed to use information from negative clues）。
+func (s *state) promptOrder(p int) []int {
+	h := s.hands[p]
+	if !s.knows(lvMultiPrompt) || !s.multiColor() {
+		return h
+	}
+	h = slices.Clone(h)
+	info := func(id int) int { return bits.OnesCount16(s.notes[id].hinted) }
+	slices.SortStableFunc(h, func(a, b int) int { return info(b) - info(a) })
+	return h
 }
 
 // hiddenFinesse（Level 5 The Hidden Finesse）：p 會把已提示的牌 id 當成 m 打出（他看不到它其實是 t）。t 現在就能打、

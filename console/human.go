@@ -19,7 +19,7 @@ const helpText = `
  p <位置>              打出手牌，例如 p 1（位置從左邊 1 開始；新抽的牌放最左邊）
  d <位置>              棄掉手牌，例如 d 5（提示 token 滿 8 個時不能棄）
  h <玩家> <顏色|數字>  給提示，例如 h 1 r（給 1 號提示紅色）、h 2 3（給 2 號提示數字 3）
-                       玩家可用編號或名字；顏色 r/y/g/b/w 或 紅/黃/綠/藍/白（6 Suits 多一個 t / 青，Black 多一個 k / 黑）
+                       玩家可用編號或名字；顏色 r/y/g/b/w 或 紅/黃/綠/藍/白（6 Suits 多一個 t / 青，Black 多一個 k / 黑；Rainbow 的彩虹色不能提示，每種顏色提示都會點到它）
  u                     回溯：回到你上一次行動之前（撤銷你那一手和之後 AI 的行動），可連續使用
  x                     偷看自己手牌的真實牌面（紀錄檔會註明你在第幾回合偷看過）
  log                   顯示完整紀錄
@@ -173,11 +173,14 @@ func (h *Human) parse(line string, v game.PlayerView) (game.Action, error) {
 			return game.Action{}, fmt.Errorf("找不到玩家 %q", f[1])
 		}
 		var letters []string
-		for _, c := range v.Colors() {
+		for _, c := range v.Variant.ClueColors() {
 			letters = append(letters, strings.ToLower(c.Letter()))
 		}
 		if c, ok := game.ParseColor(f[2]); ok {
-			if !v.Variant.HasColor(c) {
+			if c == game.Rainbow && v.Variant.HasColor(c) {
+				return game.Action{}, fmt.Errorf("彩虹色不能提示（每種顏色提示都會點到彩虹色的牌；可用 %s）", strings.Join(letters, "/"))
+			}
+			if !v.Variant.CanClue(c) {
 				return game.Action{}, fmt.Errorf("這局沒有%s色（只有 %s）", c.Name(), strings.Join(letters, "/"))
 			}
 			return game.HintColorTo(target, c), nil

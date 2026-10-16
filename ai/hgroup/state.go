@@ -18,6 +18,7 @@ type note struct {
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
 	touches  int      // 被正向提示點到的次數（Level 4 Order Chop Move：點到次數不同的 1 不算同一組）
+	hinted   uint16   // 點到它的提示值（位元 0–7 顏色、8–12 數字）；正向資訊的多寡（Level 5 Prompts in Multi-Color Variants）
 	drawn    int      // 抽到這張牌時的事件序號（起手牌是 0；Level 5 Layered Finesse：提示之後才抽的牌不在 layer 裡）
 	explicit idSet    // 只由提示本身（正向與負向）得到的可能
 	poss     idSet    // 依慣例推論後的可能（隱含資訊）
@@ -54,13 +55,14 @@ type clueRec struct {
 	// fallback：需要接收者自己 self-prompt / self-finesse 的解讀。只在其他解讀都不成立後才考慮
 	// （Level 2 The Self-Finesse：「only consider ... if there are no other possibilities」）
 	fallback []cand
-	fpAt     []int // 提示當下每位玩家的 finesse position（Wrong Prompt 用）
-	chop     bool  // 焦點在 chop 上（Level 3 Chop-Focus 例外：這張 1 最先打）
-	fresh    []int // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
-	passed   []int // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
-	seq      int   // 提示時的事件序號
-	stale    bool  // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
-	saveView []bool // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
+	fpAt     []int      // 提示當下每位玩家的 finesse position（Wrong Prompt 用）
+	chop     bool       // 焦點在 chop 上（Level 3 Chop-Focus 例外：這張 1 最先打）
+	fresh    []int      // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
+	passed   []int      // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
+	seq      int        // 提示時的事件序號
+	stale    bool       // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
+	saveView []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
+	free     freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
@@ -121,6 +123,8 @@ type sim struct {
 	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
 	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
 	assumeMine bool
+
+	free freeChoice // 解讀 / 重新找連接牌時：這個提示的 Free Choice（Rainbow 變體，variant_rainbow.go）
 }
 
 // saveSim 存下目前的假設情境，回傳還原它的函式。

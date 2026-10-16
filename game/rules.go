@@ -55,7 +55,7 @@ func (g *Game) Validate(a Action) error {
 func validHint(h Hint, va Variant) bool {
 	switch h.Kind {
 	case HintColor:
-		return va.HasColor(h.Color)
+		return va.CanClue(h.Color)
 	case HintRank:
 		return h.Rank >= 1 && h.Rank <= MaxRank
 	}

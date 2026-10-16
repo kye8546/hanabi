@@ -1,7 +1,7 @@
 // Level 5（docs/level-5.mdx）中自成一塊的部分：Urgency Principle 的例外（可以延後盲打的緊急行動）、
 // Queued Finesse 的盲打順序。Layered / Clandestine / Hidden Finesse 是連接牌推論的分支，在 connect.go
 // （findFinesse 的 layered、findPrompt 的 hiddenFinesse、stepDep 的 layerSlot）；Ambiguous Finesse 在 level2.go 的 passMeansMe。
-// 彩虹等多色變體的 Prompt 規則要等加入那些變體後再補。
+// 彩虹等多色變體的 Prompt 規則（Prompts in Multi-Color Variants）在 connect.go 的 promptOrder。
 
 package hgroup
 

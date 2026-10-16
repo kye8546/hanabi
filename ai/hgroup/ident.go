@@ -5,7 +5,8 @@
 // Level 2 加上多重 prompt / finesse、Reverse Finesse、Self-Finesse、5 Stall、Wrong Prompt；
 // Level 3 加上 Playing Multiple 1's、Fix Clue、Sarcastic Discard；
 // Level 4 加上 Chop Moves（Trash Chop Move、5's Chop Move、Order Chop Move）。
-// 變體：Black (6 Suits) 另外照黑色的 save clue 慣例（https://hanabi.github.io/variant-specific/black，所有等級）。
+// 變體：Black (6 Suits) 另外照黑色的 save clue 慣例（https://hanabi.github.io/variant-specific/black，所有等級）；
+// Rainbow (6 Suits) 照彩虹的慣例（https://hanabi.github.io/variant-specific/rainbow，所有等級）。
 package hgroup
 
 import (
@@ -15,7 +16,7 @@ import (
 	"hanabi/game"
 )
 
-// ident 是一種牌面（顏色 + 數字），編號 0..34（青色是 25..29、黑色是 30..34）。
+// ident 是一種牌面（顏色 + 數字），編號 0..39（青色是 25..29、黑色是 30..34、彩虹色是 35..39）。
 type ident int8
 
 const numIdents = game.NumColors * int(game.MaxRank)
@@ -71,11 +72,19 @@ func (s idSet) single() (ident, bool) {
 	return ident(bits.TrailingZeros64(uint64(s))), true
 }
 
-// hintSet 回傳提示 h 會點到的所有牌面。
+// hintBit 是提示值在 note.hinted 裡的位元。
+func hintBit(h game.Hint) uint16 {
+	if h.Kind == game.HintColor {
+		return 1 << h.Color
+	}
+	return 1 << (game.NumColors + int(h.Rank) - 1)
+}
+
+// hintSet 回傳提示 h 會點到的所有牌面（顏色提示也點到彩虹色）。
 func hintSet(h game.Hint) idSet {
 	var s idSet
 	for i := ident(0); int(i) < numIdents; i++ {
-		if (h.Kind == game.HintColor && i.color() == h.Color) || (h.Kind == game.HintRank && i.rank() == h.Rank) {
+		if (h.Kind == game.HintColor && (i.color() == h.Color || i.color() == game.Rainbow)) || (h.Kind == game.HintRank && i.rank() == h.Rank) {
 			s |= 1 << i
 		}
 	}

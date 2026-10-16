@@ -39,6 +39,7 @@ type interp struct {
 	// saveView[q]：從看得到焦點的旁觀者 q 的角度，這個提示可能是救它的 save clue
 	// （例如 q 看不到自己手上的另一張 2，以為 chop 上的 2 是 2 Save；passMeansMe 用）
 	saveView []bool
+	free     freeChoice // Rainbow 變體的 Free Choice
 }
 
 // interpret 依 H-Group 慣例（目前的等級）解讀 giver 給 R 的提示。touched 是被點到的牌 ID。
@@ -104,6 +105,8 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 
 	// 這次被點到的牌不在 finesse position 上（finesseSlot 會跳過）
 	s.touchedNow = touched
+	it.free = s.freeChoiceOf(R, h, touched)
+	s.free = it.free
 
 	// 計算期間把接收者的筆記換成「提示後」的樣子（負向資訊會影響 prompt 候選）
 	s.overlay = map[int]idSet{}
@@ -343,6 +346,7 @@ func (s *state) onClue(e game.Event) {
 		n := s.notes[id]
 		n.clued, n.cm = true, false // 被提示點到後就是一般的已提示牌
 		n.touches++
+		n.hinted |= hintBit(e.Hint)
 	}
 	if it.fix {
 		s.applyFix(R, e.Player, it)
@@ -358,7 +362,7 @@ func (s *state) onClue(e game.Event) {
 	}
 
 	rec := &clueRec{giver: e.Player, target: R, focus: it.focus, cands: it.cands, fallback: it.fallback,
-		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq, saveView: it.saveView}
+		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq, saveView: it.saveView, free: it.free}
 	var u idSet
 	for _, c := range it.cands {
 		u |= 1 << c.id

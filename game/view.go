@@ -97,7 +97,7 @@ func (v PlayerView) LegalHints() []Action {
 		for j, vc := range v.Hands[t] {
 			hand[j] = vc.Card
 		}
-		for _, c := range v.Colors() {
+		for _, c := range v.Variant.ClueColors() {
 			if a := HintColorTo(t, c); len(touchedSlots(hand, a.Hint)) > 0 {
 				out = append(out, a)
 			}

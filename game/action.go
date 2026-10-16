@@ -24,10 +24,10 @@ type Hint struct {
 	Rank  Rank  // Kind == HintRank 時有效
 }
 
-// Matches 回傳這個提示是否會點到該牌。
+// Matches 回傳這個提示是否會點到該牌。彩虹色的牌被每種顏色提示點到。
 func (h Hint) Matches(c Card) bool {
 	if h.Kind == HintColor {
-		return c.Color == h.Color
+		return c.Color == h.Color || c.Color == Rainbow
 	}
 	return c.Rank == h.Rank
 }

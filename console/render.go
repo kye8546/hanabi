@@ -28,6 +28,7 @@ var ansiColors = [game.NumColors]string{
 	"\x1b[1;97m", // 白
 	"\x1b[1;36m", // 青
 	"\x1b[1;90m", // 黑（亮黑 = 深灰，深色與淺色終端都看得到）
+	"\x1b[1;35m", // 彩虹（洋紅）
 }
 
 // Renderer 負責把 PlayerView 與事件印成文字。
@@ -154,7 +155,8 @@ func (r *Renderer) hand(v game.PlayerView, seat int) {
 	var actual, known strings.Builder
 	for _, vc := range cards {
 		actual.WriteString(cell(r.card(vc.Card), 2))
-		known.WriteString(cell(r.knownShort(vc.Know), 2))
+		ks, n := r.knownShort(vc.Know)
+		known.WriteString(cell(ks, n))
 	}
 	r.printf("     手牌  %s\n", actual.String())
 	if !r.showNeg {
@@ -199,10 +201,7 @@ func (r *Renderer) colorsShown(k game.Knowledge) []game.Color {
 	if r.showNeg {
 		return k.PossibleColors()
 	}
-	if c, ok := k.HintedColor(); ok {
-		return []game.Color{c}
-	}
-	return nil
+	return k.PositiveColors()
 }
 
 // ranksShown 同 colorsShown，針對數字。
@@ -216,16 +215,20 @@ func (r *Renderer) ranksShown(k game.Knowledge) []game.Rank {
 	return nil
 }
 
-// knownShort 把認知縮寫成兩個字元，例如 "R3"、"R?"、"?3"、"??"。
-func (r *Renderer) knownShort(k game.Knowledge) string {
+// knownShort 把認知縮寫成短字串，例如 "R3"、"R?"、"?3"、"??"；Rainbow 變體中被一種顏色點到的牌
+// 是「那種顏色或彩虹色」，例如 "RM3"。回傳字串與可見長度。
+func (r *Renderer) knownShort(k game.Knowledge) (string, int) {
 	cs, rs := "?", "?"
 	if ranks := r.ranksShown(k); len(ranks) == 1 {
 		rs = strconv.Itoa(int(ranks[0]))
 	}
-	if cols := r.colorsShown(k); len(cols) == 1 {
-		return r.paint(cols[0], cols[0].Letter()+rs)
+	switch cols := r.colorsShown(k); {
+	case len(cols) == 1:
+		return r.paint(cols[0], cols[0].Letter()+rs), 2
+	case len(cols) == 2 && cols[1] == game.Rainbow:
+		return r.paint(cols[0], cols[0].Letter()) + r.paint(cols[1], cols[1].Letter()+rs), 3
 	}
-	return r.style(ansiDim, cs+rs)
+	return r.style(ansiDim, cs+rs), 2
 }
 
 func (r *Renderer) hintText(h game.Hint) string {

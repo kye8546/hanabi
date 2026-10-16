@@ -2,6 +2,7 @@ package game
 
 import (
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -72,7 +73,7 @@ func TestDeckComposition(t *testing.T) {
 			ids[cd.ID] = true
 			count[Card{Color: cd.Color, Rank: cd.Rank}]++
 		}
-		size := map[Variant]int{NoVariant: 50, SixSuits: 60, BlackSix: 55}[va]
+		size := map[Variant]int{NoVariant: 50, SixSuits: 60, BlackSix: 55, RainbowSix: 60}[va]
 		if len(ids) != size || len(all) != size {
 			t.Errorf("%s：應有 %d 張不同 ID 的牌，有 %d 張、%d 種 ID", va.Name(), size, len(all), len(ids))
 		}
@@ -137,6 +138,36 @@ func TestBlackVariant(t *testing.T) {
 		if got, ok := ParseVariant(va.Code()); !ok || got != va {
 			t.Errorf("ParseVariant(%q) = %v, %v", va.Code(), got, ok)
 		}
+	}
+}
+
+func TestRainbowVariant(t *testing.T) {
+	g, _ := NewVariant(2, RainbowSix, 1)
+	if g.Variant.MaxScore() != 30 || !g.Variant.HasColor(Rainbow) || g.Variant.CanClue(Rainbow) || len(g.Variant.ClueColors()) != 5 {
+		t.Fatalf("Rainbow (6 Suits) 應是 R/Y/G/B/W/M、滿分 30、彩虹色不能提示：%v", g.Variant.Colors())
+	}
+	k := func() Knowledge { return NewKnowledge(RainbowSix) }
+	g.Hands[1] = []HandCard{{Card: c(Rainbow, 2), Know: k()}, {Card: c(Red, 1), Know: k()}, {Card: c(Blue, 3), Know: k()}}
+	if _, err := g.Apply(HintColorTo(1, Rainbow)); !errors.Is(err, ErrBadHint) {
+		t.Errorf("不應能提示彩虹色，得到 %v", err)
+	}
+	evs := mustApply(t, g, HintColorTo(1, Red))
+	if !slices.Equal(evs[0].Touched, []int{0, 1}) {
+		t.Errorf("紅色應點到彩虹 2 與紅 1：%v", evs[0].Touched)
+	}
+	if k := g.Hands[1][0].Know; !k.CanBeColor(Red) || !k.CanBeColor(Rainbow) || k.CanBeColor(Blue) {
+		t.Errorf("被紅色點到的牌是紅色或彩虹色：%+v", k)
+	}
+	if k := g.Hands[1][2].Know; k.CanBeColor(Red) || k.CanBeColor(Rainbow) || !k.CanBeColor(Blue) {
+		t.Errorf("沒被紅色點到的牌不是紅色也不是彩虹色：%+v", k)
+	}
+	g.Current = 0
+	mustApply(t, g, HintColorTo(1, Blue))
+	if c, ok := g.Hands[1][0].Know.KnownColor(); !ok || c != Rainbow {
+		t.Errorf("被紅色與藍色點到的牌一定是彩虹色：%+v", g.Hands[1][0].Know)
+	}
+	if c, ok := g.Hands[1][0].Know.HintedColor(); !ok || c != Rainbow {
+		t.Errorf("只看正向提示也看得出是彩虹色：%v %v", c, ok)
 	}
 }
 

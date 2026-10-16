@@ -72,6 +72,9 @@ func (s *state) allClues() []clueEval {
 	for k := 1; k < s.n; k++ {
 		R := (s.me + k) % s.n
 		for _, c := range s.colors {
+			if c == game.Rainbow {
+				continue // 彩虹色不能提示
+			}
 			if ev, ok := s.evalClue(R, game.Hint{Kind: game.HintColor, Color: c}, k); ok {
 				out = append(out, ev)
 			}

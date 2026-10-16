@@ -285,7 +285,13 @@ func (s *state) doomsLaterChop(ev clueEval, hints int) (int, bool) {
 func (s *state) cleanClueFor(p, id int) bool {
 	c := s.cards[id]
 	chop := s.chop(p)
-	for _, h := range []game.Hint{{Kind: game.HintColor, Color: c.Color}, {Kind: game.HintRank, Rank: c.Rank}} {
+	hs := []game.Hint{{Kind: game.HintRank, Rank: c.Rank}}
+	for _, col := range s.colors {
+		if col != game.Rainbow && (col == c.Color || c.Color == game.Rainbow) {
+			hs = append(hs, game.Hint{Kind: game.HintColor, Color: col})
+		}
+	}
+	for _, h := range hs {
 		ok := true
 		var seen idSet
 		focus := -1

@@ -40,7 +40,7 @@ func runGame(n int, va game.Variant, level int, seed uint64) (*game.Game, error)
 
 // 全 AI 對局：不可以有不合法行動，並印出各等級 × 人數的平均分數表（go test -v 看得到）。
 // HGAMES 局數（預設 200；比較改動用 1000）、HLEVEL 等級（例如 4 或 1,4；預設全部）、
-// HVARIANT 變體（none / 6suits / black6，可用逗號列多個；預設標準 5 色）。各局平行跑，結果和循序跑完全相同。
+// HVARIANT 變體（none / 6suits / black6 / rainbow6，可用逗號列多個；預設標準 5 色）。各局平行跑，結果和循序跑完全相同。
 func TestSelfPlay(t *testing.T) {
 	games := 200
 	if testing.Short() {
@@ -94,7 +94,7 @@ func TestVariantSelfPlay(t *testing.T) {
 	for lv := 1; lv <= MaxLevel; lv++ {
 		levels = append(levels, lv)
 	}
-	selfPlay(t, []game.Variant{game.SixSuits, game.BlackSix}, levels, games)
+	selfPlay(t, []game.Variant{game.SixSuits, game.BlackSix, game.RainbowSix}, levels, games)
 }
 
 // simStats 是一組（變體、等級、人數）自我對局的累計結果。

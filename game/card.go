@@ -19,39 +19,42 @@ const (
 	Green
 	Blue
 	White
-	Teal  // 只在 6 Suits 變體出現
-	Black // 只在 Black (6 Suits) 變體出現；每個數字只有 1 張
+	Teal    // 只在 6 Suits 變體出現
+	Black   // 只在 Black (6 Suits) 變體出現；每個數字只有 1 張
+	Rainbow // 只在 Rainbow (6 Suits) 變體出現；每種顏色提示都會點到它，不能用「彩虹色」提示
 )
 
 // NumColors 是所有變體中的顏色總數（陣列大小用）；一局實際用哪些顏色看 Variant.Colors。
-const NumColors = 7
+const NumColors = 8
 
 // AllColors 依固定順序列出所有顏色，方便迭代與顯示；一局實際用的是 Variant.Colors。
-var AllColors = [NumColors]Color{Red, Yellow, Green, Blue, White, Teal, Black}
+var AllColors = [NumColors]Color{Red, Yellow, Green, Blue, White, Teal, Black, Rainbow}
 
-var colorLetters = [NumColors]string{"R", "Y", "G", "B", "W", "T", "K"}
-var colorNames = [NumColors]string{"紅", "黃", "綠", "藍", "白", "青", "黑"}
+var colorLetters = [NumColors]string{"R", "Y", "G", "B", "W", "T", "K", "M"}
+var colorNames = [NumColors]string{"紅", "黃", "綠", "藍", "白", "青", "黑", "彩"}
 
 // Variant 是 Hanab Live 的變體（https://github.com/Hanabi-Live/hanabi-live/blob/main/docs/variants.md）。
 // Hanab Live 的第五色是紫色，這裡沿用實體版的白色。
 type Variant int
 
 const (
-	NoVariant Variant = iota // 標準 5 色
-	SixSuits                 // 6 Suits：多一個青色
-	BlackSix                 // Black (6 Suits)：多一個黑色，每個數字只有 1 張（全都是 critical）
+	NoVariant  Variant = iota // 標準 5 色
+	SixSuits                  // 6 Suits：多一個青色
+	BlackSix                  // Black (6 Suits)：多一個黑色，每個數字只有 1 張（全都是 critical）
+	RainbowSix                // Rainbow (6 Suits)：多一個彩虹色，每種顏色提示都會點到它
 )
 
 // Variants 列出所有變體（開局選單的順序）。
-var Variants = []Variant{NoVariant, SixSuits, BlackSix}
+var Variants = []Variant{NoVariant, SixSuits, BlackSix, RainbowSix}
 
 var variantInfo = []struct {
 	name, code string
 	colors     []Color
 }{
-	NoVariant: {"No Variant", "none", AllColors[:5]},
-	SixSuits:  {"6 Suits", "6suits", AllColors[:6]},
-	BlackSix:  {"Black (6 Suits)", "black6", []Color{Red, Yellow, Green, Blue, White, Black}},
+	NoVariant:  {"No Variant", "none", AllColors[:5]},
+	SixSuits:   {"6 Suits", "6suits", AllColors[:6]},
+	BlackSix:   {"Black (6 Suits)", "black6", []Color{Red, Yellow, Green, Blue, White, Black}},
+	RainbowSix: {"Rainbow (6 Suits)", "rainbow6", []Color{Red, Yellow, Green, Blue, White, Rainbow}},
 }
 
 // Colors 回傳這個變體用到的顏色。
@@ -59,6 +62,14 @@ func (v Variant) Colors() []Color { return variantInfo[v].colors }
 
 // HasColor 回傳這個變體有沒有顏色 c。
 func (v Variant) HasColor(c Color) bool { return slices.Contains(v.Colors(), c) }
+
+// ClueColors 回傳能拿來提示的顏色（彩虹色不能提示：它被每種顏色提示點到）。
+func (v Variant) ClueColors() []Color {
+	return slices.DeleteFunc(slices.Clone(v.Colors()), func(c Color) bool { return c == Rainbow })
+}
+
+// CanClue 回傳能不能用顏色 c 提示。
+func (v Variant) CanClue(c Color) bool { return c != Rainbow && v.HasColor(c) }
 
 // MaxScore 回傳這個變體的滿分。
 func (v Variant) MaxScore() int { return len(v.Colors()) * int(MaxRank) }
@@ -79,7 +90,7 @@ func ParseVariant(code string) (Variant, bool) {
 	return 0, false
 }
 
-// Letter 回傳單一英文字母代號 (R/Y/G/B/W/T/K)。
+// Letter 回傳單一英文字母代號 (R/Y/G/B/W/T/K/M)。
 func (c Color) Letter() string { return colorLetters[c] }
 
 // Name 回傳中文名稱。
