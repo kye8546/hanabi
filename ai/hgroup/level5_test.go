@@ -445,3 +445,12 @@ func TestL5LayerIsNotEvidenceWhenAnotherClueNeedsIt(t *testing.T) {
 		t.Errorf("P4 不該把 slot 4 當成 w2 打出（%s）", bots[4].Why())
 	}
 }
+
+func TestL5BlindPlayBelongsToEarlierClue(t *testing.T) {
+	// 自我對局 5 人局 seed 1226：紅色可能是 r2、要 P1 finesse 的 r1，他的 finesse position 是 layer y1。之後的「2」救 P0 chop 上的 w2，
+	// P1 盲打出 y1 時，P0 不能把它當成「2」是 y2 的證明（以前就這樣丟掉 save 的解讀、把 w2 當 y2 打出）
+	g, bots := replayCodes(t, 5, 1226, 5, "h2B h4G p4 h0R h02 h3R p1 h4Y h15 p2")
+	if a := bots[0].Act(g.View(0)); a == game.Play(3) {
+		t.Errorf("P0 不該把 chop 上的 w2 當成 y2 打出（%s）", bots[0].Why())
+	}
+}

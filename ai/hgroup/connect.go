@@ -27,7 +27,7 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 	c := t.color()
 	for r := s.stacks[c] + 1; r < t.rank(); r++ {
 		m := identOf(c, r)
-		if s.alreadyGotten(obs, giver, m, used) {
+		if s.alreadyGotten(obs, giver, m, used) >= 0 {
 			continue
 		}
 		// Prompts > Finesses：已提示的牌（包括接收者自己的，self-prompt）優先於 finesse
@@ -62,7 +62,7 @@ func (s *state) connectRec(rec *clueRec, obs int, t ident) ([]dep, bool) {
 // 某張被拿到的牌筆記確定是 m，或持有者本來就會打它（已知可打、或是 play clue 的焦點）、而且它可能是 m
 // （obs 看得到時必須真的是 m）。本來就會打的牌不算 prompt。
 // 給提示者看不到自己的牌，所以他手上的牌只有筆記確定是 m 才算。exclude 是焦點與這條連接已用到的牌。
-func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) bool {
+func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) int {
 	for pl, h := range s.hands {
 		for _, id := range h {
 			if slices.Contains(exclude, id) || slices.Contains(s.skipCards, id) || !s.live(id) {
@@ -77,7 +77,7 @@ func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) bool {
 				// 我是給提示者時，我對自己牌的私下推論（筆記）別人不一定推得出，不能拿來當大家的共識
 				if obs == giver {
 					if t, ok := p.single(); ok && t == m {
-						return true
+						return id
 					}
 					continue
 				}
@@ -87,28 +87,28 @@ func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) bool {
 				}
 				if ok {
 					if t == m && p.has(m) && s.giverMayKnow(obs, id, m) {
-						return true
+						return id
 					}
 				} else if s.optimistic && giver == s.me && obs != s.me && p.has(m) && s.mineCanBe(id, m) {
 					// 我是給提示者、在模擬接收者：他看得到我這張，我看不到，它可能就是 m
-					return true
+					return id
 				}
 				continue
 			}
 			if t, ok := p.single(); ok && t == m {
-				return true
+				return id
 			}
 			if p.has(m) && (s.holderKnowsPlayable(id) || s.notes[id].willPlay) {
 				if t, ok := s.see(obs, id); ok && t == m {
-					return true
+					return id
 				} else if !ok && s.mineCanBe(id, m) {
 					s.ownMaybe = s.ownMaybe || pl == s.me
-					return true
+					return id
 				}
 			}
 		}
 	}
-	return false
+	return -1
 }
 
 // findPrompt：從給提示者的下一位開始，第一位手上有「可能是 m 的被提示牌」的玩家，
@@ -517,13 +517,27 @@ func (s *state) checkDeps(e game.Event, played int) {
 	layerOnly := func(rec *clueRec, peeled idSet, done int) bool {
 		return done < 0 && peeled != 0 && !exactFor[rec] && len(exactFor) > 0
 	}
+	// Level 5 Queued Finesse：盲打照提示的先後兌現。最早一個有解讀要他盲打這張牌的提示擁有他這次的盲打
+	// （打出的不是預期的牌面就是 layer），之後的提示先不拿它當證據，等他下一手（自我對局 seed 1226：紅色可能是
+	// r2、要 Bob finesse r1，他的 finesse position 是 layer y1；我把他盲打出的 y1 當成之後的「2」是 y2 的證明、
+	// 丟掉了 save 的解讀，chop 上的 w2 就被打錯）
+	var claim *clueRec
+	if s.knows(lvLayeredFinesse) && e.Type == game.EvPlay && played >= 0 && !s.notes[played].clued {
+		for _, rec := range s.recs {
+			if slices.ContainsFunc(rec.cands, func(c cand) bool {
+				return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == e.Player && d.finesse && d.card == played })
+			}) && (claim == nil || rec.seq < claim.seq) {
+				claim = rec
+			}
+		}
+	}
 	otherExplains := func(rec *clueRec) bool {
 		for r := range explained {
 			if r != rec {
 				return true
 			}
 		}
-		return false
+		return claim != nil && claim != rec && claim.seq < rec.seq
 	}
 	proved := s.blindProves(e, played, explained)
 	for _, rec := range s.recs {
