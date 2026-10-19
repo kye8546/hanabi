@@ -63,6 +63,7 @@ type clueRec struct {
 	stale    bool       // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
 	saveView []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
 	free     freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
+	struck   bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
@@ -357,6 +358,9 @@ func (s *state) apply(e game.Event) {
 				s.applyWrongPrompt(wpCard, wpIDs, wpRec)
 			} else {
 				s.onStrike(e.Card.ID)
+				for _, rec := range s.recs {
+					rec.struck = true
+				}
 			}
 		case game.EvDiscard:
 			s.discarded[id]++

@@ -178,8 +178,8 @@ func selfPlay(t *testing.T, vas []game.Variant, levels []int, games int) {
 		avg := f(st.total)
 		t.Logf("%s Lv%d %d 人：平均 %.2f 分（棄牌後理論上限 %.2f），平均閃電 %.2f，三閃電 %d 局，滿分 %d 局（共 %d 局）",
 			gr.va.Name(), gr.lv, gr.n, avg, f(st.maxSum), f(st.strikes), st.bombs, st.perfect, games)
-		// 退步警戒線：自我對局目前約 21–23 分
-		if avg < 18 || st.bombs*20 > games {
+		// 退步警戒線：自我對局目前約 21–23 分；三閃電率 1000 局約 1–2%，100 局的抽樣誤差大（5% 時常誤報），用 8%
+		if avg < 18 || st.bombs*100 > games*8 {
 			t.Errorf("%s Lv%d %d 人表現退步：平均 %.2f 分、三閃電 %d/%d 局", gr.va.Name(), gr.lv, gr.n, avg, st.bombs, games)
 		}
 		if gr.n == game.MinPlayers {

@@ -142,6 +142,10 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if it.stray {
 		ev.misleads, ev.danger = true, true // 計畫外的玩家會盲打（或打已提示的牌），多半打錯
 	}
+	if s.focusUnclear(touched) {
+		ev.misleads = true
+		return ev, true
+	}
 	if s.knows(lvFixClue) && len(it.newCards) == 0 && !slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
 		// 不給任何新資訊的提示：接收者若已經（私下推得）知道其中某張是他下一手要打的牌，就會當成 Stop Clue
 		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險
@@ -204,7 +208,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 			return ev, true
 		}
 	}
-	if bad := s.unsafeFinesse(R, plan); bad {
+	if bad := s.unsafeFinesse(R, plan); bad || s.layerMisread(it, plan) {
 		return ev, true
 	}
 	// 被 prompt / finesse 叫出來的連接牌，若可能和我手上不確定的已提示牌重複，同樣違反 Good Touch
@@ -273,6 +277,43 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	ev.score -= dist
 	return ev, true
+}
+
+// layerMisread（Level 5 Layered Finesse）：layer 打出後，接收者會以為焦點是接在 layer 後面的那張
+// （提示資訊上可能是它，例如「2」的焦點是 g2，layer 是 y1，接收者就以為是 y2）。原文的 Bob is Lazy 也是這樣讀；
+// 盲打的人看得到焦點會再打下一張，但在那之前接收者的筆記是錯的，中間別人的提示就可能讓他打錯
+// （自我對局 seed 492：之後綠色點到他的 g2 與 chop 上的 g3，他把 g3 讀成 g1 打出）。Clarity Principle：不給。
+func (s *state) layerMisread(it interp, plan []dep) bool {
+	maybe := it.explicit[it.focus] & s.useful()
+	for _, d := range plan {
+		if !d.finesse || d.layers == 0 {
+			continue
+		}
+		cards := s.depCards(d)
+		for _, l := range cards[:len(cards)-1] {
+			if c := identOfCard(s.cards[l]); c.rank() < game.MaxRank && maybe.has(identOf(c.color(), c.rank()+1)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// focusUnclear：點到的牌中有被 finesse、還沒被提示的牌，而有人不知道它被 finesse（他是那個 finesse 提示的接收者，
+// 看不到焦點，還有直接的解讀）：他會把它當成新牌，判斷出的焦點和別人不同，該盲打的連接牌他就不會打
+// （自我對局 seed 393：「3」點到被 finesse 的 r3 與新的 y3，大家讀成 y3、要 Reverse Finesse Alice 的 y2，
+// Alice 不知道 r3 被 finesse，以為焦點是能打的 r3 而不盲打，後面的人又依 Ambiguous Finesse 以為是自己而打錯）。
+func (s *state) focusUnclear(touched []int) bool {
+	for _, id := range touched {
+		if n := s.notes[id]; n.finessed && !n.clued {
+			for q := range s.n {
+				if !s.knowsFinessed(q, id) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // chainPlays：焦點 t 與連接牌照計畫打出後，再加上接得上的非焦點新牌（例如「1」點到的其他 1、白色點到的 w1 w2），

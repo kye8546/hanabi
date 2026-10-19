@@ -115,7 +115,8 @@ func (s *state) onFinessePos(rec *clueRec, cs []cand, p int, t ident) bool {
 func (s *state) passMeansMe(rec *clueRec, p int, t ident, exact bool) bool {
 	pos := func(q int) int { return (q - rec.giver + s.n) % s.n }
 	reverse := pos(p) < pos(rec.target) && pos(rec.target) < pos(s.me)
-	if !reverse && !(s.knows(lvUrgency) && exact) {
+	// 提示之後有人打錯：What to Do After a Strike 會重置相關的筆記，他沒盲打可能只是因為這樣（自我對局 seed 948）
+	if !reverse && !(s.knows(lvUrgency) && exact && !rec.struck) {
 		return false
 	}
 	// 從他的角度這可能是 save clue（例如他看不到自己手上的另一張 2，以為 chop 上的 2 是 2 Save）：

@@ -380,3 +380,31 @@ func TestL5PassWhileQueued(t *testing.T) {
 	ambiguousPass(t, 1271, "h22 p1 h31 p3 h12 h4R h05 p1 h2G p4 h4Y p3 p3",
 		"他還有排在前面的 finesse")
 }
+
+func TestL5NoClueOnFinessedCardUnknownToSomeone(t *testing.T) {
+	// 自我對局 5 人局 seed 393：t30 P4 紅色給 P0 的 r5，finesse 了 P3 的 r3；P0 看不到焦點，不知道 r3 被 finesse。
+	// t32 P1 若給 P3「3」（點到那張 r3 與新的 y3），知道 finesse 的人讀成 y3、要 Reverse Finesse P0 的 y2，
+	// P0 卻把 r3 當成新牌、以為焦點是能打的 r3 而不盲打，後面的人又依 Ambiguous Finesse 以為是自己而打錯
+	g, bots := replayCodes(t, 5, 393, 5, "h13 h01 h3B h2G h2B p4 p1 p3 h14 d4 p4 d1 p2 h22 h24 p4 p2 p1 h05 d4 p2 p4 p2 h4R p1 p2 d3 h4B p1 h0R d4")
+	if a := bots[1].Act(g.View(1)); a == game.HintRankTo(3, 3) {
+		t.Errorf("P1 不該給點到別人不知道被 finesse 的牌的「3」（%s）", bots[1].Why())
+	}
+}
+
+func TestL5NoLayerThatLooksLikeFocus(t *testing.T) {
+	// 自我對局 5 人局 seed 492：P4 的「2」焦點是 g2，要 P1 Layered Finesse（layer 是 y1）。y1 一打出，
+	// P4 就會以為焦點是 y2（Bob is Lazy 的讀法），中間別人的提示讓他把 chop 上的 g3 讀成 g1 打錯——不給
+	g, bots := replayCodes(t, 5, 492, 5, "")
+	if a := bots[0].Act(g.View(0)); a == game.HintRankTo(4, 2) {
+		t.Errorf("P0 不該給 layer 會被讀成焦點前一張的 Layered Finesse（%s）", bots[0].Why())
+	}
+}
+
+func TestL5PassAfterStrikeIsNotAmbiguousFinesse(t *testing.T) {
+	// 自我對局 5 人局 seed 948：t42 藍色給 P3 的 b3，要 Reverse Finesse P4 的 b2；t44 P3 把同一個提示點到的 b4 打錯，
+	// 相關的筆記照 What to Do After a Strike 作廢，P4 沒盲打。P0 不能依 Ambiguous Finesse 以為是自己而盲打
+	g, bots := replayCodes(t, 5, 948, 5, "h2Y h4G p1 h0Y p1 h3R p1 d3 h2G p2 h1W p2 p4 p1 p1 p4 h2Y h4W d4 p3 p3 p4 p1 h05 p4 p1 h24 p3 p1 h3G h3R d4 p4 p2 h0G h3Y d4 d4 p3 d4 p1 h3B h33 p4 d4")
+	if a := bots[0].Act(g.View(0)); a == game.Play(0) {
+		t.Errorf("P0 不該盲打（%s）", bots[0].Why())
+	}
+}
