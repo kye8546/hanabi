@@ -409,13 +409,25 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 			return d, depDone
 		}
 		if e.Type == game.EvPlay && !d.finesse {
-			// prompt 打出的是別張（也成功）：承諾移到他下一張可能的被提示牌（由左而右）
-			for _, id := range s.hands[d.player] {
-				if id != played && s.notes[id].clued && s.notes[id].poss.has(d.id) {
-					d.card = id
-					return d, depPending
+			// prompt 打出的是別張（也成功）：承諾移到他下一張可能的被提示牌（由左而右）。筆記上沒有的話，再找提示資訊上
+			// 可能是它的——筆記可能被別的提示的 prompt 寫成別張（自我對局 seed 1643：「2」prompt 他左邊的 1 當 r1，
+			// 實際是 y1；之後 y4 prompt 右邊那張 1 當 y1、打出 r1，他就以為是 Hidden Finesse 而盲打）
+			for _, ok := range []func(n *note) bool{
+				func(n *note) bool { return n.poss.has(d.id) },
+				func(n *note) bool { return !n.bad && n.explicit.has(d.id) },
+			} {
+				for _, id := range s.hands[d.player] {
+					if n := s.notes[id]; id != played && n.clued && ok(n) {
+						d.card = id
+						return d, depPending
+					}
 				}
 			}
+		}
+		if n := s.notes[played]; d.finesse && n.clued && !n.explicit.has(d.id) {
+			// 要盲打的牌後來被別的提示點到、提示資訊已排除它是那張：他是當成已提示的牌打出的，不是這個 finesse 的 layer
+			// （自我對局 seed 2054：要他盲打的 finesse position 被紅色點到後打出 r3，他以為是 layer、再盲打下一張當 y2）
+			return d, depFail
 		}
 		// Level 5：盲打出的是別張能打的牌 → Layered Finesse，他繼續盲打下一張；當成 prompt 打出的是別張能打的牌、
 		// 又沒有其他可能的已提示牌 → Hidden Finesse，真正的牌在提示當下的 finesse position。兩者都在 layerSlot

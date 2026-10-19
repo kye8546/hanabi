@@ -408,3 +408,22 @@ func TestL5PassAfterStrikeIsNotAmbiguousFinesse(t *testing.T) {
 		t.Errorf("P0 不該盲打（%s）", bots[0].Why())
 	}
 }
+
+func TestL5PromptMovesToOtherCluedCardBeforeHiddenFinesse(t *testing.T) {
+	// 自我對局 5 人局 seed 1643：P4 有兩張被提示的 1（左 y1、右 r1）。t16「2」prompt 左邊那張當 r1，筆記寫成 r1；
+	// t19 黃色的 y4 要 prompt y1，他打出右邊那張，結果是 r1。y1 的 prompt 要移到另一張可能是 y1 的已提示牌（提示資訊上
+	// 左邊那張仍可能是 y1），不是 Hidden Finesse——以前他因此盲打 finesse position 的 w3
+	g, bots := replayCodes(t, 5, 1643, 5, "h41 h4W h3W h23 p3 p1 h25 d1 h21 p4 p2 p1 p1 p2 h2G h12 d4 p1 h1Y p4 h33 p3 p4 p4")
+	if a := bots[4].Act(g.View(4)); a == game.Play(1) {
+		t.Errorf("P4 不該盲打 finesse position（%s）", bots[4].Why())
+	}
+}
+
+func TestL5CluedFinesseCardIsNotLayer(t *testing.T) {
+	// 自我對局 5 人局 seed 2054：要 P0 盲打的 finesse position（當 y2）後來被紅色點到、他打出 r3。
+	// 提示資訊已排除它是 y2，這不是 Layered Finesse 的 layer，他不該再盲打下一張當 y2（是 w4）
+	g, bots := replayCodes(t, 5, 2054, 5, "h42 h0B p1 h1B h3R h2W h4G p2 h0Y p3 h1R d1 p1 p1 p2 p4 p4 h1W d4 p3 p4 h35 d4 h43 d3 p1 p3 h1Y d2 h0R p1 p4 h3W d2 h35")
+	if a := bots[0].Act(g.View(0)); a == game.Play(1) {
+		t.Errorf("P0 不該盲打 slot 2（%s）", bots[0].Why())
+	}
+}
