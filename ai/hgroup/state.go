@@ -125,6 +125,9 @@ type sim struct {
 	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
 	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
 	assumeMine bool
+	// ownMaybe：找連接牌時，有一張連接牌是「我自己看不到、只是可能是它」的牌（alreadyGotten）。這時我的計畫
+	// 可能把同一張牌算成好幾張（例如焦點「r1 或 r2」既算 r1 又算 r2），計畫裡要我 prompt 的牌就不可靠
+	ownMaybe bool
 
 	free freeChoice // 解讀 / 重新找連接牌時：這個提示的 Free Choice（Rainbow 變體，variant_rainbow.go）
 }

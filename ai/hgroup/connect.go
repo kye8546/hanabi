@@ -99,7 +99,10 @@ func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) bool {
 				return true
 			}
 			if p.has(m) && (s.holderKnowsPlayable(id) || s.notes[id].willPlay) {
-				if t, ok := s.see(obs, id); ok && t == m || !ok && s.mineCanBe(id, m) {
+				if t, ok := s.see(obs, id); ok && t == m {
+					return true
+				} else if !ok && s.mineCanBe(id, m) {
+					s.ownMaybe = s.ownMaybe || pl == s.me
 					return true
 				}
 			}

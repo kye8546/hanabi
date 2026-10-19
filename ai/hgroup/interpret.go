@@ -46,6 +46,7 @@ type interp struct {
 	// （例如 q 看不到自己手上的另一張 2，以為 chop 上的 2 是 2 Save；passMeansMe 用）
 	saveView []bool
 	free     freeChoice // Rainbow 變體的 Free Choice
+	ownMaybe bool       // plan 用到我自己看不到、只是可能是那張的牌（sim.ownMaybe）：plan 裡要我 prompt 的牌不寫筆記
 }
 
 // interpret 依 H-Group 慣例（目前的等級）解讀 giver 給 R 的提示。touched 是被點到的牌 ID。
@@ -208,7 +209,9 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 				}
 			}
 		}
+		s.ownMaybe = false
 		it.plan, it.planOK = s.connect(s.me, giver, R, it.focus, t)
+		it.ownMaybe = s.ownMaybe
 		it.agreed = it.planOK
 		for _, d := range it.plan {
 			if d.player == s.me {
@@ -424,6 +427,11 @@ func (s *state) onClue(e game.Event) {
 			rec.plan = slices.DeleteFunc(slices.Clone(rec.plan), func(d dep) bool { return d.player == R })
 		}
 		for _, d := range rec.plan {
+			if d.player == s.me && !d.finesse && it.ownMaybe {
+				// 我自己的牌我看不到，計畫可能把同一張算了兩次（自我對局 seed 1667：焦點「r1 或 r2」既算 r1 又算 r2，
+				// 剩下的 r3 就落在我另一張紅牌上，它實際是 r1，被寫成 r3 後一路變成 r5 而打錯）
+				continue
+			}
 			s.markDep(rec, d)
 		}
 	}

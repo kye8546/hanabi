@@ -868,3 +868,12 @@ func TestNextPlayerMayNotClueMyPossibleDuplicate(t *testing.T) {
 		t.Fatalf("AI-1 應 2 Save AI-2 chop 上的 m2，卻 %+v（%s）", a, bots[1].s.why)
 	}
 }
+
+func TestOwnUnknownCardNotCountedTwice(t *testing.T) {
+	// 自我對局 5 人局 seed 1667：P4 被紅色點到兩張紅牌，chop 上的焦點是「r1 或 r2」。t3 別人提示 P0 的 r4，P4 替它找連接牌時
+	// 把自己那張焦點同時算成 r1 和 r2，剩下的 r3 就落在自己另一張紅牌上（實際是 r1）、寫成 r3，後來變成 r5 而打出
+	g, bots := replayCodes(t, 5, 1667, 5, "h4R h25 h0R p1 h15 h4Y h34 h3Y p2 p1 p1 h4W d2 p1 p4 h22 p1 d1 p3 p4 p2 h4B d1 p4 p3 h31 h32 p2 p2")
+	if a := bots[4].Act(g.View(4)); a == game.Play(3) {
+		t.Errorf("P4 不該把 slot 4（r1）當成 r5 打出（%s）", bots[4].Why())
+	}
+}
