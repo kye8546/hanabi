@@ -173,6 +173,9 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 		if !ok {
 			continue
 		}
+		if s.discardModulation(ev, hints) {
+			return game.Discard(slices.Index(s.hands[s.me], s.chop(s.me))), "Discard Modulation：下一位的 chop 是差一張就能打的牌，我棄牌、讓他給這個提示", true
+		}
 		// 剛才相信下一位會先給提示而沒救他的 chop；若我這個提示正好用掉他能給的提示，就改成先救
 		if s.takesNextsClue(ev, hints) {
 			if a, why, ok := s.urgentSave(evs, hints, false); ok {

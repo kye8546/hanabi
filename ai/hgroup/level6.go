@@ -176,3 +176,37 @@ func (s *state) publicChop(R int, touched []int) int {
 	}
 	return -1
 }
+
+// oneAwayValuable（Level 6 The Value of One-Away-From-Playable Cards）：p 的牌 id 是差一張就能打的牌，
+// 而且是唯一看得到的那張（不在別人手上、沒有已被拿到的同一張，也不可能是我不確定的已提示牌）。
+// 照慣例不能直接用 play / save clue 救它，但值得用 Chop Move 間接保護，或用 Discard Modulation 讓它晚點被棄。
+func (s *state) oneAwayValuable(p, id int) bool {
+	t := identOfCard(s.cards[id])
+	if s.trash(t) || t.rank() != s.stacks[t.color()]+2 || s.gottenAs(s.me, s.me, t, id) || s.maybeMine(t) {
+		return false
+	}
+	for q, h := range s.hands {
+		for _, o := range h {
+			if q != s.me && o != id && identOfCard(s.cards[o]) == t {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// discardModulation（Level 6 Discard Modulation）：我要給的 play clue，下一位也能給出同樣的結果（接收者不是他、
+// 計畫也不用到他或我的牌），而他的 chop 是高價值、又不能直接救的牌（差一張就能打，oneAwayValuable），
+// 他也沒有別的事可做（會棄 chop）：我棄牌、讓他給這個提示，他的 chop 就多保住一陣子。
+// Early Game 必須先給完 play / save clue，不這樣做。
+func (s *state) discardModulation(ev clueEval, hints int) bool {
+	if !s.knows(lvTempo) || !s.midGame || hints >= game.MaxHints || ev.kind != kindPlay {
+		return false
+	}
+	N := (s.me + 1) % s.n
+	if ev.target == N || slices.ContainsFunc(ev.plan, func(d dep) bool { return d.player == N || d.player == s.me }) {
+		return false
+	}
+	c := s.chop(N)
+	return c >= 0 && !s.keepsChop(N) && !s.needsSave(N, c) && s.oneAwayValuable(N, c) && s.chop(s.me) >= 0
+}

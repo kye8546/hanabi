@@ -164,3 +164,29 @@ func TestL6FocusShifting(t *testing.T) {
 		}
 	}
 }
+
+func TestL6DiscardModulation(t *testing.T) {
+	// 原文 Discard Modulation：1 全打出、Mid-Game，Bob 的 chop 是 r3（差一張就能打，不能直接救），Cathy 有能打的 b2。
+	// Alice 不自己提示 b2，改棄牌，讓 Bob 去提示（他就不會棄掉 r3）；Lv5 直接提示 Cathy
+	for _, lv := range []int{5, 6} {
+		g, bots := scenario6(t, lv, allOnes, "y4 g4 b4 w4 y3", "y4 w4 b4 r3 w3", "b4 b2 y3 w3 y4")
+		midGame(t, g)
+		a := step(t, g, bots)
+		if discard := a.Type == game.ActDiscard; discard != (lv >= 6) {
+			t.Errorf("Lv%d：Alice 棄牌 = %v（行動 %+v）", lv, discard, a)
+		}
+	}
+}
+
+func TestL6OneAwayChopMove(t *testing.T) {
+	// The Value of One-Away-From-Playable Cards：Bob 的 chop 是 r3（差一張就能打），不能直接救，但能用 Trash Chop Move 保護
+	// （「1」點到 slot 4 的垃圾 y1）。沒有 play clue 可給時 Alice 這樣做；Lv5 不會
+	for _, lv := range []int{5, 6} {
+		g, bots := scenario6(t, lv, allOnes, "y4 g4 b4 w4 y3", "g4 y4 w4 y1 r3", "y4 b4 w4 g3 b4")
+		g.Hints = 5 // 提示滿 8 時是拖延，Lv5 也可能選它
+		a := step(t, g, bots)
+		if tcm := a == game.HintRankTo(1, 1); tcm != (lv >= 6) {
+			t.Errorf("Lv%d：Alice 給 Trash Chop Move = %v（行動 %+v）", lv, tcm, a)
+		}
+	}
+}

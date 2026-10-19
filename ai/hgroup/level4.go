@@ -186,7 +186,8 @@ func (s *state) cmSave(evs []clueEval, e clueEval) bool {
 		return false
 	}
 	chop := s.chop(e.target)
-	if chop < 0 || !slices.Contains(e.cm, chop) || !s.needsSave(e.target, chop) {
+	// Level 6：差一張就能打的牌不能直接救，正適合用 Chop Move 間接保護
+	if chop < 0 || !slices.Contains(e.cm, chop) || !s.needsSave(e.target, chop) && !(s.knows(lvTempo) && s.oneAwayValuable(e.target, chop)) {
 		return false
 	}
 	// Chop Move 後他的手牌全被提示或 Chop Move（鎖手）、又沒牌可打：他不能棄牌，只能拖延或棄可能有用的牌。
