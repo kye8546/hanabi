@@ -40,8 +40,8 @@ func (s *state) connect(obs, giver, R, focus int, t ident) ([]dep, bool) {
 		if len(deps) > 0 && !s.knows(lvMultiConnect) {
 			return nil, false // 雙重 prompt / finesse 是 Level 2
 		}
-		if d.player != R && slices.ContainsFunc(deps, func(o dep) bool { return o.player == R && pos(d.player) < pos(R) }) {
-			return nil, false // 他排在接收者前面，卻要等接收者自己先打連接牌
+		if d.finesse && d.player != R && slices.ContainsFunc(deps, func(o dep) bool { return o.player == R && pos(d.player) < pos(R) }) {
+			return nil, false // 他排在接收者前面，卻要等接收者自己先打連接牌才盲打
 		}
 		deps = append(deps, d)
 		used = append(used, took...)

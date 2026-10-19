@@ -620,3 +620,14 @@ func TestFinesseCardLaterCluedOtherwise(t *testing.T) {
 		t.Fatalf("AI-1 應該打出確定的 b4，卻 %+v（%s）", a, bots[1].s.why)
 	}
 }
+
+func TestPromptMayWaitForReceiversSelfFinesse(t *testing.T) {
+	// 使用者回報 20261019-143628（Rainbow、Lv5）：t10 使用者「4」點到 AI-2 的 w4——AI-1 的 w1（已提示）、AI-2 自己
+	// finesse position 的 w2（Self-Finesse）、AI-1 的 w3（prompt）。排在接收者前面的 AI-1 要等 AI-2 先打出 w2 才打 w3，
+	// 這只是 prompt（他打的是已提示的牌），不是要他盲打，可以等；以前一律不允許，AI-2 只剩「y4，自己的 y2、y3」可讀，
+	// t12 在 w1 打出前就把 w2 當 y2 盲打而打錯。現在 w4 也是可能，w2 還不能打，AI-2 先等
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1792391788272327000, 5, "h2B h0G p5 p5 h21 p1 h1B d5 h1W h24 p5 ")
+	if a := step(t, g, bots); a.Type == game.ActPlay {
+		t.Fatalf("AI-2 的 finesse position 可能是還不能打的 w2，不該盲打：%+v（%s）", a, bots[2].s.why)
+	}
+}
