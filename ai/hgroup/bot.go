@@ -3,7 +3,7 @@ package hgroup
 import "hanabi/game"
 
 // MaxLevel 是目前已實作的最高慣例等級。
-const MaxLevel = 5
+const MaxLevel = 6
 
 // Levels 是 H-Group 的 25 個慣例等級名稱（Levels[0] = Level 1）。
 var Levels = [...]string{
@@ -51,6 +51,7 @@ const (
 	lvHiddenFinesse  = 5 // Hidden Finesse：被 prompt 的牌打出是別張能打的牌時，真正的牌在 finesse position
 	lvUrgency        = 5 // Urgency Principle 與 Ambiguous Finesse：該盲打的人沒打（又不是在做緊急的事），就是我
 	lvMultiPrompt    = 5 // Prompts in Multi-Color Variants：prompt 正向資訊最多的已提示牌（彩虹等多色變體）
+	lvTempo          = 6 // Tempo Clues：Focus Shifting、Valuable Tempo Clue、Tempo Clue Chop Move（TCCM 優先於 Trash Chop Move）
 )
 
 // knows：這個 AI 的等級已經學到從 lv 開始的技巧。

@@ -28,6 +28,12 @@ type interp struct {
 	cmKind int
 	cm     []int
 
+	// Level 6 Tempo Clues：valuable = 有價值的 Tempo Clue（當一般 play clue，不 Chop Move）；
+	// trashNew = 「Tempo Clue 優先於 Trash Chop Move」時一起點到的新牌（已知垃圾）
+	valuable   bool
+	trashNew   []int
+	tempoExtra int // Tempo Clue 點到的其他舊牌因此確定現在能打的張數（tempoExtraPlays）
+
 	// 我看得到焦點牌時才有
 	hasTruth bool
 	truth    ident
@@ -69,13 +75,9 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	// 焦點：沒有新牌 → 最左邊被重複點到的牌；點到 chop → chop；否則最左邊的新牌
 	switch {
 	case len(it.newCards) == 0:
+		// Level 6 Focus Shifting：最左邊那張已經知道能打時，焦點移到下一張不知道能打的
 		it.tempo = true
-		for _, id := range s.hands[R] {
-			if slices.Contains(touched, id) {
-				it.focus = id
-				break
-			}
-		}
+		it.focus = s.tempoFocus(R, touched)
 	case len(fresh) == 0:
 		// Level 4：只點到舊牌、而且第一次點到 Chop Moved 的牌時，焦點是最左邊那張 Chop Moved 的牌
 		it.focus = it.newCards[0]
@@ -92,8 +94,11 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	if s.findFix(giver, R, h, touched, &it); it.fix {
 		return it
 	}
-	if s.findChopMove(giver, R, h, touched, fresh, &it); it.cmKind == cmTrash {
-		return it
+	// Level 6：同時像 Tempo Clue 和 Trash Chop Move 時當成 Tempo Clue
+	if !s.tempoOverTrash(R, touched, fresh, &it) {
+		if s.findChopMove(giver, R, h, touched, fresh, &it); it.cmKind == cmTrash {
+			return it
+		}
 	}
 
 	defer s.saveSim()()
@@ -181,6 +186,11 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	if s.knows(lvSelfFinesse) && slices.ContainsFunc(it.cands, selfFin) && slices.ContainsFunc(it.cands, func(c cand) bool { return !selfFin(c) }) {
 		it.fallback = append(it.fallback, slices.DeleteFunc(slices.Clone(it.cands), func(c cand) bool { return !selfFin(c) })...)
 		it.cands = slices.DeleteFunc(it.cands, selfFin)
+	}
+	// Level 6：沒有價值、又不是拖延時給的 Tempo Clue 另外 Chop Move 接收者的 chop
+	if it.tempo && s.knows(lvTempo) {
+		it.tempoExtra = s.tempoExtraPlays(&it, touched)
+		s.tempoChopMove(giver, R, &it, touched)
 	}
 
 	if t, ok := s.see(s.me, it.focus); ok {
@@ -403,7 +413,10 @@ func (s *state) onClue(e game.Event) {
 			s.markDep(rec, d)
 		}
 	}
-	if it.cmKind == cmFive {
+	for _, id := range it.trashNew {
+		s.notes[id].bad, s.notes[id].willPlay = true, false
+	}
+	if it.cmKind == cmFive || it.cmKind == cmTempo {
 		s.chopMove(R, it.cm)
 	}
 	if R == s.me {

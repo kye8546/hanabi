@@ -204,7 +204,7 @@ func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, 
 		return game.Action{}, "", false
 	}
 	if ev.kind == kindChopMove {
-		return ev.act, "緊急救下一位的 chop（" + map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move"}[ev.cmKind] + "）", true
+		return ev.act, "緊急救下一位的 chop（" + cmNames[ev.cmKind] + "）", true
 	}
 	return ev.act, "緊急救下一位的 chop", true
 }

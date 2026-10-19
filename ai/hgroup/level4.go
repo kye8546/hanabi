@@ -11,7 +11,11 @@ import (
 const (
 	cmTrash = 1 + iota // The Trash Chop Move
 	cmFive             // The 5's Chop Move
+	cmTempo            // Level 6 The Tempo Clue Chop Move（焦點照常打出，另外 Chop Move chop）
 )
+
+// cmNames 是各種 Chop Move 的名稱（寫進對局紀錄的理由）。
+var cmNames = map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move", cmTempo: "Tempo Clue Chop Move"}
 
 // findChopMove（Level 4）：從接收者 R 的角度，這個提示是否是 Chop Move。fresh 是沒被 Chop Move 的新牌。
 //   - The Trash Chop Move：點到的牌全是 R 推得出的垃圾（已打出、打不出去，或別處已被拿到 / 張數已用完）。

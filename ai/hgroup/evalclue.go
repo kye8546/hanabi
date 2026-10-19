@@ -107,7 +107,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if it.fix {
 		return s.evalFix(it, ev, h, dist), true
 	}
-	if it.cmKind != 0 {
+	if it.cmKind == cmTrash || it.cmKind == cmFive {
 		return s.evalChopMove(it, ev, h, dist), true
 	}
 	t := it.truth
@@ -158,7 +158,20 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	// 只點到已被提示的牌（Tempo Clue）。但若它讓別人 prompt / finesse 打出原本不會打的牌，
 	// 就符合 Minimum Clue Value Principle，當作一般 play clue 評估。接收者本來就會照之前的提示打出這些牌
 	// （例如之前的提示只剩 self-prompt 的解讀）時，這個提示沒有價值
-	if it.tempo && !(ev.understood && it.planOK && len(it.plan) > 0 && !s.alreadyResolved(R, it.focus, t)) {
+	if it.cmKind == cmTempo {
+		// Level 6 Tempo Clue Chop Move：焦點照常打出，另外 Chop Move 接收者的 chop
+		plays := ev.understood && it.planOK && !ev.danger
+		ev = s.evalChopMove(it, ev, h, dist)
+		ev.understood = ev.understood && plays
+		if plays {
+			ev.gets = 1 + len(it.plan)
+			ev.score += scoreTempoCMPlay
+		}
+		return ev, true
+	}
+	// Level 6 The Valuable Tempo Clue：有價值的 Tempo Clue 和一般 play clue 一樣（可以隨時給）
+	valuable := s.knows(lvTempo) && it.valuable && ev.understood && it.planOK && !s.alreadyResolved(R, it.focus, t)
+	if it.tempo && !valuable && !(ev.understood && it.planOK && len(it.plan) > 0 && !s.alreadyResolved(R, it.focus, t)) {
 		ev.kind = kindTempo
 		ev.knowsPlay = ev.understood && s.playableNow(t)
 		for _, c := range it.cands {
@@ -208,7 +221,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		return ev, true
 	case soon && ev.bad == 0:
 		ev.kind = kindPlay
-		ev.gets = 1 + len(plan)
+		ev.gets = 1 + len(plan) + it.tempoExtra
 		ev.plan = plan
 		ev.plays = s.chainPlays(t, plan, it.newCards, it.focus)
 		ev.immediate = len(plan) == 0 && s.playableNow(t)
@@ -337,6 +350,7 @@ const (
 	scoreCMMoreSave    = 40  // Chop Move：每多保護一張必須保留的牌
 	scoreCMUseful      = 10  // Chop Move：其他被保護的有用牌
 	scoreCMWaste       = 20  // Chop Move：每張白白被保護的沒用牌
+	scoreTempoCMPlay   = 30  // Level 6 Tempo Clue Chop Move：除了 Chop Move，焦點也會打出
 )
 
 // misleads：提示後接收者會不會對某張牌寫下錯誤的筆記（實際牌面被排除），之後可能因此打錯；

@@ -189,7 +189,7 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 			}
 		}
 		if ev.kind == kindChopMove {
-			return ev.act, map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move"}[ev.cmKind] + "：保護 chop 上必須保留的牌", true
+			return ev.act, cmNames[ev.cmKind] + "：保護 chop 上必須保留的牌", true
 		}
 		return ev.act, map[clueKind]string{kindPlay: "play clue", kindSave: "save clue"}[k], true
 	}

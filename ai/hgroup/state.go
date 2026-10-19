@@ -72,6 +72,7 @@ type state struct {
 	colors []game.Color // 這局用到的顏色（Variant.Colors）
 	all    idSet        // 這局所有可能的牌面（新牌的筆記從這裡開始）
 	hints  int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
+	deck   int          // 目前牌堆的張數（重播時追蹤，Level 6 判斷是不是終局的拖延用）
 	hands  [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
 	// 以下三個都用牌 ID 索引（track 讓長度涵蓋看過的每張牌；用 slice 而不是 map，查找是熱點）
 	notes     []*note     // 每張牌的筆記（沒看過的牌是 nil）
@@ -170,6 +171,12 @@ func newState(v game.PlayerView, level int) *state {
 		}
 	}
 	s.hints = initialHints(v)
+	s.deck = v.DeckSize
+	for _, e := range v.Log {
+		if e.Type == game.EvDraw {
+			s.deck++
+		}
+	}
 	for p, h := range s.hands {
 		for _, id := range h {
 			s.track(id)
@@ -367,6 +374,7 @@ func (s *state) apply(e game.Event) {
 		}
 		s.afterPlay()
 	case game.EvDraw:
+		s.deck--
 		s.hands[e.Player] = slices.Insert(s.hands[e.Player], 0, e.Card.ID)
 		s.track(e.Card.ID)
 		s.holderOf[e.Card.ID] = e.Player
