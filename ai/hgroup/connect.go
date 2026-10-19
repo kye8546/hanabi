@@ -499,6 +499,24 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 	}
+	// Level 5：有提示的解讀正好要他盲打出這張牌面時，其他提示不能把這次盲打當成 layer（Layered Finesse）的證據——
+	// 那是比較牽強的解讀（自我對局 seed 491：黃色要 Cathy 盲打 y1，之後的「2」也有「w2，Cathy 的 y1 是 layer」的解讀，
+	// 她盲打出 y1，接收者把兩個提示都當成證明了，「2」就被縮成 w2，實際是 b2）
+	exactFor := map[*clueRec]bool{}
+	if s.knows(lvLayeredFinesse) && e.Type == game.EvPlay && played >= 0 {
+		for _, rec := range s.recs {
+			if slices.ContainsFunc(append(slices.Clone(rec.cands), rec.fallback...), func(c cand) bool {
+				return slices.ContainsFunc(c.deps, func(d dep) bool {
+					return d.player == e.Player && d.finesse && d.card == played && d.id == identOfCard(e.Card)
+				})
+			}) {
+				exactFor[rec] = true
+			}
+		}
+	}
+	layerOnly := func(rec *clueRec, peeled idSet, done int) bool {
+		return done < 0 && peeled != 0 && !exactFor[rec] && len(exactFor) > 0
+	}
 	otherExplains := func(rec *clueRec) bool {
 		for r := range explained {
 			if r != rec {
@@ -526,7 +544,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 		// （例如 Layered Finesse 的真正那張被直接提示，接收者不該因此以為是那個解讀）
 		clued := s.knows(lvLayeredFinesse) && played >= 0 && s.notes[played].clued &&
 			!slices.Contains(rec.fresh, played) && s.notes[played].seq > rec.seq
-		if hit := done >= 0 || peeled != 0; hit && (mayBeSave && !blind || otherExplains(rec) && !explained[rec] || clued) {
+		if hit := done >= 0 || peeled != 0; hit && (mayBeSave && !blind || otherExplains(rec) && !explained[rec] || clued || layerOnly(rec, peeled, done)) {
 			// 別的提示已解釋這次打出：不排除，只把這個連接視為已完成
 			if done >= 0 {
 				kept = dropDep(kept, done)

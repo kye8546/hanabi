@@ -436,3 +436,12 @@ func TestL5NoClueStealingPendingLayer(t *testing.T) {
 		t.Errorf("P3 不該給會讓別人打出 layer 牌面的提示（%s）", bots[3].Why())
 	}
 }
+
+func TestL5LayerIsNotEvidenceWhenAnotherClueNeedsIt(t *testing.T) {
+	// 自我對局 5 人局 seed 491：黃色要 P3 盲打 y1；之後的「2」也有「w2，P3 的 y1 是 layer」的解讀。P3 盲打出 y1 正好是
+	// 黃色要的牌面，不能拿來當「2」是 w2 的證據（實際是 b2）
+	g, bots := replayCodes(t, 5, 491, 5, "h4Y h3G h42 p1 p4 h31 h33 h1W p3 h0G h2W p2 d4 p3")
+	if a := bots[4].Act(g.View(4)); a == game.Play(3) {
+		t.Errorf("P4 不該把 slot 4 當成 w2 打出（%s）", bots[4].Why())
+	}
+}
