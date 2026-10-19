@@ -399,6 +399,15 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 					elsewhere = true
 				}
 			}
+			// 別人的 finesse position 看得到就是 m：給提示者可能是要 finesse 他，等他盲打就知道（自我對局 seed 302：
+			// 綠色的 g3 要 finesse Donald 的 g2，Bob 把自己「g2 或 w2」的牌鎖成 g2，接著白色要它當 w2 時他就盲打錯）
+			if p != s.me && p != rec.giver {
+				if fp := s.finessePos(p); fp >= 0 {
+					if c, ok := s.see(s.me, fp); ok && c == m {
+						elsewhere = true
+					}
+				}
+			}
 		}
 		// 給提示者看不到自己的牌：他手上可能是 m 的已提示牌，他也許以為就是它，連接牌就不一定是我的
 		for _, id := range s.hands[rec.giver] {

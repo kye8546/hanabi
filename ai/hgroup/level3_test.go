@@ -430,3 +430,13 @@ func TestL3AssumeOwnCardsGoodUntilShownOtherwise(t *testing.T) {
 		t.Fatalf("AI-1 應照 play clue 的讀法把 finesse position 記成被 finesse 的 g1（%s）", bots[1].Why())
 	}
 }
+
+func TestL3NoInfoLockWhenFinessePositionShowsIt(t *testing.T) {
+	// 自我對局 5 人局 seed 302：t30 綠色提示 P2 的 g3，要 finesse P3 finesse position 上的 g2。P1 手上「g2 或 w2」的牌
+	// 不能依 Information Lock 鎖成 g2（他看得到 P3 的 finesse position 就是 g2）；以前鎖了，t31 白色要那張當 w2 時，
+	// 他以為 w2 在自己的 finesse position，連續盲打錯三次
+	g, bots := replayCodes(t, 5, 302, 5, "h4R h01 p1 h1B p4 p1 h32 h3Y h2B d2 p4 d2 h35 h1G d4 p3 p4 h12 p3 p3 d4 p3 p3 p3 h05 h15 p4 p4 p4 h2G h3W")
+	if a := bots[1].Act(g.View(1)); a == game.Play(0) {
+		t.Errorf("P1 不該盲打（%s）", bots[1].Why())
+	}
+}
