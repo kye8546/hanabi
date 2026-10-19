@@ -427,3 +427,12 @@ func TestL5CluedFinesseCardIsNotLayer(t *testing.T) {
 		t.Errorf("P0 不該盲打 slot 2（%s）", bots[0].Why())
 	}
 }
+
+func TestL5NoClueStealingPendingLayer(t *testing.T) {
+	// 自我對局 5 人局 seed 6171：t1 白色要 P1 依序盲打 layer r1、g1 再打 w1。P3 不能給要 P4 盲打 g1 的提示（綠色給 P2 的 g2）：
+	// P4 先打出 g1，P1 照計畫盲打的 g1 就是重複的牌
+	g, bots := replayCodes(t, 5, 6171, 5, "h4W p1 h04")
+	if a := bots[3].Act(g.View(3)); a == game.HintColorTo(2, game.Green) {
+		t.Errorf("P3 不該給會讓別人打出 layer 牌面的提示（%s）", bots[3].Why())
+	}
+}

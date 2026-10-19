@@ -359,6 +359,29 @@ func (s *state) awaited(c ident, card int) bool {
 	return false
 }
 
+// pendingLayer（Level 5 Layered Finesse）：c 是某個進行中的 Layered Finesse 還沒盲打出的 layer（我看得到 plan）。
+// 別人先打出另一張 c，那張 layer 就成了重複的牌，盲打的人照計畫打出就打錯——提示另一張 c（點到它或要人打出它）
+// 和 Good Touch 一樣不該做（自我對局 seed 6171：w2 要 Bob 依序盲打 layer r1、g1 再打 w1，別人又給了要 Emily 盲打 g1
+// 的提示，Bob 照計畫盲打 g1 就打錯）。card 是那張 c 本身（用到同一張牌不算）。
+func (s *state) pendingLayer(c ident, card int) bool {
+	for _, rec := range s.recs {
+		for _, d := range rec.plan {
+			if !d.finesse || d.layers == 0 || s.holder(d.card) != d.player {
+				continue
+			}
+			cards := s.depCards(d)
+			for _, l := range cards[:len(cards)-1] {
+				if l != card {
+					if t, ok := s.see(s.me, l); ok && t == c {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 // awaitedFinesse：我收到的提示還有未定的解讀要 p 盲打——他的 finesse position 有沒有被佔走還不確定，
 // 等待時不給要他盲打的提示（我以為的 finesse position 可能和他自己認定的不同）。
 func (s *state) awaitedFinesse(p int) bool {
