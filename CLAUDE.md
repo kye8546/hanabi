@@ -89,5 +89,6 @@ cmd/hanabi 組裝
 ## Status & next steps
 
 - 已完成：規則、console 介面、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits、Black (6 Suits) 與 Rainbow (6 Suits) 變體、Level 1–6 AI。
+- **README.md 要同步更新**（使用者指正過：曾停在 Level 4 沒更新）：加新等級、變體、console 指令或啟動參數時，README 的變體列表、各等級摘要、指令表、結構段一起改。
 - 下一步：依使用者指示逐級加入 Level 7+（`hgroup.MaxLevel`、`lvXxx` 常數）；之後的多色變體（雙色等）沿用 `hintSet`、`multiColor`、`promptOrder`。
 - Git：遠端是使用者的個人 GitHub（`origin` = `git@github-personal:kye8546/hanabi.git`，`github-personal` 是 `~/.ssh/config` 的別名；commit 身分由 `~/.gitconfig` 的 `includeIf` 自動切成個人帳號，不要改 remote 網址或 repo 的 user 設定）。**每完成一個改動就自動 commit**（`go build ./... && go vet ./...` 通過、相關測試跑過之後；一個邏輯改動一個 commit，訊息用繁體中文簡述改了什麼、為什麼）。不要 push，使用者自己 push。
