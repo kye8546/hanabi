@@ -454,3 +454,12 @@ func TestL5BlindPlayBelongsToEarlierClue(t *testing.T) {
 		t.Errorf("P0 不該把 chop 上的 w2 當成 y2 打出（%s）", bots[0].Why())
 	}
 }
+
+func TestL5NoClueStealingPendingLayerOfMyClue(t *testing.T) {
+	// 自我對局 5 人局 seed 7682：P3 收到的白色可能是「w2，P4 依序盲打 layer r1、g1 再打 w1」（P3 看不到焦點，沒有計畫，
+	// 但解讀裡有）。P3 不能給 P1 點到 r1、g1 的「1」：P1 先打出它們，P4 照計畫盲打的 g1 就是重複的牌
+	g, bots := replayCodes(t, 5, 7682, 5, "h3Y h3W p1")
+	if a := bots[3].Act(g.View(3)); a == game.HintRankTo(1, 1) {
+		t.Errorf("P3 不該給會讓別人打出 layer 牌面的「1」（%s）", bots[3].Why())
+	}
+}

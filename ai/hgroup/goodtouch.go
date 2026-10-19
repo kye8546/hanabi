@@ -365,7 +365,13 @@ func (s *state) awaited(c ident, card int) bool {
 // 的提示，Bob 照計畫盲打 g1 就打錯）。card 是那張 c 本身（用到同一張牌不算）。
 func (s *state) pendingLayer(c ident, card int) bool {
 	for _, rec := range s.recs {
-		for _, d := range rec.plan {
+		// 我看不到焦點時沒有計畫，接收者角度的解讀裡有 Layered Finesse 也算（自我對局 seed 7682：我收到的白色可能是
+		// 「w2，P4 依序盲打 layer r1、g1」，我就不該給 P1 點到 r1、g1 的「1」）
+		ds := slices.Clone(rec.plan)
+		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
+			ds = append(ds, c.deps...)
+		}
+		for _, d := range ds {
 			if !d.finesse || d.layers == 0 || s.holder(d.card) != d.player {
 				continue
 			}
