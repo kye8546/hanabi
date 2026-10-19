@@ -650,3 +650,38 @@ func TestDebugLayered(t *testing.T) {
 	}
 	fmt.Printf("給出 %d 次，之後 12 回合內有人打錯 %d 次\n", given, bad)
 }
+
+// TestDebugLevelMisplays：HLVMIS="人數 局數 等級"——等級 L 的自我對局中，每次打錯時問同局面的 L-1 會不會也打錯，
+// 列出只有 L 會打錯的局面（新等級分數比上一級低時，先用它找是哪種推論造成的；接著用 TestTraceSeed / TestReplayLog 追）。
+// 同局面 L-1 也會打錯的，多半是 L 的人給出了容易誤解的提示，要看那個提示。
+func TestDebugLevelMisplays(t *testing.T) {
+	if os.Getenv("HLVMIS") == "" {
+		t.Skip()
+	}
+	n, games, lv := 5, 1000, MaxLevel
+	fmt.Sscan(os.Getenv("HLVMIS"), &n, &games, &lv)
+	total, only := 0, 0
+	for seed := range uint64(games) {
+		g, _ := game.NewVariant(n, envVariant(), seed)
+		bots := make([]*Bot, n)
+		for i := range bots {
+			bots[i] = New(fmt.Sprint(i), lv)
+		}
+		for !g.Over {
+			p := g.Current
+			v := g.View(p)
+			a := bots[p].Act(v)
+			if a.Type == game.ActPlay {
+				if c := g.Hands[p][a.Slot].Card; g.Fireworks[c.Color]+1 != c.Rank {
+					total++
+					if alt := New("x", lv-1).Act(v); alt != a {
+						only++
+						t.Logf("seed %d t%d P%d 打錯 %v（%s）；Lv%d 同局面 %+v", seed, g.Turn, p, c, bots[p].Why(), lv-1, alt)
+					}
+				}
+			}
+			g.Apply(a)
+		}
+	}
+	t.Logf("Lv%d 打錯 %d 次，其中同局面 Lv%d 不會打錯的 %d 次", lv, total, lv-1, only)
+}
