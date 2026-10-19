@@ -440,3 +440,12 @@ func TestL3NoInfoLockWhenFinessePositionShowsIt(t *testing.T) {
 		t.Errorf("P1 不該盲打（%s）", bots[1].Why())
 	}
 }
+
+func TestL3FixedNoteRestoresGoodTouchExclusion(t *testing.T) {
+	// 自我對局 5 人局 seed 2450：P2 以為自己一張藍牌是 b2，另一張藍牌依 Good Touch 排除了 b2；「3」修正前者是 b3 後，
+	// 後者要把 b2 補回來（它實際就是 b2）。以前沒補，之後 b4 需要 b2 時他改去盲打 finesse position
+	g, bots := replayCodes(t, 5, 2450, 5, "h2B h3R h1Y h45 d1 d4 p2 h1G p1 h02 h23 p1 h3R p4 h3G h2G d4 d3 p1 h13 p4 p3 p4 p1 h3Y p3 p4 d2 p2 h04 d4 p4")
+	if a := bots[2].Act(g.View(2)); a == game.Play(0) {
+		t.Errorf("P2 不該盲打（%s）", bots[2].Why())
+	}
+}

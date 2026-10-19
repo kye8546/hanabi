@@ -324,12 +324,26 @@ func (s *state) onClue(e game.Event) {
 		fpAt[p] = s.finessePos(p)
 	}
 
+	var wrong idSet // 被這個提示推翻的筆記（原本確定是某張，提示說不是）
 	for _, id := range s.hands[R] {
 		n := s.notes[id]
 		n.explicit = it.explicit[id]
+		if t, ok := n.poss.single(); ok && s.gotten(id) && !n.explicit.has(t) {
+			wrong |= setOf(t)
+		}
 		n.poss &= n.explicit
 		if n.poss == 0 {
 			n.poss = n.explicit
+		}
+	}
+	// 依 Good Touch 因為那張「確定是 t」而排除 t 的其他已提示牌，把 t 補回來（還有其他理由排除時，之後的推論會再刪掉）。
+	// 自我對局 seed 2450：Bob 以為自己的藍牌是 b2，另一張藍牌就排除 b2；「3」修正前者是 b3 後，後者仍不可能是 b2，
+	// 它實際就是 b2，之後需要 b2 時他改去盲打 finesse position 而打錯
+	for _, t := range wrong.list() {
+		for _, id := range s.hands[R] {
+			if n := s.notes[id]; s.gotten(id) && !n.bad && n.explicit.has(t) && !n.poss.has(t) && !s.trash(t) && n.poss.count() > 1 {
+				n.poss |= setOf(t)
+			}
 		}
 	}
 	// 給提示者自己手上被提示的牌，當時的解讀（giverKnew 用）
