@@ -107,6 +107,12 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 			return
 		}
 	}
+	// Level 6：不給新資訊的 Fix Clue 只在點到的牌都是大家已知道能打的牌時才成立；Focus Shifting 找得到大家還不知道能打的焦點，
+	// 就是 Tempo Clue 這個更自然的解釋（原文 Level 3：「only typically work if the card is about to play on the stacks.
+	// Otherwise, it would look like a Tempo Clue」）。例如紅色點到被 play clue 的 r1 與另一張紅牌，再次紅色是後者的 tempo clue
+	if s.knows(lvTempo) && !s.publicKnown(s.tempoFocus(R, touched)) {
+		return
+	}
 	if y := s.nextPlay(R); y >= 0 && slices.Contains(touched, y) {
 		// 壞掉的牌：已經沒用，或可能和別處被拿到的牌重複。它根本不可能是壞牌時（例如確定是還沒打出的 5），
 		// Fix Clue 沒東西可修，就不是 Stop Clue（多半只是拖延）

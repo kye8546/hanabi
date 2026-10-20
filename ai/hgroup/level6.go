@@ -9,19 +9,84 @@ import (
 	"hanabi/game"
 )
 
-// Level 6 的判斷會決定要不要 Chop Move，必須大家看法一致（和 Level 4 一樣）：一律只用公開的資訊——
-// 哪些牌被提示過（clued，不含只有部分人知道的 finesse）、提示本身的資訊（explicit）、煙火與棄牌。
-// 持有者私下的推論、各家的共同筆記都可能不同（實測用筆記判斷時，5 人局四成的 TCCM 各家看法不一）。
+// Level 6 的判斷會決定要不要 Chop Move，必須大家看法一致（和 Level 4 一樣）。「知道能打」「是哪張牌」照大家的筆記判斷
+// （原文的 Focus Shifting 就是看筆記：被 play clue 的 r1 大家都記成 r1），但只用每個人算法都一樣的那部分（publicPoss）——
+// 持有者私下的推論、只有部分人知道的 finesse、各家對「要 prompt 幾張」的推論都可能不同
+// （最初直接用各家筆記與 cands 的 prompt 數時，5 人局四成的 TCCM 各家看法不一）。
 
-// clueKnown：只看提示資訊 ex（再扣掉已打出、打不出去的牌面），這張牌確定現在就能打。
-func (s *state) clueKnown(ex idSet) bool {
-	p := ex & s.useful()
+// publicPoss：大家都推得出的這張牌的可能——提示資訊（扣掉已打出、打不出去的），再套上它當焦點時那個提示的解讀
+// （有不需要連接牌的解讀時只看它們），
+// 以及某個提示的每種解讀都要它當連接牌時的那幾種牌面（例如被 prompt 成 r2）。已知沒用的牌回傳 0。
+func (s *state) publicPoss(id int) idSet {
+	n := s.notes[id]
+	if n.bad {
+		return 0
+	}
+	p := n.explicit & s.useful()
+	narrow := func(u idSet) {
+		if q := p & u; q != 0 && u != 0 {
+			p = q
+		}
+	}
+	for i := len(s.recs) - 1; i >= 0; i-- {
+		if rec := s.recs[i]; rec.focus == id && len(rec.cands) > 0 {
+			// 有不需要連接牌的解讀（直接、delayed 或 save）就只看它們：「也許有人被 finesse」的解讀各家不同——
+			// 看不到自己牌的人排除不了自己被 finesse，看得到的人早就排除了
+			var u, direct idSet
+			for _, c := range rec.cands {
+				u |= setOf(c.id)
+				if len(c.deps) == 0 {
+					direct |= setOf(c.id)
+				}
+			}
+			if direct != 0 {
+				u = direct
+			}
+			narrow(u)
+			break
+		}
+	}
+	for _, rec := range s.recs {
+		var u idSet
+		all := len(rec.cands) > 0
+		for _, c := range rec.cands {
+			i := slices.IndexFunc(c.deps, func(d dep) bool { return d.card == id })
+			if i < 0 {
+				all = false
+				break
+			}
+			u |= setOf(c.deps[i].id)
+		}
+		if all {
+			narrow(u)
+		}
+	}
+	return p
+}
+
+// publicKnown：大家都知道這張牌現在就能打（publicPoss 全是現在能打的牌面）。
+func (s *state) publicKnown(id int) bool {
+	p := s.publicPoss(id)
 	return p != 0 && !slices.ContainsFunc(p.list(), func(i ident) bool { return !s.playableNow(i) })
+}
+
+// publicElsewhere：除了 except，有已提示的牌大家都知道確定是 m。
+func (s *state) publicElsewhere(m ident, except int) bool {
+	for _, h := range s.hands {
+		for _, id := range h {
+			if id != except && s.notes[id].clued {
+				if t, ok := s.publicPoss(id).single(); ok && t == m {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // tempoFocus：只點到已被提示的牌（Tempo Clue）時的焦點是最左邊那張。Level 6 Focus Shifting：它已經知道能打、
 // 而點到的牌中還有不知道能打的，焦點移到最左邊那張不知道能打的牌（全都知道能打就是 Burn Clue，仍是最左邊）。
-// cards 是點到的舊牌。「知道能打」只看提示資訊（clueKnown）。
+// cards 是點到的舊牌。例如紅色點到 r1（被 play clue 的焦點）與另一張紅牌，再次紅色時焦點是後者。
 func (s *state) tempoFocus(R int, cards []int) int {
 	first := -1
 	for _, id := range s.hands[R] {
@@ -31,7 +96,7 @@ func (s *state) tempoFocus(R int, cards []int) int {
 		if first < 0 {
 			first = id
 		}
-		if !s.knows(lvTempo) || !s.clueKnown(s.notes[id].explicit) {
+		if !s.knows(lvTempo) || !s.publicKnown(id) {
 			return id
 		}
 	}
@@ -64,56 +129,77 @@ func (s *state) tempoOverTrash(R int, touched, fresh []int, it *interp) bool {
 			old = append(old, y)
 		}
 	}
-	if !slices.ContainsFunc(old, func(y int) bool { return !s.clueKnown(s.notes[y].explicit) }) {
+	if !slices.ContainsFunc(old, func(y int) bool { return !s.publicKnown(y) }) {
 		return false
 	}
 	it.tempo, it.trashNew, it.focus, it.chopFocus = true, slices.DeleteFunc(slices.Clone(touched), func(y int) bool { return slices.Contains(old, y) }), s.tempoFocus(R, old), false
 	return true
 }
 
-// tempoTarget：Tempo Clue 的焦點依提示資訊確定是哪張牌 t，而且大家都知道它輪到時能打：現在就能打，
-// 或中間缺的每一張都在別人手上、提示資訊就確定是那張的已提示牌（挑戰題 Tempo or Trash? 的 r5：r3、r4 都已被提示）。
-// 不確定的話（例如要 prompt 別人不知道是哪張的已提示牌），各家對「讓幾張牌能打」的看法可能不同，不算 TCCM。
-func (s *state) tempoTarget(it *interp) (ident, bool) {
-	t, ok := (it.explicit[it.focus] & s.useful()).single()
-	if !ok {
-		return 0, false
-	}
-	for r := s.stacks[t.color()] + 1; r < t.rank(); r++ {
-		if !s.knownElsewhere(identOf(t.color(), r), it.focus) {
+// tempoTarget：Tempo Clue 的焦點大家都知道輪到時能打、而且只靠這一張：接收者角度的每種 play 解讀，中間缺的牌都已在別處、
+// 大家都知道是那張（publicPoss 確定；挑戰題 Tempo or Trash? 的 r5：r3、r4 都已被提示）。中間缺的牌要 prompt 別人的
+// 已提示牌（它還不確定是那張）或 finesse 時，這個提示會讓兩張以上的牌打出，是有價值的 Tempo Clue（原文第 1 種），不 Chop Move。
+// 回傳焦點可能的牌面。
+func (s *state) tempoTarget(it *interp) (idSet, bool) {
+	var ts idSet
+	truth, seen := s.see(s.me, it.focus)
+	for _, c := range it.cands {
+		// 要我自己盲打的解讀：我看不到自己的牌才會有它，別人都看得到我的牌；我看得到焦點、它不是那張時就不成立
+		if seen && c.id != truth && slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == s.me && d.finesse }) {
+			continue
+		}
+		if c.save {
 			return 0, false
 		}
+		t := c.id
+		for r := s.stacks[t.color()] + 1; r < t.rank(); r++ {
+			if !s.publicElsewhere(identOf(t.color(), r), it.focus) {
+				return 0, false
+			}
+		}
+		ts |= setOf(t)
 	}
-	return t, true
+	return ts, ts != 0
 }
 
-// tempoValuable（Level 6 The Valuable Tempo Clue）：大家都知道這個 Tempo Clue 有價值（焦點 t 是 tempoTarget）——
+// tempoValuable（Level 6 The Valuable Tempo Clue）：大家都知道這個 Tempo Clue 有價值（焦點的可能牌面是 ts）——
 //  1. 讓兩張以上已被提示的牌能打：另一張被點到的已提示牌因此確定現在就能打（挑戰題 Filling in, I 的 b3、g3）；
-//  2. 焦點不是 5，而且現在 prompt t 的話會 prompt 到接收者另一張已提示的牌（依 prompt 的順序，提示資訊上可能是 t）。
+//     中間缺的牌要靠這個提示 prompt / finesse 出來的情況，tempoTarget 已排除；
+//  2. 焦點不是 5，而且現在 prompt 它的話會 prompt 到接收者另一張已提示的牌（依 prompt 的順序，大家的筆記上可能是它）。
 //
 // 第 3 種「打出它會讓鎖手的人解鎖」：接收者鎖手時沒有 chop 可以 Chop Move，tempoChopMove 本來就不成立。
 // 提示當下就判斷（原文：只看提示後的那一回合，免得各家不同步）。
-func (s *state) tempoValuable(R int, it *interp, touched []int, t ident) bool {
+func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 	if s.tempoExtraPlays(it, touched) > 0 {
 		return true
 	}
-	if t.rank() == game.MaxRank {
-		return false
-	}
-	for _, id := range s.promptOrder(R) {
-		n := s.notes[id]
-		if n.clued && !n.bad && !s.clueKnown(n.explicit) && (n.explicit & s.useful()).has(t) {
-			return id != it.focus
+	for _, t := range ts.list() {
+		if t.rank() == game.MaxRank {
+			return false
+		}
+		blocked := false
+		for _, id := range s.promptOrder(R) {
+			n := s.notes[id]
+			if n.clued && !s.publicKnown(id) && s.publicPoss(id).has(t) {
+				blocked = id != it.focus
+				break
+			}
+		}
+		if !blocked {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
-// tempoExtraPlays：Tempo Clue 點到的其他已提示牌中，提示前不知道能打、提示後依提示資訊確定現在就能打的張數。
+// tempoExtraPlays：Tempo Clue 點到的其他已提示牌中，提示前大家不知道能打、提示後確定現在就能打的張數。
 func (s *state) tempoExtraPlays(it *interp, touched []int) int {
 	n := 0
 	for _, y := range touched {
-		if y != it.focus && s.notes[y].clued && !s.notes[y].bad && !s.clueKnown(s.notes[y].explicit) && s.clueKnown(it.explicit[y]) {
+		if y == it.focus || !s.notes[y].clued || s.publicKnown(y) {
+			continue
+		}
+		if p := s.publicPoss(y) & it.explicit[y]; p != 0 && !slices.ContainsFunc(p.list(), func(i ident) bool { return !s.playableNow(i) }) {
 			n++
 		}
 	}
@@ -144,18 +230,18 @@ func (s *state) publicPace() int {
 
 // tempoChopMove（Level 6 The Tempo Clue Chop Move）：沒有價值的 Tempo Clue 不在拖延的情況下給，一定另有用意——
 // 除了讓焦點打出，還 Chop Move 接收者 chop 上的牌。點到的牌都要是之前就被提示過的（被 finesse 的不算，
-// 不是每個人都知道）、焦點本來不知道能打（否則是 Burn Clue）、而且依提示資訊確定是哪張（tempoTarget）。
+// 不是每個人都知道）、焦點本來大家不知道能打（否則是 Burn Clue）、輪到時能打而且只靠這一張（tempoTarget）。
 // 有價值的 Tempo Clue 記在 it.valuable（和一般 play clue 一樣，可以隨時給）。
 func (s *state) tempoChopMove(giver, R int, it *interp, touched []int) {
-	if !s.knows(lvTempo) || !it.tempo || s.clueKnown(s.notes[it.focus].explicit) ||
+	if !s.knows(lvTempo) || !it.tempo || s.publicKnown(it.focus) ||
 		slices.ContainsFunc(touched, func(y int) bool { return !s.notes[y].clued && !slices.Contains(it.trashNew, y) }) {
 		return
 	}
-	t, ok := s.tempoTarget(it)
+	ts, ok := s.tempoTarget(it)
 	if !ok {
 		return
 	}
-	if s.tempoValuable(R, it, touched, t) {
+	if s.tempoValuable(R, it, touched, ts) {
 		it.valuable = true
 		return
 	}

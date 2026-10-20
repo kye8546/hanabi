@@ -190,3 +190,37 @@ func TestL6OneAwayChopMove(t *testing.T) {
 		}
 	}
 }
+
+func TestL6FocusShiftOverStopClue(t *testing.T) {
+	// 使用者的例子：第一回合 Alice 紅色點到 Cathy 的 slot 1、2，slot 1 大家都記成 r1（play clue 的焦點）。
+	// 接著 Bob 再紅色點到同樣兩張：沒給新資訊，但 slot 1 已經知道能打，Focus Shifting 讓焦點移到 slot 2 → r2，
+	// 是沒有價值的 Tempo Clue，同時 Chop Move Cathy 的 chop。不是叫她別打 r1 的 Stop Clue（Level 3 第 119 行）
+	for _, lv := range []int{5, 6} {
+		g, bots := scenario6(t, lv, "", "y4 g4 b4 w4 g3", "y3 b4 w4 g3 b4", "r1 r2 y3 w3 b3")
+		force(t, g, game.HintColorTo(2, game.Red))
+		force(t, g, game.HintColorTo(2, game.Red))
+		r1, r2, chop := g.Hands[2][0].Card.ID, g.Hands[2][1].Card.ID, g.Hands[2][4].Card.ID
+		bots[0].Act(g.View(0))
+		s := bots[0].s
+		if lv >= 6 {
+			if s.notes[r1].bad {
+				t.Error("Lv6：slot 1 的 r1 不該被當成 Stop Clue 記成壞牌")
+			}
+			if !s.notes[chop].cm {
+				t.Error("Lv6：Cathy 的 chop 應被 Tempo Clue Chop Move")
+			}
+		} else if s.notes[chop].cm {
+			t.Error("Lv5 沒有 Tempo Clue Chop Move")
+		}
+		g.Current = 2
+		if a := step(t, g, bots); lv >= 6 && a != game.Play(0) {
+			t.Errorf("Lv%d：Cathy 應先打出 r1，卻做了 %+v", lv, a)
+		}
+		if p := bots[2].s.notes[r2].poss; lv >= 6 && p != idents(t, "r2") {
+			t.Errorf("Lv6：Cathy 應把 slot 2 記成 r2，卻是 %v", p.list())
+		}
+		if lv >= 6 && !bots[2].s.notes[chop].cm {
+			t.Error("Lv6：Cathy 自己也應把 chop 記成 Chop Moved")
+		}
+	}
+}
