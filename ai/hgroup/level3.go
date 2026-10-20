@@ -434,6 +434,12 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 		if len(mine) == 1 && s.myPoss(mine[0])&chain == setOf(m) {
 			s.notes[mine[0]].poss = setOf(m)
 			rec.changed = append(rec.changed, mine[0])
+			if s.knows(lvHiddenFinesse) {
+				// 等於這個提示 prompt 了我那張牌：它打出來若是別張能打的牌，給提示者看得到那張不是 m，
+				// 真正的 m 在我提示當下的 finesse position（Level 5 Hidden Finesse，stepDep 會接手）。使用者回報 20261020-162330：
+				// t37「5」的 y5 要 y4，AI-1 把自己被「4」點到的牌鎖成 y4，打出來是 g4 後沒有去盲打 finesse position 的 y4
+				rec.plan = append(rec.plan, dep{player: s.me, card: mine[0], id: m})
+			}
 		}
 	}
 }

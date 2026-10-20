@@ -473,3 +473,13 @@ func TestL5LayerMovesPastCardFreedByOtherFinesse(t *testing.T) {
 		t.Errorf("AI-1 不該把 slot 3 的 w4 當 r2 盲打（%s）", bots[1].Why())
 	}
 }
+
+func TestL5HiddenFinesseThroughInformationLock(t *testing.T) {
+	// 使用者回報 20261020-162330：t37 使用者「5」給 AI-2 的 y5（y3 在 AI-2、已知），AI-1 被「4」點到的 g4 依 Information Lock 被鎖成 y4。
+	// AI-1 t41 把它當 y4 打出、結果是 g4：使用者看得到那張不是 y4，真正的 y4 在 AI-1 提示當下的 finesse position（Hidden Finesse），
+	// AI-1 要盲打它（以前 t44 只棄已知垃圾）
+	g, bots := replayCodes(t, 3, 1792484610398984000, 6, "h21 h01 p4 p3 h2Y p5 h12 p2 p5 p5 p5 h05 h22 h2B p2 h23 d5 p1 h1B d4 p4 h13 p5 p3 h1R p4 p1 d5 h2W p4 d5 p2 p4 h14 d5 p4 h25 d4 p5 d5 p5 h0G p1")
+	if a := bots[1].Act(g.View(1)); a != game.Play(2) {
+		t.Errorf("AI-1 應盲打 slot 3 的 y4，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
