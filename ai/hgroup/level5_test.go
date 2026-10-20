@@ -463,3 +463,13 @@ func TestL5NoClueStealingPendingLayerOfMyClue(t *testing.T) {
 		t.Errorf("P3 不該給會讓別人打出 layer 牌面的「1」（%s）", bots[3].Why())
 	}
 }
+
+func TestL5LayerMovesPastCardFreedByOtherFinesse(t *testing.T) {
+	// 使用者回報 20261020-155423：t42 紅色要 AI-1 先盲打 layer w4（#39）再打 r2（#36）；t43 白色（w5）又把 #36 當 layer、要後面的 w4（#32）。
+	// t44 AI-1 打出 #39 的 w4：白色那個要 #36 當 w4 的 finesse 已經用不到它，紅色的 r2 要移到 #36，不是跳過它落在 #32（實際是 w4）
+	codes := "h21 h0Y p4 p3 h22 p3 h1W p2 p4 h15 h2G p2 h1G h25 d3 h2Y p1 p1 d5 h01 d3 p4 h2B p3 d5 h0W d3 p4 h01 d3 h14 d4 p1 d3 p4 h1B h2B p1 p1 d3 p5 h0R h2W p1 p1 h1Y"
+	g, bots := replayCodes(t, 3, 1792482863397957000, 6, codes)
+	if a := bots[1].Act(g.View(1)); a == game.Play(2) {
+		t.Errorf("AI-1 不該把 slot 3 的 w4 當 r2 盲打（%s）", bots[1].Why())
+	}
+}

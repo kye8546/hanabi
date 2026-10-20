@@ -443,8 +443,23 @@ func (s *state) chop(p int) int {
 // layerSlot：rec 提示當下就在 p 手上、還沒被拿到的牌中最左邊那張（不含 skip）。Level 5 Layered / Hidden Finesse：
 // 盲打（或當成 prompt 打出）的牌是別張能打的牌時，真正的牌在這裡（之後才抽到的牌不算）。沒有則回傳 -1。
 func (s *state) layerSlot(rec *clueRec, p, skip int) int {
+	// 被別的提示 finesse、等的正是這次打出的牌面的牌（例如另一個 Layered Finesse 把它當 layer、記成 w4，而 w4 剛從別張打出）：
+	// 那個 finesse 已經用不到它，它是空的（使用者回報 20261020-155423 t44：紅色要 AI-1 layer w4 再打 r2，白色又把 r2 那張當 layer、
+	// 要後面的 w4；AI-1 打出 w4 後 r2 的承諾跳過 r2 那張、落在真正的 w4 上，t47 把 w4 當 r2 盲打）
+	var freed ident
+	freedOK := false
+	if c, ok := s.card(skip); ok {
+		freed, freedOK = identOfCard(c), true
+	}
 	for _, id := range s.hands[p] {
-		if id != skip && s.notes[id].drawn <= rec.seq && !s.gotten(id) {
+		n := s.notes[id]
+		if id == skip || n.drawn > rec.seq {
+			continue
+		}
+		if !s.gotten(id) {
+			return id
+		}
+		if t, ok := n.poss.single(); freedOK && ok && t == freed && n.finessed && !n.clued {
 			return id
 		}
 	}
