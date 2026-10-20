@@ -80,7 +80,10 @@ func (s *state) knowsFinessed(q, id int) bool {
 // 持有者正在給提示時，他點到的牌（他看得到）是 c 的解讀也不算：他不會點到可能和自己已提示的牌重複的牌
 // （Good Touch，`maybeMine`），點了就表示他已排除那個解讀——例如他「g1 或 g3」的牌還在等 Reverse Finesse，
 // 他又點到別人的 g1，在他心中那張就是 g3。
-func (s *state) giverMayKnow(obs, id int, m ident) bool {
+func (s *state) giverMayKnow(obs, id int, m ident) bool { return s.giverMayKnowD(obs, id, m, 2) }
+
+// giverMayKnowD 同 giverMayKnow；depth 是 holderExcludes 還能往下問「那張牌的持有者知不知道」的層數。
+func (s *state) giverMayKnowD(obs, id int, m ident, depth int) bool {
 	h := s.holder(id)
 	// 大家都推得出的筆記（不是我自己手上的牌——那是我的私下推論）已確定是 m，或提示本身就說明是 m
 	if t, ok := s.notes[id].poss.single(); ok && t == m && h != s.me {
@@ -98,7 +101,7 @@ func (s *state) giverMayKnow(obs, id int, m ident) bool {
 			if c.id == m || h == s.pendingGiver && slices.ContainsFunc(s.pending, func(p int) bool {
 				t, ok := s.see(obs, p)
 				return ok && t == c.id
-			}) {
+			}) || s.holderExcludes(obs, h, id, rec.giver, c.id, depth) {
 				continue
 			}
 			// 他看得到 obs 的牌：這個解讀要靠 obs 的牌，或 obs 手上有已被拿到、可能就是 c.id 的牌
@@ -108,6 +111,35 @@ func (s *state) giverMayKnow(obs, id int, m ident) bool {
 			}
 		}
 		return slices.ContainsFunc(rec.cands, func(c cand) bool { return c.id == m })
+	}
+	return false
+}
+
+// holderExcludes：持有者 h 依 Good Touch 知道他的已提示牌 id 不是 c——c 已經打出 / 打不出去，或他看得到別處有已被拿到的牌
+// 就是 c（那張若在給他提示的人手上，要那人也知道它是 c：大家的筆記確定，或同樣用 giverMayKnow 推得出）。obs 也看得到那張才算（obs 自己的牌不算）。
+// 使用者回報 20261020-152805 t7：使用者的藍牌是 t5 那個藍色的焦點，解讀裡還留著已經打出的 b1、和 AI-1 手上已被提示的 b2，
+// AI-2 就以為使用者不一定知道自己的是 b3，不依 Good Touch 排除，把使用者「b4 的 delayed play clue」讀成 b3，再 Sarcastic Discard 掉 b4。
+func (s *state) holderExcludes(obs, h, id, giver int, c ident, depth int) bool {
+	if s.trash(c) {
+		return true
+	}
+	for p, hand := range s.hands {
+		if p == h || p == obs {
+			continue
+		}
+		for _, y := range hand {
+			if y == id || !s.live(y) {
+				continue
+			}
+			if t, ok := s.see(obs, y); ok && t == c {
+				if p != giver {
+					return true
+				}
+				if u, ok := s.notes[y].poss.single(); ok && u == c || depth > 0 && s.giverMayKnowD(obs, y, c, depth-1) {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }

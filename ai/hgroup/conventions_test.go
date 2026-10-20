@@ -877,3 +877,16 @@ func TestOwnUnknownCardNotCountedTwice(t *testing.T) {
 		t.Errorf("P4 不該把 slot 4（r1）當成 r5 打出（%s）", bots[4].Why())
 	}
 }
+
+func TestHolderExcludesTrashAndVisibleGottenForGoodTouch(t *testing.T) {
+	// 使用者回報 20261020-152805：使用者 t5 被 AI-1 藍色點到 b3（delayed，b1 在 AI-2、b2 在 AI-1），t7 使用者給 AI-2 藍色要 b4。
+	// 使用者知道自己的是 b3：那個藍色解讀裡的 b1 已經打出、b2 他看得到在 AI-1 手上（AI-1 也知道）。AI-2 要依 Good Touch
+	// 排除自己的藍牌是 b3、讀成 b4；以前讀成 b3，t9 把 b4 當成和使用者重複而 Sarcastic Discard 掉
+	g, bots := replayCodes(t, 3, 1792481285998315000, 6, "h21 h22 p2 h1B h0B p4 h2B p3")
+	if a := bots[2].Act(g.View(2)); a.Type == game.ActDiscard && a.Slot == 3 {
+		t.Errorf("AI-2 不該棄掉 b4（%s）", bots[2].Why())
+	}
+	if p := bots[2].s.notes[g.Hands[2][3].Card.ID].poss; p != idents(t, "b4") {
+		t.Errorf("AI-2 應把自己的藍牌記成 b4，卻是 %v", p.list())
+	}
+}
