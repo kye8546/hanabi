@@ -890,3 +890,13 @@ func TestHolderExcludesTrashAndVisibleGottenForGoodTouch(t *testing.T) {
 		t.Errorf("AI-2 應把自己的藍牌記成 b4，卻是 %v", p.list())
 	}
 }
+
+func TestFinesseTakesNextPlayersOnlyClue(t *testing.T) {
+	// 使用者回報 20261020-154633 t3：使用者（下一位）chop 上是 g5，AI-2 以為他會去提示 AI-1 能打的 b1、不會棄牌，
+	// 就給他「2」要 AI-1 Reverse Finesse 那張 b1——使用者得等、又不能提示 b1（Stomping），只能棄掉 g5。
+	// 要人打出的連接牌也算「我用掉了他能給的提示」，改成先處理他的 chop（例如給他能立刻打的 g1）
+	g, bots := replayCodes(t, 3, 1792482393310473000, 6, "h1W p5")
+	if a := bots[2].Act(g.View(2)); a == game.HintRankTo(0, 2) {
+		t.Errorf("AI-2 不該給會讓使用者沒事可做而棄掉 g5 的 Reverse Finesse（%s）", bots[2].Why())
+	}
+}

@@ -338,5 +338,12 @@ func (s *state) takesNextsClue(ev clueEval, hints int) bool {
 	if ev.nextPlays || ev.covers(next, chop) {
 		return false
 	}
-	return !s.nextWillClue(next, hints-1, ev.touched)
+	// 我的提示要人打出的連接牌（prompt / finesse，含 layer）他也不能再提示了（那是 Stomping on a Finesse）。
+	// 使用者回報 20261020-154633 t3：AI-2 以為使用者會去提示 AI-1 能打的 b1，就給使用者「2」要 AI-1 Reverse Finesse 那張 b1，
+	// 使用者得等、又沒別的提示可給，只好棄掉 chop 上的 g5
+	used := slices.Clone(ev.touched)
+	for _, d := range ev.plan {
+		used = append(used, s.depCards(d)...)
+	}
+	return !s.nextWillClue(next, hints-1, used)
 }
