@@ -224,3 +224,20 @@ func TestL6FocusShiftOverStopClue(t *testing.T) {
 		}
 	}
 }
+
+func TestL6TempoOnSecondOfSameCluedCardsIsValuable(t *testing.T) {
+	// 使用者回報 20261020-120718 t24：使用者的 slot 4、5 都只被「3」點過（slot 4 由 t20 的「4」可知是 r3 / b3 / w3、已知能打）。
+	// AI-2 白色點 slot 5：要 prompt w3 時會先落在 slot 4（它也可能是 w3），slot 5 輪不到——是有價值的 Tempo Clue，
+	// 不 Chop Move 使用者的 chop（以前從使用者的角度跳過已知能打的 slot 4，讀成 TCCM，和兩個 AI 看法不一）
+	codes := "h1B h01 p1 p5 p4 h12 p5 p1 d5 h2G h2Y p2 d5 d5 p2 h1R p4 h03 d4 h24 p1 d4 p5 h0W"
+	g, bots := replayCodes(t, 3, 1792469238872685000, 6, codes)
+	chop := g.Hands[0][2].Card.ID
+	me := New("me", 6)
+	me.Act(g.View(0))
+	bots[1].Act(g.View(1))
+	for name, b := range map[string]*Bot{"使用者": me, "AI-1": bots[1]} {
+		if b.s.notes[chop].cm {
+			t.Errorf("%s 不該把 slot 3 記成被 Chop Move", name)
+		}
+	}
+}
