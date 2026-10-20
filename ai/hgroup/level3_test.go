@@ -449,3 +449,13 @@ func TestL3FixedNoteRestoresGoodTouchExclusion(t *testing.T) {
 		t.Errorf("P2 不該盲打（%s）", bots[2].Why())
 	}
 }
+
+func TestL3FixRevealsDuplicateAgainstPrivateTrashNote(t *testing.T) {
+	// 使用者回報 20261020-164751 t16：t15 藍色點到 AI-1 的兩張 b4（焦點是 chop 那張，AI-1 推得出另一張只可能是垃圾或重複）。
+	// 使用者用「4」揭露兩張都是 b4、也點到新的 w4：這是修正重複的 Fix Clue，不是 w4 的 play clue——
+	// AI-1 不該 Self-Finesse 自己的 w2 而盲打（以前它早知道那張沒用，就沒當成 Fix Clue）
+	g, bots := replayCodes(t, 3, 1792486071248781000, 6, "h11 p2 h01 p3 p5 h02 h25 p4 h13 p2 p3 h05 d2 h0G h1B h14")
+	if a := bots[1].Act(g.View(1)); a == game.Play(1) {
+		t.Errorf("AI-1 不該盲打 finesse position（%s）", bots[1].Why())
+	}
+}

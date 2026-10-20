@@ -85,18 +85,38 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 	}
 	// 補資訊後 R 手上兩張以上已被拿到的牌確定是同一張：揭露了重複（例如三張被提示的 1 被紅色補成全是 r1），
 	// 只留一張，其餘是壞的
+	// 筆記和提示矛盾的牌（例如接收者原本推得是「垃圾或焦點的重複」）照提示本身確定的牌面算：給提示者看不到接收者的私下推論，
+	// 揭露「兩張都是 b4」就是修正重複的 Fix Clue（使用者回報 20261020-164751 t16：藍色點到 AI-1 的兩張 b4，使用者用「4」揭露重複、
+	// 也點到新的 w4；AI-1 早就知道其中一張沒用，就把「4」讀成 w4 的 play clue、Self-Finesse 自己的 w2 而盲打錯）。
+	// 保留原本被當成有用的那張，其餘標成壞的
 	same := map[ident][]int{}
 	for _, y := range touched {
 		if _, done := it.fixPoss[y]; done || !s.live(y) {
 			continue
 		}
-		if t, ok := (s.notes[y].poss & it.explicit[y]).single(); ok {
+		p := s.notes[y].poss & it.explicit[y]
+		if p == 0 {
+			p = it.explicit[y] & s.useful()
+		}
+		if t, ok := p.single(); ok {
 			same[t] = append(same[t], y)
 		}
 	}
-	for _, ys := range same {
-		for _, y := range ys[1:] {
-			mark(y, true, s.notes[y].poss&it.explicit[y])
+	for t, ys := range same {
+		if len(ys) < 2 {
+			continue
+		}
+		keep := ys[0]
+		for _, y := range ys {
+			if s.notes[y].poss.has(t) {
+				keep = y
+				break
+			}
+		}
+		for _, y := range ys {
+			if y != keep {
+				mark(y, true, setOf(t))
+			}
 		}
 	}
 	if it.fix || len(it.newCards) > 0 || s.fiveStall(giver, h) && s.mustStall(giver) {
