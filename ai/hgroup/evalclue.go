@@ -255,6 +255,14 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		// 接收者知道要保留（就算還不確定是 play 還是 save）就算救下來了
 		ev.kind = kindSave
 		ev.score = scoreSave + scoreNewGood*ev.newGood - scoreBadTouch*ev.bad
+		// 一起救下的其他 critical / 5 的新牌（例如綠色同時點到 chop 上 critical 的 g4 與 g5）：和 Chop Move 每多保護一張必須保留的牌同價
+		// （2 也算時各等級略降，可能是多點到的 2 之後常違反 Good Touch）。只給不違反 Good Touch、不誤導的 save clue。
+		// 使用者回報 20261020-175101 t26：AI-1 選了 TCCM（打出 y3、保護 g4），AI-2 的新 chop 卻是 g5，綠色一次救下兩張比較好
+		for _, id := range it.newCards {
+			if c := identOfCard(s.cards[id]); id != it.focus && !ev.misleads && ev.bad == 0 && (s.critical(c) || c.rank() == game.MaxRank) && s.needsSave(R, id) {
+				ev.score += scoreCMMoreSave
+			}
+		}
 		if ev.misleads {
 			ev.score -= scoreSaveMisleads
 		}

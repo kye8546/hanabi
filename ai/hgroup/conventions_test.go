@@ -900,3 +900,12 @@ func TestFinesseTakesNextPlayersOnlyClue(t *testing.T) {
 		t.Errorf("AI-2 不該給會讓使用者沒事可做而棄掉 g5 的 Reverse Finesse（%s）", bots[2].Why())
 	}
 }
+
+func TestSaveClueCoveringTwoCriticalsBeatsChopMove(t *testing.T) {
+	// 使用者回報 20261020-175101 t26：AI-2 chop 上是 critical 的 g4、左邊還有 g5。黃色 TCCM 讓 y3 能打、保護 g4，但新 chop 就是 g5；
+	// 綠色一次救下 g4 與 g5 比較好
+	g, bots := replayCodes(t, 3, 1792489861901848000, 6, "h11 p5 h0W p5 p3 h1W h1Y p5 h04 h15 p1 h1R h12 p2 d5 p5 h23 d4 d5 p5 h0G p2 p3 d4 h1B")
+	if a := bots[1].Act(g.View(1)); a != game.HintColorTo(2, game.Green) {
+		t.Errorf("AI-1 應給 AI-2 綠色（同時救 g4、g5），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

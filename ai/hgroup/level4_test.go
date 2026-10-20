@@ -271,10 +271,10 @@ func TestL4GiveFivesChopMove(t *testing.T) {
 }
 
 func TestL4GiveTrashChopMoveForTwoCriticals(t *testing.T) {
-	// Bob 的 chop 連著兩張 critical（slot 4 的 y4、slot 5 的 r4），slot 3 是垃圾 b1：
-	// 一個 save clue 只能救一張，Trash Chop Move 一次保護兩張
-	g, bots := scenarioAt(t, 4, allOnes, "y3 g4 b4 w4 b3", "g3 b1 y4 r4 y3", "y3 b3 w3 g3 w4")
-	g.Discards = append(g.Discards, card(t, "r4"), card(t, "y4"))
+	// Bob 的 chop 連著兩張 critical（slot 4 的 y3、slot 5 的 r4，沒有共同的顏色或數字），slot 3 是垃圾 b1：
+	// 一個 save clue 只能救一張，Trash Chop Move 一次保護兩張（兩張同數字時，那個數字的 save clue 也能一次救兩張）
+	g, bots := scenarioAt(t, 4, allOnes, "r3 g4 b4 w4 b3", "g3 b1 y3 r4 w3", "r3 b3 w3 g3 w4")
+	g.Discards = append(g.Discards, card(t, "r4"), card(t, "y3"))
 	midGame(t, g)
 	if a := step(t, g, bots); a != game.HintRankTo(1, 1) {
 		t.Fatalf("Alice 應給 Bob「1」（Trash Chop Move 兩張 critical），卻做了 %+v", a)
