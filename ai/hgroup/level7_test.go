@@ -176,3 +176,12 @@ func TestL7ShouldThisBlindPlay(t *testing.T) {
 		}
 	}
 }
+
+func TestL7NoScreamWhenPlayingFiveRefillsClue(t *testing.T) {
+	// 使用者回報 20261021-165112 t36：提示 0 個，AI-2 有大家都知道的 B5，使用者 chop 上是 Y5、沒牌可打。
+	// 打出 B5 會回收一個提示，使用者就能給 AI-1 的 G5 明顯的 play clue、不會棄 Y5：Scream Discard 不是最後手段，照常打出 B5
+	g, bots := replayCodes(t, 3, 1792572672139425000, 7, "h12 p1 h1B h15 p3 h1G h22 p1 p1 h24 p4 h1G h2Y p2 p5 d5 p2 p2 h1G p1 d5 h1B p1 d4 h2W d5 p2 d5 h02 h04 p3 p3 d4 p2 h2B")
+	if a := step(t, g, bots); a != game.Play(2) {
+		t.Errorf("AI-2 應打出 B5（slot 3），卻做了 %+v", a)
+	}
+}

@@ -111,7 +111,22 @@ func (s *state) misreadAsGeneration(a game.Action) bool {
 // 而他下一手會棄 chop（沒有確定能打的牌、也沒有已知垃圾可棄，我打出能打的牌後也不會有；挑戰題 Screaming into the Void）。
 func (s *state) screamWorthy(p int) bool {
 	c := s.chop(p)
-	return c >= 0 && s.needsSave(p, c) && !s.keepsChop(p) && !s.holderMayAct(p) && !(p == (s.me+1)%s.n && s.playLetsNextPlay(p))
+	if c < 0 || !s.needsSave(p, c) || s.keepsChop(p) || s.holderMayAct(p) {
+		return false
+	}
+	// 我打出能打的牌後他就有事可做：有牌可打，或我打出 5 回收了提示、他有明顯的 play clue 可給（不算給我的，All 4's Test）
+	// ——不是最後手段（使用者回報 20261021-165112 t36：AI-2 有 B5，打出後使用者有提示可以讓 AI-1 打 G5，不會棄 chop 上的 Y5）
+	return !(p == (s.me+1)%s.n && (s.playLetsNextPlay(p) || s.playRefillsClue() && s.obviousClue(p)))
+}
+
+// playRefillsClue：提示 0 個時，我確定能打的牌是 5，打出後回收一個提示。
+func (s *state) playRefillsClue() bool {
+	slot := s.bestPlay()
+	if slot < 0 || s.hints >= game.MaxHints {
+		return false
+	}
+	t, ok := s.myPoss(s.hands[s.me][slot]).single()
+	return ok && t.rank() == game.MaxRank
 }
 
 // holderMayAct：p 自己可能知道手上有牌可打或有已知垃圾——共同筆記扣掉他看得到所有剩下張數的牌面後（holderView），
@@ -231,7 +246,8 @@ func (s *state) generationWorthy() bool {
 		return false
 	}
 	N, P3 := (s.me+1)%s.n, (s.me+2)%s.n
-	return s.screamWorthy(P3) && (s.willPlay(N) || !s.obviousClue(P3))
+	// 我打出 5 就回收一個提示，下一位直接就能救 P3，不必棄牌換提示
+	return !s.playRefillsClue() && s.screamWorthy(P3) && (s.willPlay(N) || !s.obviousClue(P3))
 }
 
 // obviousClue：p 有明顯的 play clue 可給——我看得到的其他玩家（不含 p 與我）有沒被提示、現在就能打、別處沒被拿到，
