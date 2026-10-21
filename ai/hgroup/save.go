@@ -352,3 +352,54 @@ func (s *state) takesNextsClue(ev clueEval, hints int) bool {
 	}
 	return !s.nextWillClue(next, hints-1, used)
 }
+
+// exposesNextChop：play clue e 讓下一位的新 chop 落在必須保留的牌上、他又不能立刻打牌（clueEval.exposesNext），
+// 而他也沒有確實能給的提示（nextHasRealClue）——他下一手很可能就棄掉那張牌，不給這個提示，改給別的
+// （例如讓他下一手打牌的 Tempo Clue Chop Move）。使用者回報 20261021-180705 t21：AI-2 的綠色點到使用者 chop 上的 g3，
+// chop 移到 b5，使用者沒牌可打、手上的藍牌可能是 b4 而不能提示 AI-2 的 b4，只好棄掉 b5；「4」能讓他打出 b4。
+// 使用者的判斷：只要能確保他下一手不會棄 chop（他真的有提示可給別人），這樣提示也無妨。
+func (s *state) exposesNextChop(e clueEval, hints int) bool {
+	if !e.exposesNext {
+		return false
+	}
+	used := slices.Clone(e.touched)
+	for _, d := range e.plan {
+		used = append(used, s.depCards(d)...)
+	}
+	return !s.nextHasRealClue((s.me+1)%s.n, hints-1, used)
+}
+
+// nextHasRealClue：next 有確實能給的提示（剩 hints 個提示時）：我看得到的其他玩家（不含我——他會不會提示我，
+// 要看我看不到的牌，All 4's Test——也不含 next）有沒被提示、現在就能打、不違反 Good Touch 的牌，或 chop 上有必須保留的牌；
+// next 自己手上已提示、可能是同一張的牌除外（Level 12 Duplication Responsibility：他不會冒重複的風險）。used 是已經被提示掉的牌。
+func (s *state) nextHasRealClue(next, hints int, used []int) bool {
+	if hints <= 0 {
+		return false
+	}
+	mayDup := func(t ident) bool {
+		return slices.ContainsFunc(s.hands[next], func(id int) bool { return s.gotten(id) && s.notes[id].poss.has(t) })
+	}
+	for p := range s.n {
+		if p == s.me || p == next {
+			continue
+		}
+		for _, id := range s.hands[p] {
+			if slices.Contains(used, id) {
+				continue
+			}
+			if t := identOfCard(s.cards[id]); !s.gotten(id) && s.playableNow(t) && !mayDup(t) &&
+				!s.gottenAs(s.me, s.me, t, id) && s.cleanClueFor(p, id) {
+				return true
+			}
+		}
+		if ch := s.chop(p); ch >= 0 && !slices.Contains(used, ch) && s.needsSave(p, ch) && !mayDup(identOfCard(s.cards[ch])) {
+			return true
+		}
+	}
+	return false
+}
+
+// tempoCMNextPlays：e 是讓下一位下一手就打牌的 Tempo Clue Chop Move（焦點他確定現在能打），可以當成 play clue 比較。
+func (s *state) tempoCMNextPlays(e clueEval) bool {
+	return e.kind == kindChopMove && e.cmKind == cmTempo && e.nextPlays && e.understood && !e.misleads && e.cmWaste == 0
+}

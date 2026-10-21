@@ -910,3 +910,12 @@ func TestNoTouchDuplicateOfFinessedCard(t *testing.T) {
 		t.Errorf("AI-1 不應給 AI-2 紅色（點到和被 finesse 的 r1 重複的牌），卻做了 %+v", a)
 	}
 }
+
+func TestNoClueThatLeavesNextChopOnFiveWithNothingToDo(t *testing.T) {
+	// 使用者回報 20261021-180705 t21：AI-2 的綠色點到使用者 chop 上的 g3（要 prompt AI-1 的 g2），chop 移到 b5。使用者沒牌可打，
+	// 手上的藍牌可能是 b4 而不能提示 AI-2 的 b4，也沒有別的好提示可給，只好棄掉 b5。AI-2 改給「4」：使用者知道藍牌是 b4、下一手打出
+	g, bots := replayCodes(t, 3, 1792577225902334000, 7, "h12 h0B p1 p5 h25 h11 h2W p5 p2 d5 p5 h05 d3 p4 h1W d3 h0B p1 p1 p1")
+	if a := step(t, g, bots); a != game.HintRankTo(0, 4) {
+		t.Errorf("AI-2 應給使用者「4」，卻做了 %+v", a)
+	}
+}

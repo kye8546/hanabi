@@ -35,6 +35,7 @@ type clueEval struct {
 	knowsPlay   bool  // tempo：接收者會因此知道焦點可以打
 	immediate   bool  // play clue 的焦點現在就能打（不用等連接牌）
 	nextPlays   bool  // 下一位玩家會因此在他下一手打牌（被直接提示、被 prompt 或被 finesse）
+	exposesNext bool  // 給下一位的提示讓他的新 chop 落在必須保留的牌上、他又不能立刻打牌（scoreNextChopNeeds）
 	touched     []int
 	newGood     int   // 非焦點、有用的新牌
 	plays       int   // 照計畫進行後會依序打出的牌數（焦點、連接牌、接得上的非焦點新牌）
@@ -176,6 +177,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		if plays {
 			ev.gets = 1 + len(it.plan)
 			ev.score += scoreTempoCMPlay
+			// 他本來就會打的牌（已知能打、是之前的提示要打的牌，例如只剩 self-prompt 的解讀）不算這個提示讓他打的
+			ev.nextPlays = R == (s.me+1)%s.n && s.knowsPlayNow(it) && !s.alreadyResolved(R, it.focus, t) &&
+				!s.holderKnowsPlayable(it.focus) && !s.notes[it.focus].willPlay && !s.plannedPlay(it.focus)
 		}
 		return ev, true
 	}
@@ -279,6 +283,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if R == (s.me+1)%s.n && !s.keepsChop(R) && !s.knowsPlayNow(it) {
 		if nc := s.chopAfter(R, touched); nc >= 0 && s.needsSave(R, nc) {
 			ev.score -= scoreNextChopNeeds
+			ev.exposesNext = true
 		}
 	}
 	ev.score -= dist
@@ -557,6 +562,25 @@ func (s *state) alreadyResolved(R, focus int, t ident) bool {
 			cs = rec.fallback
 		}
 		return len(cs) > 0 && !slices.ContainsFunc(cs, func(c cand) bool { return c.id != t || c.save })
+	}
+	return false
+}
+
+// plannedPlay：某個提示要持有者打出這張牌當連接牌，他本來就會打——我推得的計畫要它，或接收者角度的解讀
+// （扣掉要我盲打、但我這手不會打的；都扣光時看 fallback，例如只剩 self-prompt 的解讀）每一種都要它。
+func (s *state) plannedPlay(id int) bool {
+	uses := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == id }) }
+	for _, rec := range s.recs {
+		if slices.ContainsFunc(rec.plan, func(d dep) bool { return d.card == id }) {
+			return true
+		}
+		cs := slices.DeleteFunc(slices.Clone(rec.cands), func(c cand) bool { return s.failsOnMyTurn(rec, c) })
+		if len(cs) == 0 {
+			cs = rec.fallback
+		}
+		if len(cs) > 0 && !slices.ContainsFunc(cs, func(c cand) bool { return !uses(c) }) {
+			return true
+		}
 	}
 	return false
 }

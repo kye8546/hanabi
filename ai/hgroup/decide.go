@@ -189,6 +189,9 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 	evs, hints := t.clues(s), t.v.Hints
 	for _, k := range []clueKind{kindPlay, kindSave} {
 		ev, ok := best(evs, func(e clueEval) bool {
+			if k == kindPlay && (e.kind == kindPlay || s.tempoCMNextPlays(e)) {
+				return !s.starvesLockedNext(e, hints) && !s.exposesNextChop(e, hints)
+			}
 			return (e.kind == k || k == kindSave && s.cmSave(evs, e)) && !s.starvesLockedNext(e, hints)
 		})
 		if !ok {
@@ -213,6 +216,9 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 			}
 		}
 		if ev.kind == kindChopMove {
+			if k == kindPlay {
+				return ev.act, cmNames[ev.cmKind] + "：讓下一位下一手就打牌（其他 play clue 會讓他的 chop 落在必須保留的牌上）", true
+			}
 			return ev.act, cmNames[ev.cmKind] + "：保護 chop 上必須保留的牌", true
 		}
 		return ev.act, map[clueKind]string{kindPlay: "play clue", kindSave: "save clue"}[k], true
