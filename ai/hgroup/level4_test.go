@@ -343,3 +343,13 @@ func TestL4GiveFivesChopMoveEvenIfItLocks(t *testing.T) {
 		t.Fatalf("Alice 應給 Bob「5」（5's Chop Move，一次救四張 5 和 r4），卻做了 %+v", a)
 	}
 }
+
+func TestL4NoTrashChopMoveWhenDirectSaveWorks(t *testing.T) {
+	// 使用者回報 20261021-094401 t29：AI-2 chop 上是 critical 的 g4，「4」能直接救它（也點到已知垃圾的 r4）。
+	// 原文：能直接用 save clue 救的牌不能 Trash Chop Move（有正向資訊總是比較好）。以前 AI-1 的筆記把那張 r4 記成 r1，
+	// 「4」讓筆記矛盾就被當成誤導，改給了「1」的 Trash Chop Move
+	g, bots := replayCodes(t, 3, 1792547041335921000, 6, "h11 p2 h0B p5 p2 h0Y p1 h2Y h0B p3 h22 p4 p1 h23 p3 p2 h25 p4 d5 h2R p3 d5 d5 h11 h2W p1 p2 d5")
+	if a := bots[1].Act(g.View(1)); a != game.HintRankTo(2, 4) {
+		t.Errorf("AI-1 應直接給 AI-2「4」救 g4，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

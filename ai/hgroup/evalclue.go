@@ -426,6 +426,11 @@ func (s *state) misleads(R int, it interp, touched []int) (wrong, danger, costly
 	}
 	for _, id := range touched {
 		p := s.notes[id].poss & it.explicit[id]
+		if p == 0 {
+			// 筆記和提示矛盾：接收者會改成只看提示本身的資訊（onClue），不是寫下錯誤的筆記（使用者回報 20261021-094401 t29：
+			// AI-2 的紅牌被記成 r1，「4」讓它變成 r4 就被當成誤導，AI-1 改用 Trash Chop Move 救本來能直接用「4」救的 g4）
+			p = it.explicit[id]
+		}
 		switch {
 		case id == it.focus && p&u != 0:
 			p &= u
