@@ -900,3 +900,13 @@ func TestFinesseTakesNextPlayersOnlyClue(t *testing.T) {
 		t.Errorf("AI-2 不該給會讓使用者沒事可做而棄掉 g5 的 Reverse Finesse（%s）", bots[2].Why())
 	}
 }
+
+func TestNoTouchDuplicateOfFinessedCard(t *testing.T) {
+	// 使用者回報 20261021-174911 t2：AI-1 的紅色點到 AI-2 的 r2 與 r1、finesse 使用者的 r1——AI-2 的 r1 和被 finesse 的 r1 重複，
+	// 違反 Good Touch。「2」同樣 finesse 使用者的 r1、讓 AI-2 打出 r2，另一張點到的是有用的 b2，比較好
+	g, bots := replayCodes(t, 3, 1792576151055814000, 7, "h15")
+	a := step(t, g, bots)
+	if a.Type == game.ActHint && a.Target == 2 && a.Hint.Kind == game.HintColor && a.Hint.Color == game.Red {
+		t.Errorf("AI-1 不應給 AI-2 紅色（點到和被 finesse 的 r1 重複的牌），卻做了 %+v", a)
+	}
+}

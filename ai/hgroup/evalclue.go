@@ -113,6 +113,12 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	t := it.truth
 
 	var seen idSet
+	// 計畫要打出的連接牌（prompt / finesse）也算已被拿到：點到和它們一樣的牌違反 Good Touch
+	// （使用者回報 20261021-174911 t2：紅色點到 AI-2 的 r2、r1，要 finesse 使用者的 r1，AI-2 的 r1 就重複了；以前算成有用的新牌）
+	var planned idSet
+	for _, d := range it.plan {
+		planned |= setOf(d.id)
+	}
 	// 焦點先算：和焦點一樣的非焦點新牌是重複的那張（例如其他 1 都打出了，「1」點到兩張 w1）
 	order := it.newCards
 	if i := slices.Index(order, it.focus); i > 0 {
@@ -124,7 +130,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		case id != it.focus && (s.trash(c) || seen.has(c)) && s.seenAsTrash(it, id):
 			// 接收者推得出它不可能有用（垃圾，或只可能是焦點的重複）：不會造成誤解，還多知道一張可以先棄的牌
 			ev.trashMarked++
-		case s.trash(c) || seen.has(c) || s.gottenAs(s.me, s.me, c, id) || s.maybeMine(c) || s.awaited(c, id) || s.pendingLayer(c, id):
+		case s.trash(c) || seen.has(c) || id != it.focus && planned.has(c) || s.gottenAs(s.me, s.me, c, id) || s.maybeMine(c) || s.awaited(c, id) || s.pendingLayer(c, id):
 			ev.bad++
 		case id != it.focus:
 			ev.newGood++
