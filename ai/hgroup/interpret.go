@@ -188,6 +188,12 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		it.fallback = append(it.fallback, slices.DeleteFunc(slices.Clone(it.cands), func(c cand) bool { return !selfFin(c) })...)
 		it.cands = slices.DeleteFunc(it.cands, selfFin)
 	}
+	// Level 7：被 Scream / Shout Discard 叫到的人必須給提示，只補已提示牌資訊的提示是拖延，不會讓人盲打
+	if it.tempo && s.screamed(giver) {
+		finesses := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse }) }
+		it.cands = slices.DeleteFunc(it.cands, finesses)
+		it.fallback = slices.DeleteFunc(it.fallback, finesses)
+	}
 	// Level 6：沒有價值、又不是拖延時給的 Tempo Clue 另外 Chop Move 接收者的 chop
 	if it.tempo && s.knows(lvTempo) {
 		it.tempoExtra = s.tempoExtraPlays(&it, touched)

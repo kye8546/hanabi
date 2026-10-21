@@ -183,6 +183,11 @@ func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, 
 		}
 		return ev.act, "下一位的 chop 需要救，先給讓他下一手就打牌的 play clue（Play Clue 優先於 Save Clue）", true
 	}
+	// Level 7 The Shout Discard Chop Move：手上有大家都知道能打的牌和沒用的牌時，棄掉沒用的牌就能 Chop Move 他的 chop，不花提示
+	// （提示 0 個時由 stepEmergencyDiscard 處理，那時 Generation Discard 優先）
+	if slot := s.shoutSave(hints); slot >= 0 && hints > 0 && shoutOverClue {
+		return game.Discard(slot), "Shout Discard Chop Move：不打能打的牌、棄已知垃圾，要下一位 Chop Move 他 chop 上必須保留的牌", true
+	}
 	ev, ok := best(evs, func(e clueEval) bool {
 		return e.target == next && (e.focus == chop && (e.kind == kindPlay || e.kind == kindSave) || s.cmSave(evs, e))
 	})

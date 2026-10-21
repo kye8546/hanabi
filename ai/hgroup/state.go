@@ -102,6 +102,9 @@ type state struct {
 	// cmLast：每位玩家最近一次被 Chop Move 的牌。他下一次棄牌若棄掉 critical，表示那次 Chop Move 是誤會，
 	// 撤銷它（Level 4 Critical Discards after a Chop Move）
 	cmLast map[int][]int
+
+	// scream：Level 7 Scream / Shout Discard 之後、被叫的人還沒行動（他這一手必須給提示，行動後才決定 Chop Move）
+	scream *screamRec
 }
 
 // sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
@@ -316,6 +319,16 @@ func (s *state) sync(v game.PlayerView) {
 }
 
 func (s *state) apply(e game.Event) {
+	// Level 7：上一位做了 Scream / Shout Discard，這是被叫的人的行動（抽牌不算）：行動後照他做了什麼決定 Chop Move
+	if sc := s.scream; sc != nil && e.Type != game.EvDraw {
+		p3Chop := s.publicChop((sc.target+1)%s.n, nil)
+		defer func() {
+			if s.scream == sc {
+				s.scream = nil
+			}
+			s.resolveScream(sc, e, p3Chop)
+		}()
+	}
 	switch e.Type {
 	case game.EvHint:
 		s.deferred = s.deferrable(e)
@@ -324,6 +337,11 @@ func (s *state) apply(e game.Event) {
 		s.onClue(e)
 		s.hints--
 	case game.EvPlay, game.EvMisplay, game.EvDiscard:
+		// Level 7：照他棄牌前（大家看到的）手牌判斷是不是 Scream / Shout Discard
+		var scream *screamRec
+		if e.Type == game.EvDiscard {
+			scream = s.detectScream(e.Player, e.Card.ID)
+		}
 		// Level 4 The Order Chop Move：要在打出前（照他打牌前的手牌）算他跳過了幾張 1
 		ocmTarget := -1
 		if e.Type == game.EvPlay && s.knows(lvChopMove) {
@@ -381,6 +399,9 @@ func (s *state) apply(e game.Event) {
 			if c := s.chop(ocmTarget); c >= 0 {
 				s.chopMove(ocmTarget, []int{c})
 			}
+		}
+		if scream != nil {
+			s.scream = scream
 		}
 		s.afterPlay()
 	case game.EvDraw:

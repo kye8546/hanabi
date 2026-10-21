@@ -47,6 +47,7 @@ var decideSteps = []decideStep{
 	(*state).stepFinesseBlindPlay,  // 1. 被 finesse 的牌立刻盲打（Finesse Urgency）
 	(*state).stepOrderChopMoveNext, //    Order Chop Move 能保護下一位必須保留的 chop：比給他提示好
 	(*state).stepUrgentSave,        // 2. 下一位要棄掉必須保留的 chop：就算自己有牌可打也先救
+	(*state).stepEmergencyDiscard,  //    Level 7 提示 0 個時：Generation Discard、Scream / Shout Discard Chop Move
 	(*state).stepSarcasticDiscard,  //    Level 3 Sarcastic Discard
 	(*state).stepFixMisplay,        //    Level 3 Misplay Cost Principle：隊友會打錯
 	(*state).stepOrderChopMove,     //    Order Chop Move 保護後面其他人的 chop
@@ -56,6 +57,7 @@ var decideSteps = []decideStep{
 	(*state).stepEarlyTrash,        //    Early Game：先棄已被提示的已知垃圾（先於 5 Stall）
 	(*state).stepFiveStall,         //    Early Game：5 Stall 代替棄牌
 	(*state).stepLastRoundGamble,   //    最後一輪賭一張最可能能打的被提示牌
+	(*state).stepPlayChopMoved,     //    Level 7 盲打很可能能打的 Chop Moved 牌（還能承受閃電時）
 	(*state).stepStallAtMaxHints,   // 6. 提示滿 8 不能棄牌：拖延提示
 	(*state).stepEndgameBurn,       //    終局被迫拖延（Level 8 Burning，所有等級都用）
 	(*state).stepDiscard,           // 7. 棄牌
@@ -63,11 +65,30 @@ var decideSteps = []decideStep{
 
 func (s *state) decide(v game.PlayerView) game.Action {
 	t := &turn{v: v}
+	// Level 7：被 Scream / Shout Discard 叫到的人這一手不能棄牌，必須給提示（先照平常的順序找 play / save clue，
+	// 沒有就拖延：5 Stall 或補已提示牌的資訊）
+	mustClue := s.screamed(s.me) && v.Hints > 0
 	for _, step := range decideSteps {
-		if a, why, ok := step(s, t); ok {
-			s.why = why
-			return a
+		a, why, ok := step(s, t)
+		if !ok || mustClue && (a.Type != game.ActHint || s.misreadAsGeneration(a)) {
+			continue
 		}
+		// Level 7：這次棄牌會被當成 Scream / Shout Discard，我卻不是要救人：改打確定能打的牌
+		if a.Type == game.ActDiscard && s.unintendedScream(a.Slot) {
+			if slot := s.screamAvoidPlay(); slot >= 0 {
+				a, why = game.Play(slot), "打出確定能打的牌（棄牌會被當成 Scream Discard）"
+			}
+		}
+		s.why = why
+		return a
+	}
+	if mustClue {
+		s.why = "被 Scream Discard 叫到，不能棄牌：拖延提示"
+		evs := slices.DeleteFunc(slices.Clone(t.clues(s)), func(e clueEval) bool { return s.misreadAsGeneration(e.act) })
+		if len(evs) == 0 {
+			evs = t.clues(s)
+		}
+		return s.stall(evs)
 	}
 	panic("decide：棄牌那一步一定成立")
 }
@@ -378,6 +399,12 @@ func (s *state) stallTier(evs []clueEval) (game.Action, int) {
 // （沒被提示的牌就算我推得出是垃圾，別人看來也是棄掉不明的牌，會結束 Early Game）。沒有則回傳 -1。
 func (s *state) trashSlot(clued bool) int {
 	hand := s.hands[s.me]
+	// Level 7：大家都知道沒用的已提示牌要先棄，否則棄別張（chop）會被當成 Scream Discard（With Known-Trash）
+	if s.knows(lvScream) {
+		if slot := s.myTrashSlot(); slot >= 0 {
+			return slot
+		}
+	}
 	for slot := len(hand) - 1; slot >= 0; slot-- {
 		if s.knownTrash(hand[slot]) && (!clued || s.gotten(hand[slot])) {
 			return slot

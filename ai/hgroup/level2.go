@@ -12,8 +12,10 @@ import (
 // fiveStallHints：Early Game 至少還有這麼多提示才用 5 Stall 代替棄牌。
 var fiveStallHints = 1
 
-// mustStall：給提示者這一手不能棄牌（提示滿 8，或手牌全被拿到），只能給拖延提示。
-func (s *state) mustStall(giver int) bool { return s.hints >= game.MaxHints || s.chop(giver) < 0 }
+// mustStall：給提示者這一手不能棄牌（提示滿 8、手牌全被拿到，或 Level 7 被 Scream / Shout Discard 叫到），只能給拖延提示。
+func (s *state) mustStall(giver int) bool {
+	return s.hints >= game.MaxHints || s.chop(giver) < 0 || s.screamed(giver)
+}
 
 // fiveStall：數字 5 提示點到不在 chop 上的新的 5 時，可以當成 5 Stall（Level 2）。只重新點到舊的 5 是 tempo clue
 // （這張能打），除非給提示者這一手不能棄牌（那只是拖延）：
