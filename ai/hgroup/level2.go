@@ -61,16 +61,29 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		}
 		// 只補回「看得到另一位玩家的 finesse position 確實是那張」的解讀（他沒打最可能是看到了那張）；
 		// 要靠接收者自己或我（看不到）的，不補——原文：那人沒盲打時，通常是另一種直接的解讀
-		visible := true
+		visible, selfOK, self := true, true, false
 		for _, d := range deps {
-			if d.finesse {
-				if t, ok := s.see(rec.target, d.card); !ok || t != d.id && d.layers == 0 || d.player == s.me {
-					visible = false
-				}
+			if !d.finesse {
+				continue
+			}
+			if d.player == rec.target {
+				self = true
+				visible = false
+				continue
+			}
+			if t, ok := s.see(rec.target, d.card); !ok || t != d.id && d.layers == 0 || d.player == s.me {
+				visible, selfOK = false, false
 			}
 		}
-		if visible {
+		switch {
+		case visible:
 			kept = append(kept, cand{id: id, deps: deps})
+		case self && selfOK && !slices.ContainsFunc(rec.fallback, func(c cand) bool { return c.id == id && sameDeps(c.deps, deps) }):
+			// 只差接收者自己的 Self-Finesse：原文 Self-Finesse「could be a Reverse Finesse … (At least, until the other player has
+			// had a chance to blind-play the card.)」——他有機會盲打卻沒打，就輪到 Self-Finesse（放進 fallback，其他解讀都不成立後升格）。
+			// 使用者回報 20261021-103315：m4 要 AI-2 盲打 m2、m3，AI-2 看到 AI-1 的 finesse position 是 m3 而只打了 m2；
+			// 以前 AI-1 不補回「m3 是我的 Self-Finesse」，改升格成早已不成立的 b4
+			rec.fallback = append(rec.fallback, cand{id: id, deps: deps})
 		}
 	}
 	// 我的計畫（我看得到焦點）：只有在他的角度確實需要 finesse、而且他能看到的人裡只可能是我（或他自己）時，

@@ -130,6 +130,9 @@ type sim struct {
 	ownMaybe bool
 
 	free freeChoice // 解讀 / 重新找連接牌時：這個提示的 Free Choice（Rainbow 變體，variant_rainbow.go）
+
+	// clueSeq：替已發生的提示重新找連接牌時，那個提示的事件序號——finesse position 照提示當下的手牌算，之後才抽到的牌不算
+	clueSeq int
 }
 
 // saveSim 存下目前的假設情境，回傳還原它的函式。

@@ -489,7 +489,8 @@ func (s *state) promoteFocus(rec *clueRec) {
 	if t, ok := s.see(s.me, rec.focus); ok && !u.has(t) {
 		return
 	}
-	if n.poss&u == 0 && n.explicit&u != 0 {
+	// 原本的解讀都不成立了，筆記照升格的解讀重寫（舊筆記和它們有交集時也一樣——例如原本只有 r2，升格後是 r2 / y2 / g2…）
+	if n.explicit&u != 0 {
 		n.poss = n.explicit & u
 	}
 }

@@ -631,3 +631,24 @@ func TestPromptMayWaitForReceiversSelfFinesse(t *testing.T) {
 		t.Fatalf("AI-2 的 finesse position 可能是還不能打的 w2，不該盲打：%+v（%s）", a, bots[2].s.why)
 	}
 }
+
+func TestSelfFinesseAfterReverseTargetPassesWithVisibleCopy(t *testing.T) {
+	// 使用者回報 20261021-103315（Rainbow）：t4 使用者「4」給 AI-1 的 m4（m1 在 AI-2 已被提示）。AI-1 看到 AI-2 的 finesse position 是 m2、
+	// 下一張 finesse position（b2 那張已被別的提示 finesse）是 m3，讀成 AI-2 依序盲打 m2、m3；AI-2 看到 AI-1 的 finesse position 是 m3，
+	// 當成 AI-1 的 Self-Finesse 而只打 m2。原文 Self-Finesse：可能是 Reverse Finesse 時先等，「until the other player has had a chance to
+	// blind-play」——AI-2 有機會卻沒打（改打確定的 b4），AI-1 就要 Self-Finesse 提示當下 finesse position 的 m3
+	// （以前不補回這個解讀，改升格成早已不成立的 b4；這裡讓 AI-1 t17 先給別的提示保住那張 m3）
+	codes := "h21 h0B p2 h14 h01 p5 p1 h24 p2 h12 h05 p4 h25 d3 p4 p5 h05"
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1792549995224280000, 6, codes)
+	step(t, g, bots)             // AI-2：沒盲打 m3（它以為是 AI-1 的）
+	force(t, g, game.Discard(4)) // 使用者
+	m3 := -1
+	for sl, hc := range g.Hands[1] {
+		if hc.Card.ID == 10 {
+			m3 = sl
+		}
+	}
+	if a := bots[1].Act(g.View(1)); a != game.Play(m3) {
+		t.Errorf("AI-1 應 Self-Finesse 盲打 m3（slot %d），卻做了 %+v（%s）", m3+1, a, bots[1].Why())
+	}
+}

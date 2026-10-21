@@ -55,6 +55,7 @@ func (s *state) connectRec(rec *clueRec, obs int, t ident) ([]dep, bool) {
 	defer s.saveSim()()
 	s.sameClue = rec.fresh
 	s.free = rec.free
+	s.clueSeq = rec.seq
 	return s.connect(obs, rec.giver, rec.target, rec.focus, t)
 }
 
@@ -181,7 +182,7 @@ func (s *state) hiddenFinesse(obs, p, id int, t, m ident, used []int) (dep, []in
 // （同一人排隊盲打不同提示的牌是 Level 5 的 Queued Finesse）。
 func (s *state) finesseSlot(p int, used []int) int {
 	for _, id := range s.hands[p] {
-		if slices.Contains(used, id) || slices.Contains(s.touchedNow, id) {
+		if slices.Contains(used, id) || slices.Contains(s.touchedNow, id) || s.clueSeq > 0 && s.notes[id].drawn > s.clueSeq {
 			continue
 		}
 		if n := s.notes[id]; n.finessed && !n.clued && s.knows(lvMultiConnect) && !s.knows(lvQueuedFinesse) {
@@ -339,6 +340,13 @@ func (s *state) selfMark(rec *clueRec, who int) {
 	}
 	n := s.notes[card]
 	p := n.poss & ids
+	if p&s.useful() == 0 {
+		// 舊筆記剩下的牌面都已打出（例如之前升格的解讀要它是 b3，b3 後來被別人打出了）：照提示資訊重算
+		p = n.explicit & ids
+	}
+	if q := p & s.useful(); q != 0 {
+		p = q
+	}
 	if p == 0 {
 		return
 	}
@@ -434,7 +442,10 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 		}
 		// Level 5：盲打出的是別張能打的牌 → Layered Finesse，他繼續盲打下一張；當成 prompt 打出的是別張能打的牌、
 		// 又沒有其他可能的已提示牌 → Hidden Finesse，真正的牌在提示當下的 finesse position。兩者都在 layerSlot
-		if e.Type == game.EvPlay && (d.finesse && s.knows(lvLayeredFinesse) || !d.finesse && s.knows(lvHiddenFinesse)) {
+		// 接收者自己的 Self-Finesse 沒有 layer：盲打出什麼，焦點就要對上它（原文 Bob is Lazy：「she knows that her previously unknown 2
+		// that was the Finesse target must match」），其他要它是別張的解讀不成立
+		selfFin := d.finesse && d.player == rec.target
+		if e.Type == game.EvPlay && !selfFin && (d.finesse && s.knows(lvLayeredFinesse) || !d.finesse && s.knows(lvHiddenFinesse)) {
 			if nc := s.layerSlot(rec, d.player, played); nc >= 0 {
 				st := depPending
 				if d.layers > 0 {
