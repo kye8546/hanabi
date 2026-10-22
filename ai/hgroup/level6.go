@@ -165,8 +165,8 @@ func (s *state) tempoTarget(it *interp) (idSet, bool) {
 // tempoValuable（Level 6 The Valuable Tempo Clue）：大家都知道這個 Tempo Clue 有價值（焦點的可能牌面是 ts）——
 //  1. 讓兩張以上已被提示的牌能打：另一張被點到的已提示牌因此確定現在就能打（挑戰題 Filling in, I 的 b3、g3）；
 //     中間缺的牌要靠這個提示 prompt / finesse 出來的情況，tempoTarget 已排除；
-//  2. 焦點不是 5，而且現在 prompt 它的話會 prompt 到接收者另一張已提示的牌（依 prompt 的順序，大家的筆記上可能是它；
-//     那張已知能打也算）。
+//  2. 焦點不是 5，而且現在 prompt 它的話會 prompt 到接收者另一張已提示的牌（依 prompt 的順序，提示資訊容許它是那張；
+//     不看筆記上的推論——那張已知能打、或推得出是別張也算）。
 //
 // 第 3 種「打出它會讓鎖手的人解鎖」：接收者鎖手時沒有 chop 可以 Chop Move，tempoChopMove 本來就不成立。
 // 提示當下就判斷（原文：只看提示後的那一回合，免得各家不同步）。
@@ -181,9 +181,10 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 		blocked := false
 		for _, id := range s.promptOrder(R) {
 			n := s.notes[id]
-			// 已知能打的牌也算：它可能就是 t，要 prompt t 時一定先落在它身上（或它直接被當成那張 t），焦點永遠輪不到
-			// （使用者指正 20261020-120718 t24：slot 4、5 都只被「3」點過，slot 4 雖然已知能打，白色點 slot 5 仍是有價值的）
-			if n.clued && s.publicPoss(id).has(t) {
+			// prompt 會落在哪張只看提示本身的資訊（正面提示，加上負面提示能排除的），不看筆記上的其他推論（使用者的規則）：
+			// 只要提示資訊容許它是 t，要 prompt t 時就會先落在它身上，焦點輪不到——它已知能打、或推得出是別張都一樣
+			// （使用者指正 20261020-120718 t24：slot 4、5 都只被「3」點過，slot 4 雖然已知能打、之後也推得出是 r3，白色點 slot 5 仍是有價值的）
+			if n.clued && !n.bad && n.explicit.has(t) {
 				blocked = id != it.focus
 				break
 			}
