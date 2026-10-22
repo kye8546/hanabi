@@ -56,6 +56,13 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		}
 	}
 	s.skipCards = skip
+	// 沒打的是我：我看得到焦點，我的計畫已把接收者那邊的連接牌記成被 finesse，但接收者角度的解讀不能靠它（那是我私下的推論）
+	if e.Player == s.me {
+		for _, d := range rec.plan {
+			s.skipCards = append(s.skipCards, d.card)
+			s.unclaimed = append(s.unclaimed, d.card)
+		}
+	}
 	for _, id := range lost {
 		deps, ok := s.connectRec(rec, rec.target, id)
 		if !ok || len(deps) == 0 {
@@ -90,7 +97,7 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 	}
 	// 我的計畫（我看得到焦點）：只有在他的角度確實需要 finesse、而且他能看到的人裡只可能是我（或他自己）時，
 	// 他沒打才代表「是我」——若他看得到連接牌已在別處（被提示 / 會被打），他不打另有理由
-	if t, ok := s.see(s.me, rec.focus); ok && slices.Contains(lost, t) && s.passMeansMe(rec, e.Player, t, s.onFinessePos(rec, before, e.Player, t)) {
+	if t, ok := s.see(s.me, rec.focus); ok && e.Player != s.me && slices.Contains(lost, t) && s.passMeansMe(rec, e.Player, t, s.onFinessePos(rec, before, e.Player, t)) {
 		if deps, ok := s.connectRec(rec, s.me, t); ok {
 			for _, d := range deps {
 				if !slices.ContainsFunc(rec.plan, func(p dep) bool { return p.card == d.card }) && d.player != e.Player {

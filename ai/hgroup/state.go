@@ -124,7 +124,10 @@ type sim struct {
 	touchedNow  []int // 解讀提示期間：這次被點到的牌（不在 finesse position 上）
 	skipFinesse []int // 重新找連接牌時：這次提示已經輪過、沒有盲打的人（不會是他）
 	skipCards   []int // 重新找連接牌時：他沒盲打的那些牌（不算已經有人會打）
-	sameClue    []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
+	// unclaimed：重新找連接牌時，這些牌被 finesse 的筆記只是我私下的推論（我自己沒盲打後替接收者重算時，我的計畫記下的牌），
+	// 從接收者的角度它們還在 finesse position 上
+	unclaimed []int
+	sameClue  []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
 	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
 	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
 	assumeMine bool

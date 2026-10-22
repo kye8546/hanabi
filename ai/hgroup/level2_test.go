@@ -652,3 +652,18 @@ func TestSelfFinesseAfterReverseTargetPassesWithVisibleCopy(t *testing.T) {
 		t.Errorf("AI-1 應 Self-Finesse 盲打 m3（slot %d），卻做了 %+v（%s）", m3+1, a, bots[1].Why())
 	}
 }
+
+func TestOwnPassRestoresReceiverSelfFinesse(t *testing.T) {
+	// 使用者回報 20261022-123841：t1 使用者「2」點到 AI-2 的 w2，要 AI-2 Self-Finesse slot 1 的 w1。AI-1 看不到自己的
+	// finesse position，只記了「finesse 我」的解讀；它沒盲打（看得到 AI-2 的 w1）後，要和別人一樣補回 AI-2 的 Self-Finesse，
+	// AI-2 打出 w1 後就知道那張是 w2。以前解讀被刪光，t8 AI-1 又白白用白色提示這張大家都知道的 w2（Burn Clue）
+	g, bots := replayCodes(t, 3, 1792643921749331000, 7, "h22 h2B h05 h11 p4 p1 h22")
+	id := g.Hands[2][3].Card.ID
+	a := step(t, g, bots)
+	if got, ok := bots[1].s.notes[id].poss.single(); !ok || got != identOf(game.White, 2) {
+		t.Errorf("AI-1 應記得 AI-2 slot 4 是 w2，筆記是 %v", bots[1].s.notes[id].poss.list())
+	}
+	if a == game.HintColorTo(2, game.White) {
+		t.Errorf("AI-1 不應再用白色提示大家都知道的 w2，卻做了 %+v", a)
+	}
+}

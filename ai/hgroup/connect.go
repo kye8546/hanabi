@@ -188,7 +188,7 @@ func (s *state) finesseSlot(p int, used []int) int {
 		if n := s.notes[id]; n.finessed && !n.clued && s.knows(lvMultiConnect) && !s.knows(lvQueuedFinesse) {
 			return -1
 		}
-		if !s.gotten(id) {
+		if !s.gotten(id) || slices.Contains(s.unclaimed, id) {
 			return id
 		}
 	}
@@ -555,7 +555,10 @@ func (s *state) checkDeps(e game.Event, played int) {
 		// 接收者角度的解讀
 		passedBefore := slices.Clone(rec.cands)
 		kept, changed, done, peeled := s.stepCands(rec, rec.cands, e, played, -1)
-		if s.knows(lvSelfFinesse) && e.Player != rec.target && e.Player != s.me && !slices.Contains(rec.passed, e.Player) {
+		// 沒盲打的人是我自己也一樣（我看不到自己的 finesse position，接收者角度的解讀裡有要我盲打的；我沒打，
+		// 大家就會補回其他解讀，例如接收者自己的 Self-Finesse——使用者回報 20261022-123841：「2」要 AI-2 Self-Finesse w1，
+		// AI-1 以前只記了「finesse 我」的解讀，沒打之後解讀全被刪光，一直不知道那張是 w2，t8 又白白提示它）
+		if s.knows(lvSelfFinesse) && e.Player != rec.target && !slices.Contains(rec.passed, e.Player) {
 			kept = s.retryFinesse(rec, e, played, passedBefore, kept)
 		}
 		// 可能是 save clue 的提示不會觸發 prompt，已提示的連接牌被打出證明不了什麼；
