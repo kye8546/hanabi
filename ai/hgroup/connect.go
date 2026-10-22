@@ -760,6 +760,24 @@ func (s *state) release(rec *clueRec, d dep) {
 // stepCands 依這次行動推進每種解讀的連接，丟掉連接失敗的解讀。done 是剛兌現的連接牌（沒有則 -1）；
 // peeled 是照預期盲打出 layer 的解讀（Level 5，它們也算「需要這次打出的牌」）。
 // waitFor 這位玩家的 finesse 不套用 Finesse Urgency。
+// promptPassed（Level 2）：接收者角度的解讀 c 要某人（不是接收者自己）打出他已提示的牌當 prompt，那張現在就能打，
+// 他輪到了卻棄牌——prompt 的解讀不成立。原文 Self-Finesse：「If the clue looks like it could be a Prompt, then the
+// clue receiver will not play anything and assume that it is a Prompt. (At least, until the other player has had a chance to
+// play the Prompted card.)」；Level 5 Schrödinger's Cat：「they will often have to wait for everyone else to have a turn to allow
+// for the possibility of a Prompt」。使用者指正 20261022-145748 t8：「3」點到 AI-2 的 w3，AI-2 也可能讀成 y3（prompt 使用者的
+// 黃牌當 y2），使用者沒打黃牌就確定是 w3；以前 prompt 永遠可以等，AI-1 以為 AI-2 會一直卡著而改做 5 Stall。
+// 他給提示時再等一回合：可能在做緊急的事（救 chop、給快被棄的牌 play clue……）。試過給提示也算沒打，Lv2 5 人局 500 局
+// -0.13、打錯變多——AI 被 prompt 時常先救人或給 finesse；只算棄牌時各等級持平。Scream / Shout Discard 也是緊急的事。
+func (s *state) promptPassed(rec *clueRec, c cand, e game.Event, played, waitFor int) bool {
+	if !s.knows(lvSelfFinesse) || e.Type != game.EvDiscard || s.detectScream(e.Player, e.Card.ID) != nil {
+		return false
+	}
+	return slices.ContainsFunc(c.deps, func(d dep) bool {
+		return !d.finesse && d.player == e.Player && d.player != rec.target && d.player != waitFor &&
+			s.playableNow(d.id) && slices.Contains(s.hands[d.player], d.card)
+	})
+}
+
 func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor int) (kept []cand, changed bool, done int, peeled idSet) {
 	done = -1
 	for _, c := range cs {
@@ -778,6 +796,9 @@ func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor
 				s.release(rec, d)
 			}
 			c.deps[i] = nd
+		}
+		if !fail && s.promptPassed(rec, c, e, played, waitFor) {
+			fail = true
 		}
 		if fail {
 			changed = true

@@ -667,3 +667,22 @@ func TestOwnPassRestoresReceiverSelfFinesse(t *testing.T) {
 		t.Errorf("AI-1 不應再用白色提示大家都知道的 w2，卻做了 %+v", a)
 	}
 }
+
+func TestPromptPassedResolvesDirectPlay(t *testing.T) {
+	// 使用者指正 20261022-145748 t8：AI-2 有能打的 w3，「3」點到它時，AI-2 也可能讀成 y3（prompt 使用者 t2 被黃色點到的牌當 y2）。
+	// 原文 Self-Finesse：可能是 Prompt 時先等，「until the other player has had a chance to play the Prompted card」——使用者輪到時
+	// 沒打那張黃牌，就確定是 w3。所以「3」是乾淨的 play clue（以前 prompt 永遠可以等，AI-1 改做 5 Stall）
+	g, bots := replayCodes(t, 3, 1792652268251504000, 7, "h21 h0Y p4 p2 h0W p4 p3")
+	w3 := g.Hands[2][2].Card.ID
+	if a := step(t, g, bots); a != game.HintRankTo(2, 3) {
+		t.Fatalf("AI-1 應給 AI-2「3」，卻做了 %+v", a)
+	}
+	if a := step(t, g, bots); a.Type == game.ActPlay && g.Hands[2][a.Slot].Card.ID == w3 {
+		t.Fatalf("使用者還沒機會打黃牌，AI-2 不該就打出 w3")
+	}
+	force(t, g, game.Discard(4)) // 使用者沒打黃牌
+	a := bots[2].Act(g.View(2))
+	if a.Type != game.ActPlay || g.Hands[2][a.Slot].Card.ID != w3 {
+		t.Errorf("使用者沒打黃牌後，AI-2 應打出 w3，卻做了 %+v", a)
+	}
+}

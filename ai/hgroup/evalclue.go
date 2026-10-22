@@ -228,7 +228,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 			ev.bad++
 		}
 	}
-	soon := playable && s.resolvesToPlay(it.cands, plan, t)
+	soon := playable && s.resolvesToPlay(R, it.cands, plan, t)
 
 	switch {
 	case ev.danger:
@@ -508,7 +508,7 @@ func (s *state) selfPromptTimely(R int, cands []cand) bool {
 }
 
 // resolvesToPlay：照實際的連接進行後，接收者的每種剩餘解讀都會變成可打（不需要更多提示）。
-func (s *state) resolvesToPlay(cands []cand, plan []dep, t ident) bool {
+func (s *state) resolvesToPlay(R int, cands []cand, plan []dep, t ident) bool {
 	after := s.stacks
 	after[t.color()] = t.rank() - 1
 	inPlan := func(d dep) bool {
@@ -535,6 +535,10 @@ func (s *state) resolvesToPlay(cands []cand, plan []dep, t ident) bool {
 		}
 		if !ok && slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse }) {
 			continue // 不在計畫中的 finesse 不會發生，接收者會排除
+		}
+		// Level 2：不在計畫中的 prompt（要別人、不是接收者自己打出已提示的牌）也不會發生：他不打而棄牌時，接收者就排除（promptPassed）
+		if !ok && s.knows(lvSelfFinesse) && slices.ContainsFunc(c.deps, func(d dep) bool { return !inPlan(d) && !d.finesse && d.player != R }) {
+			continue
 		}
 		alive[c.id] = true
 		if ok && !c.save {
