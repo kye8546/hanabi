@@ -182,9 +182,13 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 		for _, id := range s.promptOrder(R) {
 			n := s.notes[id]
 			// prompt 會落在哪張只看提示本身的資訊（正面提示，加上負面提示能排除的），不看筆記上的其他推論（使用者的規則）：
-			// 只要提示資訊容許它是 t，要 prompt t 時就會先落在它身上，焦點輪不到——它已知能打、或推得出是別張都一樣
-			// （使用者指正 20261020-120718 t24：slot 4、5 都只被「3」點過，slot 4 雖然已知能打、之後也推得出是 r3，白色點 slot 5 仍是有價值的）
+			// 只要提示資訊容許它是 t，要 prompt t 時就會先落在它身上，焦點輪不到（使用者指正 20261020-120718 t24：slot 4、5 都只被
+			// 「3」點過，slot 4 雖然已知能打、之後也推得出是 r3，白色點 slot 5 仍是有價值的）。
+			// 例外是本來就會被打出去的 play clue 焦點（playsAnyway，例如被記成 r1 的牌不擋 r2）
 			if n.clued && !n.bad && n.explicit.has(t) {
+				if id != it.focus && s.playsAnyway(id, t) {
+					continue
+				}
 				blocked = id != it.focus
 				break
 			}
@@ -194,6 +198,32 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 		}
 	}
 	return true
+}
+
+// playsAnyway：id 是某個 play clue 的焦點，它的直接解讀（不需要連接牌的）全都是現在就能打、又不是 t 的牌——
+// 它本來就會被打出去，不會擋住 t 的 prompt（使用者的例子：紅色點到 slot 1、2，slot 1 被記成 r1；再一次紅色時
+// r2 的 prompt 會落在 slot 2，是 Tempo Clue Chop Move）。只看直接解讀：「也許有人被 finesse」的解讀各家不同（同 publicPoss）。
+func (s *state) playsAnyway(id int, t ident) bool {
+	for i := len(s.recs) - 1; i >= 0; i-- {
+		rec := s.recs[i]
+		if rec.focus != id {
+			continue
+		}
+		direct := 0
+		for _, c := range rec.cands {
+			if c.save || c.id == t {
+				return false
+			}
+			if len(c.deps) == 0 {
+				if !s.playableNow(c.id) {
+					return false
+				}
+				direct++
+			}
+		}
+		return direct > 0
+	}
+	return false
 }
 
 // tempoExtraPlays：Tempo Clue 點到的其他已提示牌中，提示前大家不知道能打、提示後確定現在就能打的張數。
