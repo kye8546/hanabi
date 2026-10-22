@@ -919,3 +919,14 @@ func TestNoClueThatLeavesNextChopOnFiveWithNothingToDo(t *testing.T) {
 		t.Errorf("AI-2 應給使用者「4」，卻做了 %+v", a)
 	}
 }
+
+func TestNextPlaysNeedsEveryReadingPlayable(t *testing.T) {
+	// 使用者回報 20261022-175528 t11：「3」點到 AI-2 的 g3，AI-2 的解讀還有「m3，要使用者 Reverse Finesse m2」，
+	// 他會先等使用者，不會下一手就打（實際模擬他 t12 棄掉 chop 上的 g4）。給提示者不能把它當成讓下一位下一手就打牌的 play clue
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1792662928049530000, 7, "h11 p4 h0R p5 h0Y h0G p4 p1 d5 p5")
+	bots[1].Act(g.View(1))
+	ev, _ := bots[1].s.evalClue(2, game.Hint{Kind: game.HintRank, Rank: 3}, 1)
+	if ev.nextPlays {
+		t.Error("「3」不會讓 AI-2 下一手就打牌（他要先等可能的 Reverse Finesse）")
+	}
+}

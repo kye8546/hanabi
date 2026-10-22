@@ -240,7 +240,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.plays = s.chainPlays(t, plan, it.newCards, it.focus)
 		ev.immediate = len(plan) == 0 && s.playableNow(t)
 		next := (s.me + 1) % s.n
-		ev.nextPlays = R == next && ev.immediate
+		// 他自己的每種解讀都直接能打才會下一手就打；還有要等別人（例如 Reverse Finesse 後面的人）的解讀時，他會先等
+		// （使用者回報 20261022-175528 t11：「3」點到 AI-2 的 g3，也可能是要使用者 Reverse Finesse m2 的 m3，AI-2 先等、棄掉 chop 上的 g4）
+		ev.nextPlays = R == next && ev.immediate && s.knowsPlayNow(it)
 		for _, d := range plan {
 			ev.nextPlays = ev.nextPlays || d.player == next && s.playableNow(d.id)
 		}
