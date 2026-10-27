@@ -219,12 +219,19 @@ func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, 
 
 // playLetsNextPlay：我打出確定能打的牌之後，下一位就會知道他有牌可打（例如他的 delayed play clue 正等我這張），
 // 他也就不會棄 chop，不必花提示救。
+// 我手上有該盲打的 finesse 牌時，這一手打的是它（Finesse Urgency），不是 bestPlay 那張（使用者回報 20261027-170823 t27：
+// AI-2 以為打出 B4 就讓使用者知道 B5 能打，實際卻先盲打 R4，使用者棄掉 chop 上的 G5）。
 func (s *state) playLetsNextPlay(next int) bool {
-	slot := s.bestPlay()
-	if slot < 0 {
+	id := -1
+	if ids := s.blindPlayOrder(); len(ids) > 0 {
+		id = ids[0]
+	} else if slot := s.bestPlay(); slot >= 0 {
+		id = s.hands[s.me][slot]
+	}
+	if id < 0 {
 		return false
 	}
-	t, ok := s.myPoss(s.hands[s.me][slot]).single()
+	t, ok := s.myPoss(id).single()
 	if !ok {
 		return false
 	}

@@ -483,3 +483,14 @@ func TestL5HiddenFinesseThroughInformationLock(t *testing.T) {
 		t.Errorf("AI-1 應盲打 slot 3 的 y4，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL5DeferFinesseWhenPlayIsNotTheOneThatHelps(t *testing.T) {
+	// 使用者回報 20261027-170823 t27：AI-2 有該盲打的 R4（finesse）和已知的 B4，使用者 chop 上是 G5、手上的 B5 要等 B4。
+	// AI-2 以為「打出 B4 使用者就有牌可打」而不救，實際上這一手先盲打 R4，使用者沒事做就棄掉 G5。
+	// 應先救 G5（Urgency Principle 的例外），R4 晚一手再盲打
+	g, bots := replayCodes(t, 3, 1793092103689839000, 8, "h11 p3 h12 h1G p5 p1 h15 p5 d4 h22 p4 d3 d5 p5 h1B h1R p1 p4 d5 h0W p5 p5 h0B p3 p4 h2B")
+	a := step(t, g, bots)
+	if a.Type != game.ActHint || a.Target != 0 || !slices.Contains(g.Log[len(g.Log)-1].Touched, 2) {
+		t.Errorf("AI-2 應先救使用者 chop 上的 G5，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
