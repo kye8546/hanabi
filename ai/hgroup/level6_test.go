@@ -262,3 +262,12 @@ func TestL6ReclueOfDelayedPlayFocusIsTCCM(t *testing.T) {
 		t.Errorf("AI-2 不該再救已被 Chop Move 的 slot 4，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL6DiscardModulationDiscardsKnownTrash(t *testing.T) {
+	// 使用者回報 20261027-151447 t21：AI-2 做 Discard Modulation（讓 AI-1 給 play clue），白色已完成、手上被白色點到的牌是
+	// 大家都知道的垃圾，應先棄它，不是棄 chop 上的 Y4
+	g, bots := replayCodes(t, 3, 1793085287288853000, 8, "h1G p5 h0G h1W h01 p1 p2 p5 h0W p5 p5 h15 p3 d4 d5 h2W h22 p1 h1B p1")
+	if a := step(t, g, bots); a != game.Discard(3) {
+		t.Errorf("AI-2 應棄掉 slot 4 的已知垃圾，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
