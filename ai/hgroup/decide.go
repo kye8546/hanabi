@@ -52,6 +52,7 @@ var decideSteps = []decideStep{
 	(*state).stepSarcasticDiscard,  //    Level 3 Sarcastic Discard
 	(*state).stepFixMisplay,        //    Level 3 Misplay Cost Principle：隊友會打錯
 	(*state).stepOrderChopMove,     //    Order Chop Move 保護後面其他人的 chop
+	(*state).stepStallBeforePlay,   //    Level 8 終局：有隊友的牌來不及打完時先拖延，自己的牌晚點打
 	(*state).stepPlay,              // 3. 打出確定能打的牌（例外：先給有時效的 play clue）
 	(*state).stepPlayOrSaveClue,    // 4. play clue 優先於 5. save clue
 	(*state).stepFixGoodTouch,      //    Level 3：其他違反 Good Touch 的牌

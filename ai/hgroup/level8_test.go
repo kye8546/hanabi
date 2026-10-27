@@ -205,3 +205,23 @@ func TestL8DistributionClue(t *testing.T) {
 		}
 	}
 }
+
+func TestL8ThreeCardsLeft(t *testing.T) {
+	// 挑戰題 3 Cards Left：牌堆 3 張、提示 0 個，Alice 有已知的 r4，Bob 有已知的 r5、w5、b5，其他人的牌都沒用。
+	// 打出 r4 不會換回提示，Bob 的三張 5 來不及打完；Alice 該棄牌（留著 r4），之後大家拖延，整隊拿到滿分
+	g, bots := scenarioEnd(t, 8, 3, "r3 y5 g5 b4 w4", "g1 g1 y1 b1 r4", "g3 r5 w5 b5 y2", "r2 r1 y4 y3 g2")
+	g.Hints = 0
+	known(t, g, bots, 0, 4, "r4")
+	for slot, c := range []string{"r5", "w5", "b5"} {
+		known(t, g, bots, 1, slot+1, c)
+	}
+	if a := step(t, g, bots); a.Type != game.ActDiscard {
+		t.Fatalf("Alice 應棄牌、留著 r4，卻做了 %+v（%s）", a, bots[0].Why())
+	}
+	for !g.Over {
+		step(t, g, bots)
+	}
+	if g.Score() != 25 {
+		t.Errorf("應拿到滿分，實際 %d 分", g.Score())
+	}
+}

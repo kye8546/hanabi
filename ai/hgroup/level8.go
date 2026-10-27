@@ -54,15 +54,192 @@ func (s *state) mustBurn(v game.PlayerView) bool {
 	// （Level 8：Team Distribution / Burning）。牌堆只剩 1 張時，我一棄牌每人就只剩一回合，
 	// 任何握有 2 張以上還需要打的牌的隊友都打不完（之後的人也可能接著拖延），一律拖延。
 	for k := 1; k < s.n; k++ {
-		p := (s.me + k) % s.n
-		var need idSet
-		for _, id := range s.hands[p] {
-			if t := identOfCard(s.cards[id]); !s.trash(t) {
-				need |= setOf(t)
+		left := s.turnsLeft(k, v.DeckSize-1)
+		if s.teammateNeed(k) > left && (v.DeckSize == 1 || s.turnsLeft(k, v.DeckSize) > left) {
+			return true
+		}
+	}
+	return false
+}
+
+// teammateNeed：我後面第 k 位手上還需要打的牌（我看得到的牌面，不重複計算）有幾種。
+func (s *state) teammateNeed(k int) int {
+	var need idSet
+	for _, id := range s.hands[(s.me+k)%s.n] {
+		if t := identOfCard(s.cards[id]); !s.trash(t) {
+			need |= setOf(t)
+		}
+	}
+	return need.count()
+}
+
+// stepStallBeforePlay（Level 8 End-Game Strategy / Burning）：終局中打牌也會抽牌、讓遊戲提早結束。照原文的問法
+// 「Does stalling produce a line that is better than playing?」，把「現在打出確定能打的牌」和「現在拖延（有提示就給
+// 拖延提示，提示 0 個就棄牌換一個提示）」各推演到遊戲結束（endgameRollout），拖延能打出的牌比較多才拖延。
+// 挑戰題 3 Cards Left：提示 0 個，Alice 打 r4 的話 Bob 的三張 5 來不及打完；棄牌換提示、之後大家拖延才拿得到滿分。
+// 試過只看「有隊友的牌比他剩下的回合多」就拖延：大家都替別人拖延、沒人打牌，5 人局 -0.1–0.6。
+func (s *state) stepStallBeforePlay(t *turn) (game.Action, string, bool) {
+	slot := s.bestPlay()
+	if !s.knows(lvEndGame) || t.v.DeckSize == 0 || slot < 0 {
+		return game.Action{}, "", false
+	}
+	mine, ok := s.myPoss(s.hands[s.me][slot]).single()
+	if !ok {
+		return game.Action{}, "", false
+	}
+	var a game.Action
+	var why string
+	switch {
+	case t.v.Hints > 0:
+		ev, ok := s.burnClue(t.clues(s))
+		if !ok {
+			return game.Action{}, "", false
+		}
+		a, why = ev.act, "終局拖延：推演起來先拖延、我的牌晚點打，大家打得完的牌比較多"
+	case !t.v.CanDiscard():
+		return game.Action{}, "", false
+	default:
+		// 提示 0 個：棄牌換一個提示讓之後的人拖延（要棄得安全：已知垃圾，或我看得到每一張還需要的牌）
+		why = "終局：推演起來棄牌換提示讓大家拖延、我的牌晚點打，大家打得完的牌比較多"
+		if pa, pwhy, ok := s.positionalMove(t.v); ok && pa.Type == game.ActDiscard {
+			a, why = pa, pwhy
+		} else if ts := s.trashSlot(false); ts >= 0 {
+			a = game.Discard(ts)
+		} else if c := s.chop(s.me); c >= 0 && s.seesEvery() {
+			a = game.Discard(slices.Index(s.hands[s.me], c))
+		} else {
+			return game.Action{}, "", false
+		}
+	}
+	if s.endgameRollout(mine, true, t.v) <= s.endgameRollout(mine, false, t.v) {
+		return game.Action{}, "", false
+	}
+	return a, why, true
+}
+
+// endgameRollout：從現在推演到遊戲結束，回傳之後最多打得出幾張牌。模型（兩條路線同樣保守）：每個人只打已被拿到、
+// 牌面確定（我看得到，或我自己的筆記確定）的牌；沒被提示的牌、之後才給的提示都不算。每一回合，有能打的牌的人
+// 可以打（先打能接上別人的那張）或拖延——有提示、牌堆還有牌就給提示（不抽牌），否則棄牌（換回提示）——取打出最多的
+// 一條（大家照同一個推演合作）；沒有能打的牌就拖延。牌堆空了之後拖延沒有用，能打就打。
+// 我這一手：stall 時拖延，否則打出 mine。局面只由煙火、提示數、牌堆、最後一輪剩幾回合、輪到誰決定，記下算過的。
+func (s *state) endgameRollout(mine ident, stall bool, v game.PlayerView) int {
+	known := make([][]ident, s.n)
+	for p, h := range s.hands {
+		for _, id := range h {
+			var t ident
+			ok := false
+			if p == s.me {
+				t, ok = s.myPoss(id).single()
+			} else {
+				t, ok = s.see(s.me, id)
+			}
+			if ok && s.live(id) && !s.trash(t) {
+				known[p] = append(known[p], t)
 			}
 		}
-		left := s.turnsLeft(k, v.DeckSize-1)
-		if need.count() > left && (v.DeckSize == 1 || s.turnsLeft(k, v.DeckSize) > left) {
+	}
+	type pos struct {
+		stacks                   [game.NumColors]game.Rank
+		hints, deck, final, turn int
+	}
+	memo := map[pos]int{}
+	score := func(st [game.NumColors]game.Rank) int {
+		n := 0
+		for _, c := range s.colors {
+			n += int(st[c])
+		}
+		return n
+	}
+	var best func(q pos) int
+	// act：q.turn 那位玩家打出 t（ok）或拖延之後，推進到下一回合
+	act := func(q pos, t ident, ok bool) int {
+		before := q.deck
+		if ok {
+			q.stacks[t.color()] = t.rank()
+			if t.rank() == game.MaxRank && q.hints < game.MaxHints {
+				q.hints++
+			}
+			q.deck = max(q.deck-1, 0)
+		} else if q.hints > 0 && q.deck > 0 {
+			q.hints--
+		} else {
+			q.hints = min(q.hints+1, game.MaxHints)
+			q.deck = max(q.deck-1, 0)
+		}
+		switch {
+		case q.final > 0:
+			q.final--
+		case before > 0 && q.deck == 0:
+			q.final = s.n
+		}
+		q.turn = (q.turn + 1) % s.n
+		return best(q)
+	}
+	best = func(q pos) int {
+		if q.final == 0 {
+			return score(q.stacks)
+		}
+		if r, ok := memo[q]; ok {
+			return r
+		}
+		p := (s.me + q.turn) % s.n
+		var next ident
+		found, waiting := false, false
+		for _, t := range known[p] {
+			if t.rank() <= q.stacks[t.color()] {
+				continue
+			}
+			waiting = true
+			if t.rank() != q.stacks[t.color()]+1 {
+				continue
+			}
+			if !found || t.rank() < game.MaxRank && slices.ContainsFunc(known, func(k []ident) bool {
+				return slices.Contains(k, identOf(t.color(), t.rank()+1))
+			}) {
+				next, found = t, true
+			}
+		}
+		for _, k := range known {
+			for _, t := range k {
+				waiting = waiting || t.rank() > q.stacks[t.color()]
+			}
+		}
+		var r int
+		switch {
+		case !waiting:
+			r = score(q.stacks) // 沒有人有牌要打了
+		case !found:
+			r = act(q, 0, false)
+		case q.deck == 0:
+			r = act(q, next, true)
+		default:
+			r = max(act(q, next, true), act(q, 0, false))
+		}
+		memo[q] = r
+		return r
+	}
+	start := pos{stacks: s.stacks, hints: v.Hints, deck: v.DeckSize, final: -1}
+	return act(start, mine, !stall) - score(s.stacks)
+}
+
+// unblocksIdle：我打出 slot 的牌後，某位隊友手上（我看得到）接在它後面的牌就能打，而他現在沒有別張能打——他在等我這張。
+func (s *state) unblocksIdle(slot int) bool {
+	t, ok := s.myPoss(s.hands[s.me][slot]).single()
+	if !ok || t.rank() >= game.MaxRank {
+		return false
+	}
+	nxt := identOf(t.color(), t.rank()+1)
+	for q, h := range s.hands {
+		if q == s.me {
+			continue
+		}
+		waits, other := false, false
+		for _, id := range h {
+			c, _ := s.see(s.me, id)
+			waits = waits || c == nxt && s.gotten(id)
+			other = other || s.playableNow(c) && s.gotten(id)
+		}
+		if waits && !other {
 			return true
 		}
 	}
