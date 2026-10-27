@@ -225,3 +225,15 @@ func TestL8ThreeCardsLeft(t *testing.T) {
 		t.Errorf("應拿到滿分，實際 %d 分", g.Score())
 	}
 }
+
+func TestL8FiveCardsLeft(t *testing.T) {
+	// 挑戰題 5 Cards Left：牌堆 5 張、提示 1 個，只有 Alice 的 y5、g5 被提示。給 Cathy 紅色（finesse Bob 的 r4）
+	// 可能讓 Alice 之後抽到的 5 來不及打；Alice 該打出 y5 或 g5
+	g, bots := scenarioEnd(t, 8, 5, "r3 y4 g4 b4 w4", "g1 g1 y5 g5 y1", "r4 b1 b2 w3 y1", "w2 w1 y4 r5 g1")
+	g.Hints = 1
+	known(t, g, bots, 0, 2, "y5")
+	known(t, g, bots, 0, 3, "g5")
+	if a := step(t, g, bots); a != game.Play(2) && a != game.Play(3) {
+		t.Errorf("Alice 應打出 y5 或 g5，卻做了 %+v（%s）", a, bots[0].Why())
+	}
+}
