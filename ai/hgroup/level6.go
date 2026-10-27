@@ -178,6 +178,12 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 		if t.rank() == game.MaxRank {
 			return false
 		}
+		// 焦點本來就是 play clue 的焦點、大家都知道是 t（例如 delayed play clue 等著前面的牌打出）：他本來就會打，
+		// 這個提示沒有讓任何牌多打出（使用者回報 20261027-145109 t35：黃色已經讓使用者 slot 5 的 Y4 等著打，
+		// AI-1 又用「4」點它，以前因為 slot 2 的黃牌會先被 prompt 而算成有價值）
+		if u, ok := s.publicPoss(it.focus).single(); ok && u == t && s.notes[it.focus].willPlay {
+			return false
+		}
 		blocked := false
 		for _, id := range s.promptOrder(R) {
 			n := s.notes[id]

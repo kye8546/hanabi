@@ -242,3 +242,23 @@ func TestL6TempoOnSecondOfSameCluedCardsIsValuable(t *testing.T) {
 		}
 	}
 }
+
+func TestL6ReclueOfDelayedPlayFocusIsTCCM(t *testing.T) {
+	// 使用者回報 20261027-145109 t35：t33 黃色點到使用者 slot 2、5，焦點 slot 5 是 Y4 的 delayed play clue（Y1–Y3 都在 AI-2 手上已提示）。
+	// 再用「4」點 slot 5 不會讓任何牌多打出（大家都知道它是 Y4、本來就會打），不是有價值的 Tempo Clue：
+	// 不在拖延時給就是 Tempo Clue Chop Move，使用者 chop 上的 G3（critical）被保護。以前 AI-1 因為 slot 2 的黃牌會先被 prompt
+	// 而當成有價值的 play clue，AI-2 也沒 Chop Move、又花一個提示救 slot 4
+	g, bots := replayCodes(t, 3, 1793083869918335000, 8, "h1B p2 h0W p1 h0W h1R p1 p1 h15 d5 d5 d5 p5 d2 d5 h2W h22 p4 p5 h22 p1 h2R d2 p1 h14 p4 d3 d5 p4 d3 h2Y h23 h0Y d4")
+	chop := g.Hands[0][3].Card.ID
+	if a := step(t, g, bots); a == game.HintRankTo(0, 4) {
+		actAll(g, bots)
+		for p, b := range bots {
+			if p != 0 && !b.s.notes[chop].cm {
+				t.Errorf("座位 %d 應把使用者 chop 上的 G3 記成 Chop Moved（「4」是 Tempo Clue Chop Move）", p)
+			}
+		}
+	}
+	if a := step(t, g, bots); a.Type == game.ActHint && a.Target == 0 && a.Hint.Matches(g.Hands[0][3].Card) {
+		t.Errorf("AI-2 不該再救已被 Chop Move 的 slot 4，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

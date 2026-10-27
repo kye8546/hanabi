@@ -568,7 +568,13 @@ func (s *state) alreadyResolved(R, focus int, t ident) bool {
 		if rec.focus != focus || rec.target != R {
 			continue
 		}
-		cs := slices.DeleteFunc(slices.Clone(rec.cands), func(c cand) bool { return s.failsOnMyTurn(rec, c) })
+		// 要我盲打的解讀，焦點實際不是它時（我看得到焦點）也不成立：接收者看得到我的牌，我也不會在輪到時盲打
+		// （使用者回報 20261027-145109 t35：黃色的 Y4 也可能是「Y5，之後 finesse AI-1 的 Y4」，Y4 還不能打，
+		// failsOnMyTurn 排除不了，AI-1 就以為要再點一次「4」才確定）
+		mine := func(c cand) bool {
+			return c.id != t && slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == s.me && d.finesse })
+		}
+		cs := slices.DeleteFunc(slices.Clone(rec.cands), func(c cand) bool { return s.failsOnMyTurn(rec, c) || mine(c) })
 		if len(cs) == 0 {
 			cs = rec.fallback
 		}
