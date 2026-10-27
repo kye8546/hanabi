@@ -185,3 +185,12 @@ func TestL7NoScreamWhenPlayingFiveRefillsClue(t *testing.T) {
 		t.Errorf("AI-2 應打出 B5（slot 3），卻做了 %+v", a)
 	}
 }
+
+func TestL7NoGenerationDiscardWhenMyPlayUnlocksP3(t *testing.T) {
+	// 使用者回報 20261027-180616 t17：提示 0 個，使用者 chop 上是要救的 B2，但使用者被「3」點到的 R3 正等 AI-1 的 R2。
+	// AI-1 打出 R2 使用者就有牌可打、不會棄 chop，不該棄牌換提示（Generation Discard）
+	g, bots := replayCodes(t, 3, 1793095576875774000, 8, "h11 p2 h0G h21 p2 p5 p5 h2G p3 h12 p3 h03 h2Y p1 p3 h25")
+	if a := step(t, g, bots); a != game.Play(3) {
+		t.Errorf("AI-1 應打出 slot 4 的 R2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

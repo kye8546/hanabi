@@ -246,8 +246,9 @@ func (s *state) generationWorthy() bool {
 		return false
 	}
 	N, P3 := (s.me+1)%s.n, (s.me+2)%s.n
-	// 我打出 5 就回收一個提示，下一位直接就能救 P3，不必棄牌換提示
-	return !s.playRefillsClue() && s.screamWorthy(P3) && (s.willPlay(N) || !s.obviousClue(P3))
+	// 我打出 5 就回收一個提示，下一位直接就能救 P3，不必棄牌換提示；我打出的牌讓 P3 有牌可打（例如他的 delayed play clue
+	// 正等我這張）時他也不會棄 chop（使用者回報 20261027-180616 t17：AI-1 有使用者 R3 等著的 R2，卻棄牌換提示）
+	return !s.playRefillsClue() && s.screamWorthy(P3) && !s.playLetsNextPlay(P3) && (s.willPlay(N) || !s.obviousClue(P3))
 }
 
 // obviousClue：p 有明顯的 play clue 可給——我看得到的其他玩家（不含 p 與我）有沒被提示、現在就能打、別處沒被拿到，
