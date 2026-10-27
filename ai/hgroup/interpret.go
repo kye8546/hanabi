@@ -29,6 +29,8 @@ type interp struct {
 	cm     []int
 	// endStall：Level 8 終局中像 5's Chop Move 的提示，改當 5 Stall（只救下點到的 5，不 Chop Move）
 	endStall bool
+	// distribution：Level 8 The Distribution Clue（焦點和別人手上已被拿到的牌重複，是把那張牌分給接收者打）
+	distribution bool
 
 	// Level 6 Tempo Clues：valuable = 有價值的 Tempo Clue（當一般 play clue，不 Chop Move）；
 	// trashNew = 「Tempo Clue 優先於 Trash Chop Move」時一起點到的新牌（已知垃圾）
@@ -160,6 +162,10 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	gone := func(c cand) bool { return s.remainingFor(R, c.id) <= 0 }
 	if slices.ContainsFunc(it.cands, func(c cand) bool { return !gone(c) }) {
 		it.cands = slices.DeleteFunc(it.cands, gone)
+	}
+	if len(it.cands) == 0 {
+		it.cands = s.distributionCands(giver, R, &it)
+		it.distribution = len(it.cands) > 0
 	}
 	// Self-prompt 只在沒有其他解讀時才成立（Beginner's Guide: The Prompt
 	// 「There is no 4 that could possibly be playable right now. Thus, this must be a Self-Prompt」）。
@@ -404,6 +410,7 @@ func (s *state) onClue(e game.Event) {
 	}
 	fn := s.notes[it.focus]
 	fn.willPlay = len(it.cands) > 0 && !slices.ContainsFunc(it.cands, func(c cand) bool { return c.save })
+	fn.dist = it.distribution
 	if it.hasTruth && !u.has(it.truth) {
 		// 我看得到的實際牌面不在我推測的解讀中：我的推測不可靠（通常是因為看不到自己的牌），
 		// 不把它寫進接收者的筆記，免得之後拿它來排除自己的牌

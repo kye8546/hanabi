@@ -125,9 +125,14 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if i := slices.Index(order, it.focus); i > 0 {
 		order = append([]int{it.focus}, slices.Delete(slices.Clone(order), i, i+1)...)
 	}
+	// Level 8 Distribution Clue：值得給時，焦點和別處已被拿到的牌重複是刻意的，不算違反 Good Touch
+	distWorth := s.distributionWorth(R, it, t)
 	for _, id := range order {
 		c := identOfCard(s.cards[id])
 		switch {
+		case id == it.focus && distWorth:
+			seen |= 1 << c
+			continue
 		case id != it.focus && (s.trash(c) || seen.has(c)) && s.seenAsTrash(it, id):
 			// 接收者推得出它不可能有用（垃圾，或只可能是焦點的重複）：不會造成誤解，還多知道一張可以先棄的牌
 			ev.trashMarked++

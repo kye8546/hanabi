@@ -17,6 +17,7 @@ type note struct {
 	start    bool     // 起手牌（Level 3 Playing Multiple 1's：起手牌的 1 由舊到新打）
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
+	dist     bool     // Level 8 Distribution Clue 的焦點：刻意和別處已被拿到的牌重複，Good Touch 的排除不套用在它和那張牌之間
 	touches  int      // 被正向提示點到的次數（Level 4 Order Chop Move：點到次數不同的 1 不算同一組）
 	hinted   uint16   // 點到它的提示值（位元 0–7 顏色、8–12 數字）；正向資訊的多寡（Level 5 Prompts in Multi-Color Variants）
 	drawn    int      // 抽到這張牌時的事件序號（起手牌是 0；Level 5 Layered Finesse：提示之後才抽的牌不在 layer 裡）

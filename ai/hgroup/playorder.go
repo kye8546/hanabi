@@ -59,6 +59,9 @@ func (s *state) playOrder(p int) []int {
 				key += 1000
 			}
 		}
+		if t, ok := poss.single(); ok && s.distributedAway(p, t) {
+			key += 100000 // Level 8 Distribution Clue：這張已經分給別人打，先打其他牌
+		}
 		sub := slot
 		one := s.knows(lvMultipleOnes) && poss&^rankSet(1) == 0
 		switch {

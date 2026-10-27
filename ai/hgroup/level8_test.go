@@ -178,3 +178,30 @@ func TestL8DoublePositionalMisplay(t *testing.T) {
 		t.Errorf("Cathy 應盲打 slot 2，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL8DistributionClue(t *testing.T) {
+	// 終局（分數 21、牌堆 1 張：pace 0）：Bob 手上有大家都知道的 r3、r4、r5、g5，只剩兩回合打不完。
+	// Cathy 有另一張 r3：Alice「3」只點到它（其他 3 都已打出，提示本身只可能是 r3，和 Bob 的 r3 重複）。
+	// Lv7 照 Good Touch 不會是 r3，Cathy 不打；Lv8 是 Distribution Clue，Cathy 打出 r3 分擔 Bob 的牌
+	for _, lv := range []int{7, 8} {
+		g, bots := scenarioEnd(t, lv, 1, "r2 y5 g4 b5 w5", "y1 g1 b1 w1 y1", "r3 r4 r5 g5 y2", "y2 r3 b2 w2 g2")
+		g.Hints = 2
+		for slot, c := range []string{"r3", "r4", "r5", "g5"} {
+			known(t, g, bots, 1, slot, c)
+		}
+		if lv >= 8 {
+			if a := bots[0].Act(g.View(0)); a != game.HintRankTo(2, 3) {
+				t.Errorf("Lv8：Alice 應給 Cathy「3」（Distribution Clue），卻做了 %+v（%s）", a, bots[0].Why())
+			}
+		}
+		force(t, g, game.HintRankTo(2, 3))
+		a := step(t, g, bots)
+		if got := a == game.Play(0); got == (lv >= 8) {
+			t.Errorf("Lv%d：Bob 打出 r3 = %v（%+v；Lv8 他的 r3 已分給 Cathy，應先打別張）", lv, got, a)
+		}
+		a = step(t, g, bots)
+		if got := a == game.Play(1); got != (lv >= 8) {
+			t.Errorf("Lv%d：Cathy 打出 r3 = %v（%+v，%s）", lv, got, a, bots[2].Why())
+		}
+	}
+}

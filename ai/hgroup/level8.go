@@ -383,3 +383,86 @@ var positionalMisplay = true
 
 // positionalWhy：這一手的理由是 Positional Discard / Misplay（故意棄 / 打錯那個位置）。
 func positionalWhy(why string) bool { return strings.HasPrefix(why, "Positional") }
+
+// distributionCands（Level 8 The Distribution Clue）：終局中，照一般解讀沒有任何可能的提示，焦點每種有用的可能
+// 都和別人手上已被拿到的牌重複（Good Touch 排除了它們）——是刻意違反 Good Touch，把那位隊友手上的牌分一張給
+// 接收者打（他手上要打的牌太多、來不及在遊戲結束前打完，Team Distribution Principle）。
+// 照 hanabi-bot：焦點只要有一種有用、不重複的可能就不是。回傳那些重複的牌面當解讀；不是時回傳 nil。
+func (s *state) distributionCands(giver, R int, it *interp) []cand {
+	if !s.knows(lvEndGame) || !s.endGame() || len(it.newCards) == 0 || it.tempo {
+		return nil
+	}
+	// 重複的那張要在接收者以外的人手上（接收者自己的已提示牌和焦點重複是違反 Good Touch，不是分擔），
+	// 大家都看得出它是 t（接收者看得到，或共同筆記確定），在給提示者手上時要他也知道（giverMayKnow）
+	dup := func(t ident) bool {
+		for q, h := range s.hands {
+			if q == R {
+				continue
+			}
+			for _, id := range h {
+				if !s.live(id) || !s.knowsFinessed(giver, id) {
+					continue
+				}
+				c, ok := s.see(R, id)
+				if u, one := s.possOf(id).single(); !ok && one {
+					c, ok = u, true
+				}
+				if ok && c == t && (q != giver || s.giverMayKnow(R, id, t)) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	var out []cand
+	for _, t := range (it.explicit[it.focus] & s.useful()).list() {
+		if s.remainingFor(R, t) <= 0 {
+			continue
+		}
+		if !dup(t) {
+			return nil
+		}
+		out = append(out, cand{id: t})
+	}
+	return out
+}
+
+// distributionWorth（Level 8 Team Distribution Principle）：給接收者 R 打 t 的 Distribution Clue 值得給——
+// 他的每種解讀都能立刻打，而手上有已被拿到的 t 的隊友（不是我）要打的牌比他剩下的回合多。
+func (s *state) distributionWorth(R int, it interp, t ident) bool {
+	if !it.distribution || slices.ContainsFunc(it.cands, func(c cand) bool { return !s.playableNow(c.id) }) {
+		return false
+	}
+	for k := 1; k < s.n; k++ {
+		q := (s.me + k) % s.n
+		if q == R || !slices.ContainsFunc(s.hands[q], func(id int) bool { c, _ := s.see(s.me, id); return s.live(id) && c == t }) {
+			continue
+		}
+		need := 0
+		for _, id := range s.hands[q] {
+			if c, _ := s.see(s.me, id); s.live(id) && !s.trash(c) {
+				need++
+			}
+		}
+		if need > s.turnsLeft(k, s.deck) {
+			return true
+		}
+	}
+	return false
+}
+
+// distributedAway：牌面 t 已經用 Distribution Clue 分給 p 以外的人打（他手上有 Distribution Clue 的焦點、筆記確定是 t），
+// p 手上的那張就留到最後再打（Team Distribution Principle：讓那人分擔）。
+func (s *state) distributedAway(p int, t ident) bool {
+	for q, h := range s.hands {
+		if q == p {
+			continue
+		}
+		for _, id := range h {
+			if u, ok := s.notes[id].poss.single(); ok && u == t && s.notes[id].dist {
+				return true
+			}
+		}
+	}
+	return false
+}

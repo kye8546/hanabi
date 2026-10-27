@@ -226,13 +226,16 @@ func (s *state) visibleGotten(i ident, mine int) bool { return s.gtpExcluded(s.m
 // gtpExcluded 回傳（持有者 h 的角度）他的被拿到的牌 card 依 Good Touch 是否不可能是 i：
 // 別處已有被拿到的牌是 i（他看得到它就是 i，或筆記已確定是 i），而且後來拿到的那張，
 // 給提示者當時看得到先被拿到的那張（看不到的重複不算違反 Good Touch）。
-// 同一個 save clue 點到的牌允許重複（Save Principle 可以違反 Good Touch）。
+// 同一個 save clue 點到的牌允許重複（Save Principle 可以違反 Good Touch）；Level 8 Distribution Clue 的焦點也是。
 func (s *state) gtpExcluded(h, card int, i ident) bool {
 	m := s.notes[card]
+	if m.dist {
+		return false // Level 8 Distribution Clue：刻意重複
+	}
 	for q, hand := range s.hands {
 		for _, id := range hand {
 			pend := !s.gotten(id) && slices.Contains(s.pending, id)
-			if id == card || !s.live(id) && !pend {
+			if id == card || !s.live(id) && !pend || s.notes[id].dist {
 				continue
 			}
 			if m.giver >= 0 && !s.knowsFinessed(m.giver, id) {

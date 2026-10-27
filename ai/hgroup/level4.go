@@ -39,6 +39,11 @@ func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it
 		}
 	}
 	last := fresh[len(fresh)-1]
+	if allTrash && s.endGame() && s.distributionCands(giver, R, it) != nil {
+		// Level 8：終局中焦點是別處已確定的牌的重複（不是已打出、打不出去的牌）——是 Distribution Clue，
+		// 照一般流程解讀（hanabi-bot 也是先判斷 Distribution Clue，終局才不看 Chop Move）
+		return
+	}
 	if allTrash {
 		var cm []int
 		for _, id := range s.hands[R][slices.Index(s.hands[R], last)+1:] {
