@@ -267,7 +267,8 @@ func (s *state) publicPace() int {
 // 不是每個人都知道）、焦點本來大家不知道能打（否則是 Burn Clue）、輪到時能打而且只靠這一張（tempoTarget）。
 // 有價值的 Tempo Clue 記在 it.valuable（和一般 play clue 一樣，可以隨時給）。
 func (s *state) tempoChopMove(giver, R int, it *interp, touched []int) {
-	if !s.knows(lvTempo) || !it.tempo || s.publicKnown(it.focus) ||
+	// Level 8 終局不 Chop Move：沒有價值的 Tempo Clue 只是讓焦點打出（拖延）
+	if !s.knows(lvTempo) || !it.tempo || s.publicKnown(it.focus) || s.endGame() ||
 		slices.ContainsFunc(touched, func(y int) bool { return !s.notes[y].clued && !slices.Contains(it.trashNew, y) }) {
 		return
 	}

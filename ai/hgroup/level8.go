@@ -1,10 +1,20 @@
-// 被迫的終局拖延（取自 Level 8 docs/level-8.mdx，使用者要求所有等級都有）：pace、mustBurn、burnClue。
+// Level 8（docs/level-8.mdx）：終局（End-Game）——No Chop Moves in the End-Game（endGame）；
+// 被迫的終局拖延（使用者要求所有等級都有）：pace、mustBurn、burnClue。
 
 package hgroup
 
 import (
 	"hanabi/game"
 )
+
+// endGame（Level 8 The End-Game）：pace 小於人數就是終局（牌堆空了也算），大家都算得出（publicPace）。
+// 終局不 Chop Move（No Chop Moves in the End-Game：沒有「之後」可言，不必替之後保留牌）：像 Chop Move 的提示
+// 改當成下一個最簡單的解讀，通常是拖延提示（findChopMove、tempoChopMove）；Order Chop Move 與
+// Scream / Shout Discard Chop Move 也不算（hanabi-bot 同樣在終局關掉 Last Resorts 的棄牌；挑戰題 3 Cards Left：
+// 提示 0 個、Alice 有已知能打的 r4 卻棄牌，是為了換提示讓 Bob 的三張 5 來得及打，不是 Scream Discard）。
+func (s *state) endGame() bool {
+	return s.knows(lvEndGame) && (s.deck == 0 || s.publicPace() < s.n)
+}
 
 // pace = 目前分數 + 牌堆張數 + 人數 − 這局還拿得到的最高分（H-Group Level 8）。
 // 每次棄牌 pace 減 1；pace < 0 就不可能拿到最高分。

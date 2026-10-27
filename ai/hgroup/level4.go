@@ -22,6 +22,8 @@ var cmNames = map[int]string{cmTrash: "Trash Chop Move", cmFive: "5's Chop Move"
 //     最右邊那張新牌右邊、沒被提示的牌全部 Chop Move（垃圾就在 chop 上時沒有牌可 Chop Move，不算；那是 Level 14 的 Trash Push）。
 //   - The 5's Chop Move：不是拖延的情況下（5 Stall 優先），數字 5 點到的最右邊那張新的 5 正好在 chop 左邊一張：
 //     Chop Move chop 上那一張（只有一張）。點到 chop 的是 5 Save；離 chop 兩張以上的 5 仍是 play clue。
+//
+// Level 8 終局（endGame）不 Chop Move：像 Trash Chop Move 的提示只標出垃圾（it.cm 是空的）、像 5's Chop Move 的是 5 Stall。
 func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it *interp) {
 	if !s.knows(lvChopMove) || len(fresh) == 0 {
 		return
@@ -46,6 +48,10 @@ func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it
 		}
 		if len(cm) > 0 {
 			it.cmKind, it.cm, it.focus = cmTrash, cm, last
+			if s.endGame() {
+				// Level 8 No Chop Moves in the End-Game：只是拖延提示，點到的牌照樣是已知垃圾，不 Chop Move
+				it.cm = nil
+			}
 		}
 		return
 	}
@@ -59,6 +65,12 @@ func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it
 		}
 	}
 	if len(unclued) >= 2 && last == unclued[1] && !slices.Contains(touched, unclued[0]) {
+		if s.endGame() {
+			// Level 8 No Chop Moves in the End-Game：改當 5 Stall（Level 9 Stall Table 的終局欄是 use context），
+			// 只救下點到的 5
+			it.endStall = true
+			return
+		}
 		it.cmKind, it.cm, it.focus = cmFive, []int{unclued[0]}, last
 	}
 }
@@ -172,6 +184,9 @@ func (s *state) evalChopMove(it interp, ev clueEval, h game.Hint, dist int) clue
 	ev.understood = !ev.misleads && ev.cmWaste == 0
 	ev.score = scoreCMFirstSave + scoreCMMoreSave*(ev.cmSaves-1) + scoreCMUseful*ev.cmUseful + scoreNewGood*ev.newGood -
 		scoreBadTouch*ev.bad - scoreCMWaste*ev.cmWaste - dist
+	if len(it.cm) == 0 {
+		ev.score = -dist // Level 8 終局：像 Trash Chop Move 的提示只是拖延
+	}
 	if h.Kind == game.HintColor {
 		ev.score += scoreColor
 	}
@@ -211,14 +226,14 @@ func (s *state) cmSave(evs []clueEval, e clueEval) bool {
 
 // ocmSkip（Level 4 The Order Chop Move）：p 打出被提示的 1（x）時，照 Level 3 的順序跳過了幾張。
 // 只算「不知道是哪張」的 1：x 的牌面已知、x 是之前被 finesse 的、被點到的次數和其他 1 不同、
-// 被跳過的 1 已知沒用（playOrder 不含它）時都不算。不是 Order Chop Move 時回傳 0。
+// 被跳過的 1 已知沒用（playOrder 不含它）時都不算；Level 8 終局不 Chop Move。不是 Order Chop Move 時回傳 0。
 func (s *state) ocmSkip(p, x int) int {
 	unknownOne := func(id int) bool {
 		k := s.knownPoss(p, id)
 		return k&^rankSet(1) == 0 && k.count() > 1
 	}
 	n := s.notes[x]
-	if !s.knows(lvChopMove) || !n.clued || n.finessed || n.bad || !unknownOne(x) || s.mayBeFinessed(x) {
+	if !s.knows(lvChopMove) || !n.clued || n.finessed || n.bad || !unknownOne(x) || s.mayBeFinessed(x) || s.endGame() {
 		return 0
 	}
 	skip := 0

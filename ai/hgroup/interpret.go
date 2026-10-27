@@ -27,6 +27,8 @@ type interp struct {
 	// 5's Chop Move 點到的 5 照 5 Save 記成任何 5）
 	cmKind int
 	cm     []int
+	// endStall：Level 8 終局中像 5's Chop Move 的提示，改當 5 Stall（只救下點到的 5，不 Chop Move）
+	endStall bool
 
 	// Level 6 Tempo Clues：valuable = 有價值的 Tempo Clue（當一般 play clue，不 Chop Move）；
 	// trashNew = 「Tempo Clue 優先於 Trash Chop Move」時一起點到的新牌（已知垃圾）
@@ -145,7 +147,7 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	}
 
 	base := s.overlay[it.focus]
-	maySave := it.chopFocus || it.cmKind == cmFive || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
+	maySave := it.chopFocus || it.cmKind == cmFive || it.endStall || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
 	candsOf := func() []cand {
 		cs := s.playCands(R, giver, R, it.focus, base)
 		if maySave {

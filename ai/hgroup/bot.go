@@ -3,7 +3,7 @@ package hgroup
 import "hanabi/game"
 
 // MaxLevel 是目前已實作的最高慣例等級。
-const MaxLevel = 7
+const MaxLevel = 8
 
 // Levels 是 H-Group 的 25 個慣例等級名稱（Levels[0] = Level 1）。
 var Levels = [...]string{
@@ -54,6 +54,7 @@ const (
 	lvTempo          = 6 // Tempo Clues：Focus Shifting、Valuable Tempo Clue、Tempo Clue Chop Move（TCCM 優先於 Trash Chop Move）
 	lvScream         = 7 // Scream / Shout Discard Chop Move 與 Generation Discard
 	lvCMBlindPlay    = 7 // 很可能能打、還能承受閃電時盲打 Chop Moved 的牌
+	lvEndGame        = 8 // 終局（pace < 人數）：不 Chop Move（像 Chop Move 的提示改當拖延）、不 Scream / Shout / Generation Discard
 )
 
 // knows：這個 AI 的等級已經學到從 lv 開始的技巧。

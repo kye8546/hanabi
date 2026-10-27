@@ -53,9 +53,9 @@ func (s *state) hasPublicTrash(p int, except int) bool {
 //   - Scream Discard：提示 0 個時棄掉沒被提示的牌（chop），手上卻有大家都知道能打的牌，或有大家都知道沒用的
 //     已提示牌（With Known-Trash：本來該先棄它）。兩者都有時棄 chop 是已知的失誤（原文：illegal），不算。
 //
-// 原文另一種情況「提示 1 個、而下一位鎖手」各家難有共識，不採用。
+// 原文另一種情況「提示 1 個、而下一位鎖手」各家難有共識，不採用。Level 8 終局不 Chop Move，也就沒有 Scream / Shout Discard。
 func (s *state) detectScream(P, id int) *screamRec {
-	if !s.knows(lvScream) {
+	if !s.knows(lvScream) || s.endGame() { // Level 8 終局不 Chop Move
 		return nil
 	}
 	n := s.notes[id]
@@ -167,7 +167,7 @@ func (s *state) myTrashSlot() int {
 //   - Scream Discard Chop Move：下一位會棄掉 chop 上必須保留的牌：棄 chop（手上有大家都知道沒用的牌時棄它，
 //     那是 Shout Discard），讓他 Chop Move 自己的 chop、這一手改給提示。
 func (s *state) stepEmergencyDiscard(t *turn) (game.Action, string, bool) {
-	if !s.knows(lvScream) || t.v.Hints != 0 {
+	if !s.knows(lvScream) || t.v.Hints != 0 || s.endGame() {
 		return game.Action{}, "", false
 	}
 	playable := s.publicPlayable(s.me, -1)
@@ -196,7 +196,7 @@ func (s *state) stepEmergencyDiscard(t *turn) (game.Action, string, bool) {
 // shoutSave（Level 7 The Shout Discard Chop Move）：我手上有大家都知道能打的牌和沒用的牌時，棄掉沒用的那張就能 Chop Move
 // 下一位的 chop（任何提示數都可以），不花提示。回傳要棄的位置；不能時回傳 -1。
 func (s *state) shoutSave(hints int) int {
-	if !s.knows(lvScream) || hints >= game.MaxHints || !s.publicPlayable(s.me, -1) {
+	if !s.knows(lvScream) || hints >= game.MaxHints || !s.publicPlayable(s.me, -1) || s.endGame() {
 		return -1
 	}
 	return s.myTrashSlot()
