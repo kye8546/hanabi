@@ -35,6 +35,33 @@ func (s *state) revealGTP(x int, t ident) {
 	}
 }
 
+// recsWanting：有解讀要牌 x 當連接牌（prompt / finesse）打出的提示（打出前呼叫，打出後提示可能已經結案）。
+func (s *state) recsWanting(x int) []*clueRec {
+	var out []*clueRec
+	for _, rec := range s.recs {
+		if slices.ContainsFunc(append(slices.Clone(rec.cands), rec.fallback...), func(c cand) bool {
+			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == x })
+		}) {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// revealConnection：牌 x（牌面 t）照提示 recs 的解讀當連接牌打出。給提示者計畫要 x 打出 t，就不會同時點到另一張 t
+// （planned 的連接牌也算已被拿到），所以那個提示點到的其他新牌都不是 t——接收者收到提示時看不到焦點、不知道是 finesse，
+// 筆記上可能還留著 t（使用者回報 20261027-124308：黃色點到 AI-1 的 Y3 與另一張黃牌，finesse 使用者的 Y2；
+// 那張黃牌記成「Y2 或 Y4」，Y2 盲打出來後還當成不確定而沒打 Y4）。被 finesse 的 x 沒被拿到時 revealGTP 不處理這種情況。
+func (s *state) revealConnection(recs []*clueRec, x int, t ident) {
+	for _, rec := range recs {
+		for _, id := range rec.fresh {
+			if n, ok := s.note(id); ok && id != x && s.holder(id) >= 0 && !n.bad && n.poss.has(t) && n.poss.count() > 1 {
+				n.poss &^= setOf(t)
+			}
+		}
+	}
+}
+
 // gottenAs 回傳（obs 角度）除了 exclude 之外，是否已有被拿到的牌是 i：
 // 看得到的被提示牌實際是 i，或筆記已確定是 i。
 // giver 看不到自己的手牌，所以他手上的牌只看筆記（他不會因為看不到的牌違反 Good Touch）。

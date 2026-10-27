@@ -930,3 +930,13 @@ func TestNextPlaysNeedsEveryReadingPlayable(t *testing.T) {
 		t.Error("「3」不會讓 AI-2 下一手就打牌（他要先等可能的 Reverse Finesse）")
 	}
 }
+
+func TestFinessedCardLeavesClueMates(t *testing.T) {
+	// 使用者回報 20261027-124308 t32：t24 AI-2 黃色點到 AI-1 的 Y3（焦點）與另一張黃牌，finesse 使用者的 Y2。
+	// AI-1 當時不知道是 finesse，那張黃牌記成「Y2 或 Y4」；t25 使用者盲打出 Y2，那張就不會是 Y2（給提示者計畫要使用者打 Y2，
+	// 不會同時點到另一張），是能打的 Y4
+	g, bots := replayCodes(t, 3, 1793076188307175000, 8, "h11 p5 h02 h15 p4 h1G p3 p1 h01 p3 h2W p5 d5 h23 h04 h14 d1 d5 p5 h0R p2 p1 p4 h1Y p1 p2 d5 p3 h0R d5 h2G")
+	if a := step(t, g, bots); a != game.Play(1) {
+		t.Errorf("AI-1 應打出 slot 2 的 Y4，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

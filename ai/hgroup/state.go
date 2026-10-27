@@ -375,11 +375,16 @@ func (s *state) apply(e game.Event) {
 		if wpRec != nil {
 			s.excused = wpCard // 他這次打錯是因為 Wrong Prompt，不算沒盲打那張 finesse 的牌
 		}
+		var connRecs []*clueRec
+		if e.Type == game.EvPlay {
+			connRecs = s.recsWanting(e.Card.ID)
+		}
 		s.posResp = resp
 		s.checkDeps(e, e.Card.ID)
 		s.excused, s.posResp = -1, false
 		if e.Type == game.EvPlay {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
+			s.revealConnection(connRecs, e.Card.ID, identOfCard(e.Card))
 		}
 		if e.Type == game.EvDiscard {
 			s.focusDiscarded(e.Card.ID)
