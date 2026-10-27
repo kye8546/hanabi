@@ -80,7 +80,7 @@ func (s *state) teammateNeed(k int) int {
 // 試過只看「有隊友的牌比他剩下的回合多」就拖延：大家都替別人拖延、沒人打牌，5 人局 -0.1–0.6。
 func (s *state) stepStallBeforePlay(t *turn) (game.Action, string, bool) {
 	slot := s.bestPlay()
-	if !s.knows(lvEndGame) || t.v.DeckSize == 0 || slot < 0 {
+	if !s.knows(lvEndGame) || t.v.DeckSize == 0 || slot < 0 || !s.endGame() {
 		return game.Action{}, "", false
 	}
 	mine, ok := s.myPoss(s.hands[s.me][slot]).single()
