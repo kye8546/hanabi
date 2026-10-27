@@ -393,3 +393,36 @@ func TestViewHidesOwnCards(t *testing.T) {
 		t.Error("別人應看得到座位 0 抽到的牌")
 	}
 }
+
+func TestPace(t *testing.T) {
+	g, err := New(3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := g.View(0)
+	// 開局：0 分 + 牌堆 50 − 15 + 3 人 − 滿分 25 = 13
+	if p, ok := v.Pace(); !ok || p != len(g.Deck)+3-25 {
+		t.Fatalf("開局 pace = %d, %v；應為 %d", p, ok, len(g.Deck)+3-25)
+	}
+	// 打出 r1、r2 後棄光 r3 → 紅色最多到 2，最高分 22
+	g.Fireworks[Red] = 2
+	g.Discards = []Card{c(Red, 3), c(Red, 3), c(Blue, 1)}
+	v = g.View(0)
+	if got := v.MaxReachable(); got != 22 {
+		t.Fatalf("MaxReachable = %d，應為 22", got)
+	}
+	if p, _ := v.Pace(); p != 2+len(g.Deck)+3-22 {
+		t.Fatalf("pace = %d，應為 %d", p, 2+len(g.Deck)+3-22)
+	}
+	// 黑色每個數字只有 1 張：棄掉 k4 → 黑色最多到 3
+	gb, _ := NewVariant(2, BlackSix, 1)
+	gb.Discards = []Card{c(Black, 4)}
+	if got := gb.View(0).MaxReachable(); got != 30-2 {
+		t.Fatalf("Black MaxReachable = %d，應為 28", got)
+	}
+	// 牌堆空了就沒有 pace
+	g.Deck = nil
+	if _, ok := g.View(0).Pace(); ok {
+		t.Fatal("牌堆空了不該有 pace")
+	}
+}

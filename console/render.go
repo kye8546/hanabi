@@ -83,12 +83,16 @@ func (r *Renderer) Board(v game.PlayerView) {
 	for _, c := range v.Colors() {
 		fw = append(fw, r.paint(c, fmt.Sprintf("%s%d", c.Letter(), v.Fireworks[c])))
 	}
-	r.printf(" 煙火  %s      分數 %d/%d\n", strings.Join(fw, "  "), v.Score(), v.MaxScore())
+	score := fmt.Sprintf("分數 %d/%d", v.Score(), v.MaxScore())
+	if best := v.MaxReachable(); best < v.MaxScore() {
+		score += fmt.Sprintf("（最多 %d）", best)
+	}
+	r.printf(" 煙火  %s      %s\n", strings.Join(fw, "  "), score)
 
-	r.printf(" 提示  %s%s %d/%d    閃電  %s%s %d/%d    牌堆 %d 張\n",
+	r.printf(" 提示  %s%s %d/%d    閃電  %s%s %d/%d    牌堆 %d 張    %s\n",
 		strings.Repeat("●", v.Hints), strings.Repeat("○", game.MaxHints-v.Hints), v.Hints, game.MaxHints,
 		strings.Repeat("✗", v.Strikes), strings.Repeat("○", game.MaxStrikes-v.Strikes), v.Strikes, game.MaxStrikes,
-		v.DeckSize)
+		v.DeckSize, r.pace(v))
 	r.printf(" 棄牌  %s\n", r.discards(v.Discards))
 	r.printf("%s\n", rule)
 
@@ -98,6 +102,21 @@ func (r *Renderer) Board(v game.PlayerView) {
 		r.hand(v, seat)
 	}
 	r.printf("%s\n", rule)
+}
+
+// pace 顯示 pace（算法見說明頁）：小於人數是 H-Group 的終局（End-Game），用黃色；
+// 0 以下（再棄一張、或已經拿不到最高分）用紅色；牌堆空了之後不再抽牌，顯示「-」（和 Hanab Live 一樣）。
+func (r *Renderer) pace(v game.PlayerView) string {
+	p, ok := v.Pace()
+	switch {
+	case !ok:
+		return "Pace -"
+	case p <= 0:
+		return r.style(ansiColors[game.Red], fmt.Sprintf("Pace %d（終局）", p))
+	case p < v.NumPlayers:
+		return r.style(ansiColors[game.Yellow], fmt.Sprintf("Pace %d（終局）", p))
+	}
+	return fmt.Sprintf("Pace %d", p)
 }
 
 func (r *Renderer) discards(ds []game.Card) string {

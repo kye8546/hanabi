@@ -110,3 +110,32 @@ func (v PlayerView) LegalHints() []Action {
 	}
 	return out
 }
+
+// MaxReachable 回傳這局還拿得到的最高分：每種顏色從下一張要打的數字起，
+// 遇到某個牌面所有張數都已被棄掉（含打錯）就停，之後的牌都拿不到。
+func (v PlayerView) MaxReachable() int {
+	var gone [NumColors][MaxRank + 1]int
+	for _, c := range v.Discards {
+		gone[c.Color][c.Rank]++
+	}
+	best := 0
+	for _, c := range v.Colors() {
+		for r := Rank(1); r <= MaxRank; r++ {
+			if r > v.Fireworks[c] && gone[c][r] >= Copies(c, r) {
+				break
+			}
+			best++
+		}
+	}
+	return best
+}
+
+// Pace 回傳 H-Group（Level 8）與 Hanab Live 的 pace = 目前分數 + 牌堆張數 + 人數 − 還拿得到的最高分，
+// 也就是從現在起還能棄幾張牌（打錯也算）而仍有機會拿到那個最高分：每棄一張減 1，打出牌、給提示不變。
+// 牌堆空了（或遊戲結束）之後不再抽牌，pace 沒有意義，回傳 ok = false。
+func (v PlayerView) Pace() (pace int, ok bool) {
+	if v.DeckSize == 0 || v.Over {
+		return 0, false
+	}
+	return v.Score() + v.DeckSize + v.NumPlayers - v.MaxReachable(), true
+}
