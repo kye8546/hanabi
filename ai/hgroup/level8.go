@@ -4,6 +4,9 @@
 package hgroup
 
 import (
+	"slices"
+	"strings"
+
 	"hanabi/game"
 )
 
@@ -114,3 +117,269 @@ func (s *state) burnClue(evs []clueEval) (clueEval, bool) {
 	}
 	return best(evs, func(e clueEval) bool { return e.understood && e.bad == 0 && !e.misleads })
 }
+
+// posRec：Level 8 Positional Discard / Positional Misplay。from 在終局棄掉（或打錯）slot 位置上「不該棄」的牌，
+// 要他之後、那個位置上有能打的牌（持有者自己還不知道）的最後 plays 位玩家盲打那個位置的牌
+// （原文：「if two or more players have a playable card on the same slot, then the blind-play is always targeted
+// at the final player with the playable card」）。每位玩家只在他之後的第一回合回應；輪回 from 就結束。
+type posRec struct {
+	from, slot, plays int
+	cards             []int  // 每位玩家當時在 slot 位置的牌 ID（from 自己、或沒有那個位置的人是 -1）
+	target            []bool // 我看得到的：那張牌當時能打、持有者還不知道（我自己的那張輪到我時再判斷）
+	acted             []bool // 之後已經行動過的人
+	done              int    // 已經回應（打出那張牌）的人數
+}
+
+// posExpected：P 這一手「該棄」的牌——大家都知道沒用的已提示牌（myTrashSlot 的順序），否則 chop（publicChop）。
+// 鎖手（沒有 chop、也沒有已知垃圾）回傳 -1，他棄什麼都不是 Positional Discard。
+func (s *state) posExpected(P int) int {
+	h := s.hands[P]
+	for slot := len(h) - 1; slot >= 0; slot-- {
+		if s.screamTrash(h[slot]) {
+			return h[slot]
+		}
+	}
+	return s.publicChop(P, nil)
+}
+
+// detectPositional（Level 8，在棄牌 / 打錯的事件處理前呼叫）：P 棄掉或打錯牌 id（牌面 t）是不是 Positional Discard / Misplay。
+//   - 只算沒被提示、沒被 Chop Move、沒有任何提示要他盲打的牌（finesse 的盲打打錯、盲打 Chop Moved 的牌都不算），
+//     而且不是 critical（他看得到每一張還需要的牌，才知道自己沒被提示的牌都是垃圾或重複；棄掉 critical 是失誤）。
+//   - 棄牌：不是他該棄的牌（已知垃圾或 chop），也不是提示本身就確定沒用的牌 → Positional Discard，一張盲打。
+//   - 打錯：就是他該棄的那張（棄它不會被當成 Positional Discard）→ Positional Misplay，一張盲打；
+//     不是那張（Positional Discard 也行得通，卻多花一個閃電）→ Double Positional Misplay，兩張盲打。
+//
+// 回應中的盲打（resp：s.pos 等的那張牌）不是新的 Positional Misplay。
+func (s *state) detectPositional(e game.Event, resp bool) *posRec {
+	if resp || e.Type == game.EvPlay || s.critical(identOfCard(e.Card)) {
+		return nil
+	}
+	P, id := e.Player, e.Card.ID
+	plays := 1
+	switch {
+	case e.Type == game.EvDiscard && !s.posDiscardLike(P, id):
+		return nil
+	case e.Type == game.EvMisplay:
+		if !s.posMisplayLike(P, id) {
+			return nil
+		}
+		if id != s.posExpected(P) {
+			plays = 2
+		}
+	}
+	pr := &posRec{from: P, slot: e.Slot, plays: plays, cards: make([]int, s.n), target: make([]bool, s.n), acted: make([]bool, s.n)}
+	for q := range s.n {
+		pr.cards[q] = -1
+		if q != P && e.Slot < len(s.hands[q]) {
+			c := s.hands[q][e.Slot]
+			pr.cards[q] = c
+			if q != s.me {
+				pr.target[q] = s.posTarget(c)
+			}
+		}
+	}
+	return pr
+}
+
+// posUnknown：P 的牌 id 可以拿來做 Positional Discard / Misplay：終局、沒被提示、沒被 Chop Move、沒被 finesse，
+// 而且 P 有該棄的牌（不是鎖手）。
+func (s *state) posUnknown(P, id int) bool {
+	n := s.notes[id]
+	return s.knows(lvEndGame) && s.endGame() && !n.clued && !n.cm && !n.finessed && s.posExpected(P) >= 0
+}
+
+// posDiscardLike：P 棄掉牌 id 會被當成 Positional Discard（不看牌面是不是 critical）：posUnknown，
+// 而且不是他該棄的牌、也不是提示本身就確定沒用的牌。
+func (s *state) posDiscardLike(P, id int) bool {
+	return s.posUnknown(P, id) && id != s.posExpected(P) && s.notes[id].explicit&s.useful() != 0
+}
+
+// posMisplayLike：P 打錯牌 id 會被當成 Positional Misplay（不看牌面是不是 critical）：posUnknown，而且提示 0 個
+// （有提示時直接提示那張就好，原文的例子也是 0 個）、打錯後還不到三個閃電、沒有提示要他盲打、也不是他的
+// finesse position（大家都看得到的最左邊那張沒被提示的牌）——打錯沒被提示的牌多半只是以為自己被 finesse
+// （自我對局 5 人局：誤認成 Double Positional Misplay 又害兩個人盲打，一錯就是三個閃電）。
+func (s *state) posMisplayLike(P, id int) bool {
+	return s.posUnknown(P, id) && s.hints == 0 && s.strikes < game.MaxStrikes-1 && !s.mayBlindPlay(P, id) &&
+		slices.ContainsFunc(s.hands[P][:max(slices.Index(s.hands[P], id), 0)], func(c int) bool { n := s.notes[c]; return !n.clued && !n.cm })
+}
+
+// mayBlindPlay：有提示的解讀（或我推得的計畫）要 P 盲打——他打錯沒被提示的牌可能只是 finesse 沒接好，不是 Positional Misplay。
+func (s *state) mayBlindPlay(P, id int) bool {
+	if s.mayBeFinessed(id) {
+		return true
+	}
+	fin := func(d dep) bool { return d.player == P && d.finesse }
+	for _, rec := range s.recs {
+		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
+			if slices.ContainsFunc(c.deps, fin) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// posTarget：牌 c（我看得到）是 Positional Discard 可以叫打的牌：現在就能打，持有者自己還不知道
+// （不是大家都知道能打的已提示牌，也不是被 finesse、本來就會盲打的牌）。
+func (s *state) posTarget(c int) bool {
+	t, ok := s.see(s.me, c)
+	n := s.notes[c]
+	return ok && s.playableNow(t) && !n.finessed && !(n.clued && (s.screamPlayable(c) || s.publicKnown(c)))
+}
+
+// posSafeTarget：給 Positional Discard 時，被叫打的那張（最後一位的牌 c）別處沒有已被拿到的同一張——
+// 那張先打出，這張就成了重複，等到他回應時已經打不出去。只用在給的人挑位置：回應的人看不到自己的牌，
+// 判斷「之後還有沒有人」時照 posTarget（否則他會以為自己可能有同一張而把後面的人排除，搶著回應）。
+func (s *state) posSafeTarget(c int) bool {
+	t, _ := s.see(s.me, c)
+	return !s.gottenElsewhere(s.me, t, c) && !s.maybeMine(t)
+}
+
+// posStep：有人在 Positional Discard / Misplay 之後行動（e，抽牌不算）：記下他有沒有回應；回應夠了、或輪回棄牌的人就結束。
+func (s *state) posStep(e game.Event) {
+	pr := s.pos
+	if pr == nil || e.Type == game.EvDraw {
+		return
+	}
+	if e.Player == pr.from {
+		s.pos = nil
+		return
+	}
+	if (e.Type == game.EvPlay || e.Type == game.EvMisplay) && e.Card.ID == pr.cards[e.Player] {
+		pr.done++
+	}
+	pr.acted[e.Player] = true
+	if pr.done >= pr.plays {
+		s.pos = nil
+	}
+}
+
+// posResponse：e 是照 Positional Discard / Misplay 的盲打（別的提示不能拿它當證據）。
+func (s *state) posResponse(e game.Event) bool {
+	pr := s.pos
+	return pr != nil && (e.Type == game.EvPlay || e.Type == game.EvMisplay) && e.Player != pr.from && e.Card.ID == pr.cards[e.Player]
+}
+
+// posWillRespond：p（不是我）輪到時會回應 Positional Discard / Misplay——那個位置上他有能打的牌，
+// 而他之後到棄牌的人之前，有能打的牌的人不夠還需要的張數。
+func (s *state) posWillRespond(p int) bool {
+	pr := s.pos
+	if pr == nil || p == s.me || p == pr.from || pr.acted[p] || !pr.target[p] {
+		return false
+	}
+	later := 0
+	for k := 1; (p+k)%s.n != pr.from; k++ {
+		if pr.target[(p+k)%s.n] {
+			later++
+		}
+	}
+	return later < pr.plays-pr.done
+}
+
+// stepPositional（Level 8）：回應 Positional Discard / Misplay。還需要 k 張盲打，而我之後（到棄牌的人之前）那個位置上
+// 有能打的牌的人不到 k 位，我就是「最後幾位」之一（在我之前該打的人沒打，表示他看到之後有人有；我看不到自己的牌，
+// 他看得到）：盲打那個位置的牌。我那張不可能能打時不打。
+func (s *state) stepPositional(t *turn) (game.Action, string, bool) {
+	pr := s.pos
+	if pr == nil || pr.from == s.me || pr.acted[s.me] {
+		return game.Action{}, "", false
+	}
+	c := pr.cards[s.me]
+	if c < 0 || s.holder(c) != s.me {
+		return game.Action{}, "", false
+	}
+	later := 0
+	for k := 1; (s.me+k)%s.n != pr.from; k++ {
+		if pr.target[(s.me+k)%s.n] {
+			later++
+		}
+	}
+	if later >= pr.plays-pr.done || !slices.ContainsFunc(s.myPoss(c).list(), s.playableNow) {
+		return game.Action{}, "", false
+	}
+	why := "回應 Positional Discard：盲打同一個位置的牌"
+	if pr.plays == 2 {
+		why = "回應 Double Positional Misplay：盲打同一個位置的牌"
+	}
+	return game.Play(slices.Index(s.hands[s.me], c)), why, true
+}
+
+// seesEvery（Level 8 Positional Discard 的前提）：我看得到每一張還需要的牌——每個還打得出去、還沒打出的牌面，
+// 別人手上都有一張（或我手上有確定是它的已提示牌）。這時我其他的牌一定是垃圾或重複，棄哪一張都一樣。
+func (s *state) seesEvery() bool {
+	for _, t := range s.useful().list() {
+		if s.discarded[t] >= t.copies() {
+			continue // 已經拿不到（之後的牌面 dead，不在 useful 裡）
+		}
+		found := false
+		for p, h := range s.hands {
+			for _, id := range h {
+				if p == s.me {
+					u, ok := s.myPoss(id).single()
+					found = found || ok && u == t && s.gotten(id)
+				} else if c, ok := s.see(s.me, id); ok && c == t {
+					found = true
+				}
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+// positionalTargets：我棄掉（或打錯）slot 位置的牌時，之後那個位置上有能打的牌（持有者還不知道）的玩家，依行動順序。
+func (s *state) positionalTargets(slot int) []int {
+	var out []int
+	for k := 1; k < s.n; k++ {
+		q := (s.me + k) % s.n
+		if slot < len(s.hands[q]) && s.posTarget(s.hands[q][slot]) {
+			out = append(out, q)
+		}
+	}
+	return out
+}
+
+// positionalMove（Level 8 Positional Discard / Misplay 的給法）：終局、我看得到每一張還需要的牌（seesEvery）、
+// 這一手本來就要棄牌時，改棄（或打錯）一個能叫人盲打的位置：
+//   - Positional Discard：不是我該棄的牌（已知垃圾或 chop）的位置，之後有人那個位置上有能打的牌。
+//   - Positional Misplay：只有我該棄的那張的位置有（棄它不會被當成 Positional Discard），而且提示 0 個
+//     （有提示時棄牌換回的提示還能直接提示那張）、還能承受閃電、那張不可能能打。
+//
+// 每一種都要我那張牌不可能是 critical（看得到每一張還需要的牌就不會是）。沒有則 ok = false。
+func (s *state) positionalMove(v game.PlayerView) (a game.Action, why string, ok bool) {
+	// 前一個 Positional Discard / Misplay 還在等回應時不再給（只記得最新的一個，會打亂它）
+	if !s.knows(lvEndGame) || s.pos != nil || !s.endGame() || !s.seesEvery() {
+		return game.Action{}, "", false
+	}
+	exp := s.posExpected(s.me)
+	if exp < 0 {
+		return game.Action{}, "", false
+	}
+	// 被叫打的是那個位置上有能打的牌的最後一位
+	aimed := func(slot int) bool {
+		ts := s.positionalTargets(slot)
+		return len(ts) > 0 && s.posSafeTarget(s.hands[ts[len(ts)-1]][slot])
+	}
+	for slot, id := range s.hands[s.me] {
+		if !s.posDiscardLike(s.me, id) || !aimed(slot) {
+			continue
+		}
+		if v.CanDiscard() {
+			return game.Discard(slot), "Positional Discard：我看得到每一張還需要的牌，棄這個位置叫人盲打同一個位置的牌", true
+		}
+	}
+	slot := slices.Index(s.hands[s.me], exp)
+	if !positionalMisplay || !s.posMisplayLike(s.me, exp) || !aimed(slot) ||
+		slices.ContainsFunc(s.myPoss(exp).list(), s.playableNow) {
+		return game.Action{}, "", false
+	}
+	return game.Play(slot), "Positional Misplay：棄 chop 不會被當成 Positional Discard，故意打錯它叫人盲打同一個位置的牌", true
+}
+
+// positionalMisplay：給 Positional Misplay（要花一個閃電）。
+var positionalMisplay = true
+
+// positionalWhy：這一手的理由是 Positional Discard / Misplay（故意棄 / 打錯那個位置）。
+func positionalWhy(why string) bool { return strings.HasPrefix(why, "Positional") }

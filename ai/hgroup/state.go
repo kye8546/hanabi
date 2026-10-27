@@ -68,13 +68,14 @@ type clueRec struct {
 
 // state 是 AI 依公開資訊重播整局後的認知。
 type state struct {
-	n, me  int
-	level  int          // 使用的 H-Group 慣例等級
-	colors []game.Color // 這局用到的顏色（Variant.Colors）
-	all    idSet        // 這局所有可能的牌面（新牌的筆記從這裡開始）
-	hints  int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
-	deck   int          // 目前牌堆的張數（重播時追蹤，Level 6 判斷是不是終局的拖延用）
-	hands  [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
+	n, me   int
+	level   int          // 使用的 H-Group 慣例等級
+	colors  []game.Color // 這局用到的顏色（Variant.Colors）
+	all     idSet        // 這局所有可能的牌面（新牌的筆記從這裡開始）
+	hints   int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
+	strikes int          // 目前的閃電數（重播時追蹤，Level 8 Positional Misplay 用）
+	deck    int          // 目前牌堆的張數（重播時追蹤，Level 6 判斷是不是終局的拖延用）
+	hands   [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
 	// 以下三個都用牌 ID 索引（track 讓長度涵蓋看過的每張牌；用 slice 而不是 map，查找是熱點）
 	notes     []*note     // 每張牌的筆記（沒看過的牌是 nil）
 	cards     []game.Card // 我看得到、或已經公開的牌面（Rank 0 = 不知道；讀 ok 用 card）
@@ -105,6 +106,10 @@ type state struct {
 
 	// scream：Level 7 Scream / Shout Discard 之後、被叫的人還沒行動（他這一手必須給提示，行動後才決定 Chop Move）
 	scream *screamRec
+	// pos：Level 8 Positional Discard / Misplay 之後、還沒等到回應（posStep）；posResp：正在處理的事件是回應它的盲打
+	// （checkDeps 不拿它當其他提示的證據）
+	pos     *posRec
+	posResp bool
 }
 
 // sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
@@ -174,7 +179,10 @@ func newState(v game.PlayerView, level int) *state {
 		switch e.Type {
 		case game.EvDraw:
 			s.hands[e.Player] = s.hands[e.Player][1:]
-		case game.EvPlay, game.EvMisplay, game.EvDiscard:
+		case game.EvMisplay:
+			s.strikes--
+			fallthrough
+		case game.EvPlay, game.EvDiscard:
 			s.hands[e.Player] = slices.Insert(s.hands[e.Player], e.Slot, e.Card.ID)
 			if e.Type == game.EvPlay {
 				s.stacks[e.Card.Color] = e.Card.Rank - 1
@@ -184,6 +192,7 @@ func newState(v game.PlayerView, level int) *state {
 		}
 	}
 	s.hints = initialHints(v)
+	s.strikes = v.Strikes
 	s.deck = v.DeckSize
 	for _, e := range v.Log {
 		if e.Type == game.EvDraw {
@@ -332,6 +341,9 @@ func (s *state) apply(e game.Event) {
 			s.resolveScream(sc, e, p3Chop)
 		}()
 	}
+	// Level 8：Positional Discard / Misplay 之後的行動，記下有沒有回應
+	resp := s.posResponse(e)
+	s.posStep(e)
 	switch e.Type {
 	case game.EvHint:
 		s.deferred = s.deferrable(e)
@@ -345,6 +357,7 @@ func (s *state) apply(e game.Event) {
 		if e.Type == game.EvDiscard {
 			scream = s.detectScream(e.Player, e.Card.ID)
 		}
+		pos := s.detectPositional(e, resp)
 		// Level 4 The Order Chop Move：要在打出前（照他打牌前的手牌）算他跳過了幾張 1
 		ocmTarget := -1
 		if e.Type == game.EvPlay && s.knows(lvChopMove) {
@@ -361,8 +374,9 @@ func (s *state) apply(e game.Event) {
 		if wpRec != nil {
 			s.excused = wpCard // 他這次打錯是因為 Wrong Prompt，不算沒盲打那張 finesse 的牌
 		}
+		s.posResp = resp
 		s.checkDeps(e, e.Card.ID)
-		s.excused = -1
+		s.excused, s.posResp = -1, false
 		if e.Type == game.EvPlay {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
 		}
@@ -381,6 +395,7 @@ func (s *state) apply(e game.Event) {
 			}
 		case game.EvMisplay:
 			s.discarded[id]++
+			s.strikes++
 			if wpRec != nil {
 				s.applyWrongPrompt(wpCard, wpIDs, wpRec)
 			} else {
@@ -405,6 +420,9 @@ func (s *state) apply(e game.Event) {
 		}
 		if scream != nil {
 			s.scream = scream
+		}
+		if pos != nil {
+			s.pos = pos
 		}
 		s.afterPlay()
 	case game.EvDraw:

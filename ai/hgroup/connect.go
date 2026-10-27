@@ -510,6 +510,9 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 	}
+	if s.posResp {
+		explained[nil] = true // Level 8：回應 Positional Discard / Misplay 的盲打
+	}
 	// Level 5：有提示的解讀正好要他盲打出這張牌面時，其他提示不能把這次盲打當成 layer（Layered Finesse）的證據——
 	// 那是比較牽強的解讀（自我對局 seed 491：黃色要 Cathy 盲打 y1，之後的「2」也有「w2，Cathy 的 y1 是 layer」的解讀，
 	// 她盲打出 y1，接收者把兩個提示都當成證明了，「2」就被縮成 w2，實際是 b2）

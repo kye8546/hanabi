@@ -115,3 +115,66 @@ func TestL8NoScreamInEndGame(t *testing.T) {
 		}
 	}
 }
+
+func TestL8PositionalDiscard(t *testing.T) {
+	// 原文範例：只剩 r5、y5 還沒打出，牌堆空了、提示 0 個；Bob 有已提示的 y5，Cathy slot 2 是沒被提示的 r5。
+	// Alice 看得到每一張還需要的牌，棄 slot 2（不是 chop）：Positional Discard。Bob 照常打 y5，Cathy 盲打 slot 2 的 r5
+	for _, lv := range []int{7, 8} {
+		g, bots := scenarioEnd(t, lv, 0, "r4 y4 g5 b5 w5", "g1 g1 b1 b1 w1", "g1 b1 w1 y5 g1", "g1 r5 b1 w1 g2")
+		g.Hints = 0
+		known(t, g, bots, 1, 3, "y5")
+		a := step(t, g, bots)
+		if want := (lv >= 8); (a == game.Discard(1)) != want {
+			t.Fatalf("Lv%d：Alice 棄 slot 2 = %v，實際 %+v（%s）", lv, !want, a, bots[0].Why())
+		}
+		if lv < 8 {
+			continue
+		}
+		if a := step(t, g, bots); a != game.Play(3) {
+			t.Errorf("Bob 應打出 y5，卻做了 %+v（%s）", a, bots[1].Why())
+		}
+		if a := step(t, g, bots); a != game.Play(1) {
+			t.Errorf("Cathy 應盲打 slot 2 的 r5，卻做了 %+v（%s）", a, bots[2].Why())
+		}
+	}
+}
+
+func TestL8PositionalMisplay(t *testing.T) {
+	// 原文範例（4 人局）：所有 4 都已打出、牌堆 3 張、提示 0 個；Bob 有已提示的 g5、w5，Cathy 有已提示的 y5、b5，
+	// Donald slot 4 是沒被提示的 r5。Alice 沒有已提示的牌，chop 就是 slot 4：棄它不會被當成 Positional Discard，
+	// 改故意打錯它（Positional Misplay）。Bob、Cathy 照常打 5，Donald 盲打 slot 4 的 r5
+	g, bots := scenarioEnd(t, 8, 3, "r4 y4 g4 b4 w4", "g1 g1 b1 b1", "g1 g5 w5 b1", "y5 g1 b5 b1", "g1 b1 w1 r5")
+	g.Hints = 0
+	for _, k := range []struct {
+		p, slot int
+		c       string
+	}{{1, 1, "g5 y5 b5 r5 w5"}, {1, 2, "g5 y5 b5 r5 w5"}, {2, 0, "g5 y5 b5 r5 w5"}, {2, 2, "g5 y5 b5 r5 w5"}} {
+		preClued(t, g, bots, k.p, k.slot, idents(t, k.c))
+	}
+	if a := step(t, g, bots); a != game.Play(3) {
+		t.Fatalf("Alice 應打錯 chop（Positional Misplay），卻做了 %+v（%s）", a, bots[0].Why())
+	}
+	for p := 1; p <= 2; p++ {
+		if a := step(t, g, bots); a.Type != game.ActPlay || !bots[p].s.notes[g.Log[len(g.Log)-2].Card.ID].clued {
+			t.Errorf("座位 %d 應打出已提示的 5，卻做了 %+v（%s）", p, a, bots[p].Why())
+		}
+	}
+	if a := step(t, g, bots); a != game.Play(3) {
+		t.Errorf("Donald 應盲打 slot 4 的 r5，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}
+
+func TestL8DoublePositionalMisplay(t *testing.T) {
+	// Alice 打錯不是 chop 的 slot 2（Positional Discard 也行得通，卻多花一個閃電）：Double Positional Misplay，
+	// slot 2 有能打的牌的最後兩位（Bob 的 r5、Cathy 的 y5）都盲打。
+	// （打錯 finesse position（slot 1）不算：多半只是以為自己被 finesse）
+	g, bots := scenarioEnd(t, 8, 0, "r4 y4 g5 b5 w5", "g1 g1 b1 b1 w1", "b1 r5 w1 g1 g1", "b1 y5 w1 g1 g2")
+	g.Hints = 0
+	force(t, g, game.Play(1))
+	if a := step(t, g, bots); a != game.Play(1) {
+		t.Errorf("Bob 應盲打 slot 2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	if a := step(t, g, bots); a != game.Play(1) {
+		t.Errorf("Cathy 應盲打 slot 2，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

@@ -43,6 +43,7 @@ type decideStep func(s *state, t *turn) (game.Action, string, bool)
 
 // decideSteps 是決策的優先順序，由上而下第一個成立的就是這手的行動；最後的棄牌一定成立。
 var decideSteps = []decideStep{
+	(*state).stepPositional,        //    Level 8 回應 Positional Discard / Misplay（只在這一手有效）
 	(*state).stepDeferFinesse,      //    Level 5 Urgency Principle 的例外：下一位要棄掉必須保留的 chop，先救再盲打
 	(*state).stepFinesseBlindPlay,  // 1. 被 finesse 的牌立刻盲打（Finesse Urgency）
 	(*state).stepOrderChopMoveNext, //    Order Chop Move 能保護下一位必須保留的 chop：比給他提示好
@@ -72,6 +73,12 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		a, why, ok := step(s, t)
 		if !ok || mustClue && (a.Type != game.ActHint || s.misreadAsGeneration(a)) {
 			continue
+		}
+		// Level 8：這次棄牌會被當成 Positional Discard，我卻不是要叫人盲打：改棄該棄的牌（已知垃圾或 chop）
+		if a.Type == game.ActDiscard && !positionalWhy(why) && s.posDiscardLike(s.me, s.hands[s.me][a.Slot]) {
+			if exp := s.posExpected(s.me); exp >= 0 {
+				a = game.Discard(slices.Index(s.hands[s.me], exp))
+			}
 		}
 		// Level 7：這次棄牌會被當成 Scream / Shout Discard，我卻不是要救人：改打確定能打的牌
 		if a.Type == game.ActDiscard && s.unintendedScream(a.Slot) {
@@ -285,7 +292,7 @@ func (s *state) stepEndgameBurn(t *turn) (game.Action, string, bool) {
 }
 
 func (s *state) stepDiscard(t *turn) (game.Action, string, bool) {
-	a, why := s.discard(t.clues(s))
+	a, why := s.discard(t.v, t.clues(s))
 	return a, why, true
 }
 
@@ -421,8 +428,11 @@ func (s *state) trashSlot(clued bool) int {
 
 // discard：先棄已知沒用的牌，再棄 chop；手牌全被提示（鎖手）時給個提示，
 // 真的不行才棄最不可能是 critical 的那張。回傳行動與理由。
-func (s *state) discard(evs []clueEval) (game.Action, string) {
+func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string) {
 	hand := s.hands[s.me]
+	if a, why, ok := s.positionalMove(v); ok {
+		return a, why
+	}
 	if slot := s.trashSlot(false); slot >= 0 {
 		return game.Discard(slot), "棄已知沒用的牌"
 	}

@@ -92,6 +92,9 @@ func (s *state) saveWeight(id int) int {
 // 只要等我這一手就會被排除的解讀（需要我盲打、但我知道不是 finesse）不算，
 // 因為輪到 p 之前我已經用行動證明了。
 func (s *state) willPlay(p int) bool {
+	if s.posWillRespond(p) {
+		return true // Level 8：他會回應 Positional Discard / Misplay，盲打那個位置的牌
+	}
 	for _, id := range s.hands[p] {
 		if s.notes[id].bad {
 			continue
