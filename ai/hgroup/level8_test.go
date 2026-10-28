@@ -227,9 +227,13 @@ func TestL8ThreeCardsLeft(t *testing.T) {
 }
 
 func TestL8FiveCardsLeft(t *testing.T) {
-	// 挑戰題 5 Cards Left：牌堆 5 張、提示 1 個，只有 Alice 的 y5、g5 被提示。給 Cathy 紅色（finesse Bob 的 r4）
-	// 可能讓 Alice 之後抽到的 5 來不及打；Alice 該打出 y5 或 g5
+	// 挑戰題 5 Cards Left：牌堆 5 張、提示 1 個，只有 Alice 的 y5、g5 被提示。給 Cathy 紅色（finesse Bob 的 r4）會浪費
+	// Alice 的回合：她看不到的 b5、w5 可能被她抽到，最壞要一個人打 4 張 5。Alice 該打出 y5 或 g5，紅色交給 Bob、Cathy。
+	// 牌堆放進 b5、w5，大家每回合都抽牌時正好被 Alice 抽到（從牌堆尾端抽）。
+	// 照原文的道理提示 2 個時也該打牌，但 AI 會先給「只有我能給的 finesse」（clueBeforePlay 只在提示 ≥ 2 個時考慮），還沒處理
 	g, bots := scenarioEnd(t, 8, 5, "r3 y4 g4 b4 w4", "g1 g1 y5 g5 y1", "r4 b1 b2 w3 y1", "w2 w1 y4 r5 g1")
+	g.Deck[1], g.Deck[4] = card(t, "w5"), card(t, "b5")
+	g.Deck[1].ID, g.Deck[4].ID = 200, 201
 	g.Hints = 1
 	known(t, g, bots, 0, 2, "y5")
 	known(t, g, bots, 0, 3, "g5")
