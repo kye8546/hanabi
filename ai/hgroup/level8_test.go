@@ -259,3 +259,19 @@ func TestNoSaveTooLateInLastRound(t *testing.T) {
 		}
 	}
 }
+
+func TestGiverKnownByTrashElimination(t *testing.T) {
+	// 使用者回報 20261028-145155 t50：AI-1 只被「3」點過的牌，Y3、B3 都已沒用，大家都知道是 W3。
+	// pace 1、AI-2 手上 W2、W5、B5 三張要打，AI-1 一棄牌他就來不及打完，必須拖延；以前模擬「4」點使用者的 W4 時，
+	// 以為使用者不知道 AI-1 那張是 W3、會 self-finesse 自己的牌，判成誤導，找不到拖延的提示而棄牌
+	const codes = "h11 p5 h01 p2 p3 h15 h25 d5 d5 d5 d4 h0Y p1 h2G h02 p1 p1 h1R p1 p3 p1 p4 d4 h14 p4 p1 h13 h1G p2 h0R p1 p5 d3 d5 p3 h0G p1 d5 h1R d5 p1 h01 d3 d2 h0B p2 h0R d3 h2W"
+	for _, lv := range []int{1, 8} {
+		g, bots := replayCodes(t, 3, 1793170315843172000, lv, codes)
+		if g.Current != 1 || len(g.Deck) != 4 {
+			t.Fatalf("局面不對：牌堆 %d、輪到 P%d", len(g.Deck), g.Current)
+		}
+		if a := bots[1].Act(g.View(1)); a != game.HintRankTo(0, 4) {
+			t.Errorf("Lv%d：AI-1 應該提示使用者「4」（W4 等 W2、W3 打出），做了 %+v（%s）", lv, a, bots[1].Why())
+		}
+	}
+}

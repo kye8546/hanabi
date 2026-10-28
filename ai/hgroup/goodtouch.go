@@ -112,11 +112,13 @@ func (s *state) giverMayKnow(obs, id int, m ident) bool { return s.giverMayKnowD
 // giverMayKnowD 同 giverMayKnow；depth 是 holderExcludes 還能往下問「那張牌的持有者知不知道」的層數。
 func (s *state) giverMayKnowD(obs, id int, m ident, depth int) bool {
 	h := s.holder(id)
-	// 大家都推得出的筆記（不是我自己手上的牌——那是我的私下推論）已確定是 m，或提示本身就說明是 m
+	// 大家都推得出的筆記（不是我自己手上的牌——那是我的私下推論）已確定是 m，或提示本身扣掉大家都知道沒用的牌面就只剩 m
+	// （使用者回報 20261028-145155 t50：AI-1 只被「3」點過的牌，Y3、B3 都已沒用，大家都知道是 W3；以前不算，
+	// 模擬「4」點使用者的 W4 時以為他會 self-finesse 自己的 W3，找不到終局拖延的提示而棄牌，來不及滿分）
 	if t, ok := s.notes[id].poss.single(); ok && t == m && h != s.me {
 		return true
 	}
-	if t, ok := s.notes[id].explicit.single(); ok && t == m {
+	if t, ok := (s.notes[id].explicit & s.useful()).single(); ok && t == m {
 		return true
 	}
 	for i := len(s.recs) - 1; i >= 0; i-- {
