@@ -62,6 +62,38 @@ func (s *state) revealConnection(recs []*clueRec, x int, t ident) {
 	}
 }
 
+// receiverHadIt：牌 x（牌面 t）打出前，recs 中哪些提示的接收者不論哪種解讀都把 t 當成已被拿到——每種解讀不是要 x 當 t
+// 打出（finesse / prompt），就是焦點本身是 t（他自己那張）。他不確定 x 是不是被 finesse 的，但之後他給的提示
+// 不會點到 t（Good Touch：已被拿到，或和自己不確定的已提示牌重複）。打出前呼叫（打出後解讀會被刪減）。
+func (s *state) receiverHadIt(recs []*clueRec, x int, t ident) []*clueRec {
+	var out []*clueRec
+	for _, rec := range recs {
+		all := append(slices.Clone(rec.cands), rec.fallback...)
+		if len(all) > 0 && !slices.ContainsFunc(all, func(c cand) bool {
+			return c.id != t && !slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == x && d.id == t })
+		}) {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// revealToReceiver：x 打出 t 證明了 recs 的連接（receiverHadIt），它們的接收者之後給的提示點到的牌都不是 t。
+// revealGTP 只處理給提示者確定知道已被拿到的牌；被 finesse 的 x，那次提示的接收者看不到焦點、當時不確定是 finesse
+// （使用者回報 20261028-163014：白色點 AI-1 的 W2、finesse AI-2 的 W1，AI-1 接著用「1」點使用者的三張 1；
+// W1 打出後 AI-2 依 Good Touch 排除了 W1，AI-1 沒有，以為使用者的 1 還可能是 W1，看不出他 t7 的 Order Chop Move）。
+func (s *state) revealToReceiver(recs []*clueRec, x int, t ident) {
+	for _, rec := range recs {
+		for _, h := range s.hands {
+			for _, id := range h {
+				if n := s.notes[id]; id != x && n.giver == rec.target && n.seq > rec.seq && !n.bad && n.poss.has(t) && n.poss.count() > 1 {
+					n.poss &^= setOf(t)
+				}
+			}
+		}
+	}
+}
+
 // gottenAs 回傳（obs 角度）除了 exclude 之外，是否已有被拿到的牌是 i：
 // 看得到的被提示牌實際是 i，或筆記已確定是 i。
 // giver 看不到自己的手牌，所以他手上的牌只看筆記（他不會因為看不到的牌違反 Good Touch）。

@@ -353,3 +353,19 @@ func TestL4NoTrashChopMoveWhenDirectSaveWorks(t *testing.T) {
 		t.Errorf("AI-1 應直接給 AI-2「4」救 g4，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestOCMAfterFinesseUnknownToLaterGiver(t *testing.T) {
+	// 使用者回報 20261028-163014：t4 使用者白色點 AI-1 的 W2、finesse AI-2 的 W1；t5 AI-1 用「1」點使用者的三張 1（slot 5 是 chop）；
+	// t6 AI-2 盲打 W1；t7 使用者跳過 chop 打 slot 3 = Order Chop Move AI-1 的 chop（G2）。
+	// AI-1 給「1」時不確定 W1 被 finesse，但他自己那張不是 W1 就是 W2（finesse），不論哪種都不會點到 W1。
+	// 以前 AI-1 不排除 W1，算不出使用者的出牌順序，t11 把被 Chop Move 的 G2 棄掉
+	g, bots := replayCodes(t, 3, 1793176214592376000, 8, "h15 h21 p3 h1W h01 p1 p3 p4 h03 p5")
+	for _, p := range []int{1, 2} {
+		if s := bots[p].s; !s.notes[7].cm {
+			t.Errorf("AI-%d 應記得 AI-1 的 G2 被 Order Chop Move", p)
+		}
+	}
+	if a := bots[1].Act(g.View(1)); a == game.Discard(3) {
+		t.Errorf("AI-1 不該棄掉被 Chop Move 的 G2（%s）", bots[1].Why())
+	}
+}
