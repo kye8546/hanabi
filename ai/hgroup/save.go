@@ -11,7 +11,7 @@ import (
 // needsSave：（我看得到的）這張 chop 牌依 Save Principle 不能被棄掉。
 func (s *state) needsSave(p, id int) bool {
 	t := identOfCard(s.cards[id])
-	if s.trash(t) || s.gottenAs(s.me, s.me, t, id) {
+	if s.trash(t) || s.gottenAs(s.me, s.me, t, id) || s.tooLateToSave(p, t) {
 		return false
 	}
 	switch {
@@ -37,6 +37,17 @@ func (s *state) needsSave(p, id int) bool {
 		return true
 	}
 	return false
+}
+
+// tooLateToSave：牌堆已空的最後一輪，p 最多只剩一回合：他已經沒有回合，或 t 中間缺的牌比他之前的回合（含我這手）還多、
+// 輪到他時不可能接上，救了也打不出來（常識，所有等級）。以前照樣救，例如藍色還沒開始時花最後一個提示救下一位的 B4，
+// 自己確定能打的 G5 沒打到。
+func (s *state) tooLateToSave(p int, t ident) bool {
+	if s.deck > 0 || s.final < 0 {
+		return false
+	}
+	d := (p - s.me + s.n) % s.n
+	return d >= s.final || int(t.rank()-s.stacks[t.color()])-1 > d
 }
 
 // saveIsOthersJob：要救的 t 可能和我手上不確定的已提示牌重複（`maybeMine`），交給別人決定（Level 12 Duplication

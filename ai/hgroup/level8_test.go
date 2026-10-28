@@ -244,3 +244,18 @@ func TestL8FiveCardsLeft(t *testing.T) {
 		}
 	}
 }
+
+func TestNoSaveTooLateInLastRound(t *testing.T) {
+	// 自我對局 2 人局 seed 507 第 68 手：牌堆已空，Bob 已經沒有回合，Alice 以前還花提示救他 chop 上的 y4，
+	// 自己確定能打的 y3 沒打到。最後一輪救不到的牌不必救（常識，所有等級）
+	const codes = "h15 h05 d4 d5 h1Y d3 h12 d2 h15 d3 h12 d3 h1G d1 h11 p1 h11 p1 d4 h0R p1 d1 h11 p1 h1B d2 h11 p1 d4 d1 h1G h05 h12 p1 d3 h03 p4 p2 d2 h0G p1 h03 h1W d2 h1G p1 d4 p3 h1R p1 p4 d5 d2 h0W p1 d4 p3 d4 h11 p1 h13 p1 h1B p4 p5 h02 p3 d3"
+	for _, lv := range []int{1, 8} {
+		g, bots := replayCodes(t, 2, 507, lv, codes)
+		if len(g.Deck) != 0 || g.Current != 0 {
+			t.Fatalf("局面不對：牌堆 %d、輪到 P%d", len(g.Deck), g.Current)
+		}
+		if a := bots[0].Act(g.View(0)); a != game.Play(4) {
+			t.Errorf("Lv%d：Alice 應該打出 y3（位置 5），做了 %+v（%s）", lv, a, bots[0].Why())
+		}
+	}
+}

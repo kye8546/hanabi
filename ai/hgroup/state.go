@@ -76,6 +76,7 @@ type state struct {
 	hints   int          // 目前的提示數（重播時追蹤，5 Stall 判斷給提示者能不能棄牌用）
 	strikes int          // 目前的閃電數（重播時追蹤，Level 8 Positional Misplay 用）
 	deck    int          // 目前牌堆的張數（重播時追蹤，Level 6 判斷是不是終局的拖延用）
+	final   int          // 輪到我時，牌堆抽完後還剩幾回合（含我這手；-1 = 牌堆還沒抽完。sync 時取自畫面，只在我決策時有意義）
 	hands   [][]int      // 每位玩家的手牌 ID，0 = 最左（最新）
 	// 以下三個都用牌 ID 索引（track 讓長度涵蓋看過的每張牌；用 slice 而不是 map，查找是熱點）
 	notes     []*note     // 每張牌的筆記（沒看過的牌是 nil）
@@ -195,6 +196,7 @@ func newState(v game.PlayerView, level int) *state {
 	s.hints = initialHints(v)
 	s.strikes = v.Strikes
 	s.deck = v.DeckSize
+	s.final = v.FinalTurnsLeft
 	for _, e := range v.Log {
 		if e.Type == game.EvDraw {
 			s.deck++
@@ -280,6 +282,7 @@ func (s *state) got(id, giver int) {
 
 // sync 讀進目前看得到的牌面，並處理上次之後的新事件。
 func (s *state) sync(v game.PlayerView) {
+	s.final = v.FinalTurnsLeft
 	for p, h := range v.Hands {
 		for _, vc := range h {
 			if p != s.me && vc.Visible {
