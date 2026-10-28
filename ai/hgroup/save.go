@@ -211,9 +211,15 @@ func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, 
 	if a, ok := laterFirst(ev); ok {
 		return a, laterWhy, true
 	}
-	// 救了之後他的新 chop 是更重要的牌（例如 5），而他仍然沒牌可打：救這張只會讓他改棄那張。
-	// 改成保護那張更重要的牌（不動到 chop，例如 5 Stall），讓他棄比較不重要的 chop；沒有這種提示就不處理
+	// 救了之後他的新 chop 是更重要的牌（例如 5），而他仍然沒牌可打：救這張只會讓他改棄那張，不救，讓他棄比較不重要的 chop。
+	// 我本來就要給提示時（沒有確定能打的牌），改成保護那張更重要的牌（不動到 chop，例如 5 Stall）——否則之後的 save clue
+	// 那一步會去救 chop。我有牌可打就先打：這個保護免不了他棄 chop，那張要等他棄掉 chop 後才到 chop 上，
+	// 他再行動前其他人都還有回合救它（使用者回報 20261028-150901 t2：AI-1 不打確定的 G1，先用「5」保護 AI-2 chop 後面的
+	// B5、R5，晚點等 B5 到 chop 上再救一樣點得到兩張 5）
 	if nc := s.chopAfter(next, append(slices.Clone(ev.touched), ev.cm...)); nc >= 0 && s.needsSave(next, nc) && s.saveWeight(nc) > s.saveWeight(chop) {
+		if s.bestPlay() >= 0 {
+			return game.Action{}, "", false
+		}
 		if pv, ok := best(evs, func(e clueEval) bool {
 			return e.covers(next, nc) && !e.covers(next, chop) &&
 				(e.kind == kindSave || e.kind == kindStall || e.kind == kindPlay || e.kind == kindChopMove && e.cmWaste == 0) && !e.misleads

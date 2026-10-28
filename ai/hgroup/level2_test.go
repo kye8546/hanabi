@@ -686,3 +686,15 @@ func TestPromptPassedResolvesDirectPlay(t *testing.T) {
 		t.Errorf("使用者沒打黃牌後，AI-2 應打出 w3，卻做了 %+v", a)
 	}
 }
+
+func TestNoEarlyProtectBehindChop(t *testing.T) {
+	// 使用者回報 20261028-150901 t2：AI-2 的 chop 是 B2，後面是 B5、R5。救 B2 只會讓 B5 到 chop 上，所以不救；
+	// 以前改用「5」先保護 B5、R5，不打自己確定的 G1——但這個提示也免不了 AI-2 棄 B2，B5 到 chop 上之後再救就好
+	// Lv2 起有更好的事可做：白色點 AI-2 的 W2、Reverse Finesse 使用者 slot 1 的 W1（只有 AI-1 能給，先給、G1 晚點打）
+	for lv, want := range map[int]game.Action{1: game.Play(4), 8: game.HintColorTo(2, game.White)} {
+		g, bots := replayCodes(t, 3, 1793171341591569000, lv, "h1G")
+		if a := bots[1].Act(g.View(1)); a != want {
+			t.Errorf("Lv%d：AI-1 應該 %+v，做了 %+v（%s）", lv, want, a, bots[1].Why())
+		}
+	}
+}
