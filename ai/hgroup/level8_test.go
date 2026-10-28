@@ -275,3 +275,18 @@ func TestGiverKnownByTrashElimination(t *testing.T) {
 		}
 	}
 }
+
+func TestBurnWhenLastDrawStrandsChain(t *testing.T) {
+	// 使用者回報 20261028-164449 t53：牌堆剩 1 張、提示 5 個，只差 W4、W5。W5 在使用者手上，W4 只可能在 AI-1 手上或牌堆。
+	// AI-1 棄掉已知垃圾就抽走最後一張，最後一輪使用者在 AI-1 之前，W4 來不及在 W5 之前打出；應該拖延
+	const codes = "h11 p2 h12 h25 p4 h15 d5 d2 d3 h12 d2 p1 h2B p1 p5 h21 p3 p1 h2R p5 p4 h15 h23 h03 p2 h25 d2 p1 h04 p3 p2 h0B d3 p1 h2Y p2 d5 h0Y p4 p4 p4 d4 d3 p5 d4 h22 d5 p1 h1B p5 p5 p5"
+	for _, lv := range []int{1, 8} {
+		g, bots := replayCodes(t, 3, 1793177089331801000, lv, codes)
+		if len(g.Deck) != 1 || g.Current != 1 {
+			t.Fatalf("局面不對：牌堆 %d、輪到 P%d", len(g.Deck), g.Current)
+		}
+		if a := bots[1].Act(g.View(1)); a.Type != game.ActHint {
+			t.Errorf("Lv%d：AI-1 應該給提示拖延，做了 %+v（%s）", lv, a, bots[1].Why())
+		}
+	}
+}

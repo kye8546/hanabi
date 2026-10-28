@@ -38,9 +38,13 @@ func (s *state) pace(v game.PlayerView) int {
 //   - pace 0：再棄一張就不可能拿到最高分。
 //   - pace 1，有隊友手上沒有能打的牌，而我的牌可能能打（Pace +1 Rule：讓他去做最後一次棄牌）。
 //   - 牌堆只剩 1 張，而某位隊友手上有 2 張以上還需要打的牌（他只剩一回合打不完）。
+//   - 牌堆只剩 1 張，我抽走它後的最後一輪（每人一回合、我最後）照順序打不完還需要的牌（finalRoundShort）。
 func (s *state) mustBurn(v game.PlayerView) bool {
 	if v.DeckSize == 0 || v.Hints == 0 {
 		return false
+	}
+	if v.DeckSize == 1 && s.finalRoundShort() {
+		return true
 	}
 	switch s.pace(v) {
 	case 0:
@@ -60,6 +64,56 @@ func (s *state) mustBurn(v game.PlayerView) bool {
 		}
 	}
 	return false
+}
+
+// finalRoundShort：牌堆只剩 1 張時，我棄牌抽走它，接著每人只剩一回合（下一位先、我最後）。還需要打的牌中，
+// 別人手上看得到的由他們打，看不到的不是在我手上就是那最後一張——抽完都在我手上，只能在最後一回合打。
+// 照這個順序、每人最多打一張，最多打得出幾張（每個人都知道自己的牌，是上限）；打不完全部就表示我這一手棄牌
+// 讓最高分拿不到，應該拖延。使用者回報 20261028-164449 t53：只差 W4、W5，W5 在使用者手上、W4 只可能在 AI-1
+// 手上或牌堆，AI-1 棄掉已知垃圾抽走最後一張，W4 只能在使用者之後打，W5 就來不及。
+func (s *state) finalRoundShort() bool {
+	order := make([]int, 0, s.n)
+	for k := 1; k <= s.n; k++ {
+		order = append(order, (s.me+k)%s.n)
+	}
+	hold := make([]idSet, s.n)
+	var need idSet
+	for _, c := range s.colors {
+		for r := s.stacks[c] + 1; r <= game.MaxRank; r++ {
+			t := identOf(c, r)
+			if s.discarded[t] >= t.copies() {
+				break
+			}
+			need |= setOf(t)
+			seen := false
+			for p, h := range s.hands {
+				if p != s.me && slices.ContainsFunc(h, func(id int) bool { return identOfCard(s.cards[id]) == t }) {
+					hold[p] |= setOf(t)
+					seen = true
+				}
+			}
+			if !seen {
+				hold[s.me] |= setOf(t)
+			}
+		}
+	}
+	stacks := s.stacks
+	var best func(i int) int
+	best = func(i int) int {
+		if i == len(order) {
+			return 0
+		}
+		most := best(i + 1)
+		for _, t := range hold[order[i]].list() {
+			if stacks[t.color()]+1 == t.rank() {
+				stacks[t.color()]++
+				most = max(most, 1+best(i+1))
+				stacks[t.color()]--
+			}
+		}
+		return most
+	}
+	return best(0) < need.count()
 }
 
 // teammateNeed：我後面第 k 位手上還需要打的牌（我看得到的牌面，不重複計算）有幾種。
