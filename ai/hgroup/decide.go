@@ -303,8 +303,10 @@ func (s *state) stepDiscard(t *turn) (game.Action, string, bool) {
 }
 
 // clueBeforePlay：見 stepPlay。
+// Level 8 終局不這樣做：每個人剩下的回合有限，自己的回合拿來打牌，提示交給別人（挑戰題 5 Cards Left：
+// Alice 給 finesse Bob r4 的紅色，就可能來不及打完之後抽到的 b5、w5）。
 func (s *state) clueBeforePlay(evs []clueEval, v game.PlayerView, slot int) (clueEval, bool) {
-	if v.Hints < 2 {
+	if v.Hints < 2 || s.endGame() {
 		return clueEval{}, false
 	}
 	t, ok := s.myPoss(s.hands[s.me][slot]).single()
