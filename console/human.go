@@ -13,13 +13,15 @@ import (
 	"hanabi/player"
 )
 
-const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ u 回溯 │ x 偷看 │ n 反向資訊 │ ? 說明"
+const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ m [玩家] <位置> 標記 cm │ u 回溯 │ x 偷看 │ n 反向資訊 │ ? 說明"
 
 const helpText = `
  p <位置>              打出手牌，例如 p 1（位置從左邊 1 開始；新抽的牌放最左邊）
  d <位置>              棄掉手牌，例如 d 5（提示 token 滿 8 個時不能棄）
  h <玩家> <顏色|數字>  給提示，例如 h 1 r（給 1 號提示紅色）、h 2 3（給 2 號提示數字 3）
                        玩家可用編號或名字；顏色 r/y/g/b/w 或 紅/黃/綠/藍/白（6 Suits 多一個 t / 青，Black 多一個 k / 黑；Rainbow 的彩虹色不能提示，每種顏色提示都會點到它）
+ m [玩家] <位置>       標記 / 取消標記一張牌被 Chop Move（位置列顯示 cm），例如 m 1 4（1 號的位置 4）、m 5（自己的位置 5）
+                       標記只是你自己的筆記，跟著那張牌移動；AI 的 Chop Move 不會自動顯示
  u                     回溯：回到你上一次行動之前（撤銷你那一手和之後 AI 的行動），可連續使用
  x                     偷看自己手牌的真實牌面（紀錄檔會註明你在第幾回合偷看過）
  log                   顯示完整紀錄
@@ -28,7 +30,7 @@ const helpText = `
  q                     離開遊戲
 
  畫面說明
-   位置列的 * 代表這張牌曾被提示點到
+   位置列的 * 代表這張牌曾被提示點到，cm 是你用 m 標記的 Chop Move
    「他知」是對方自己對那張牌的認知（?? = 完全不知道）
    你自己的「顏色 / 數字」是被提示點到的顏色 / 數字（? = 還沒被點到）
    用 n（或啟動時加 -showneg）顯示反向資訊：自己和 AI 的牌都改成列出所有剩下的可能（和 Hanab Live 一樣），
@@ -143,6 +145,28 @@ func (h *Human) parse(line string, v game.PlayerView) (game.Action, error) {
 		h.r.Board(v)
 		fmt.Fprintf(h.out, " 反向提示資訊：%s\n", map[bool]string{true: "顯示", false: "隱藏"}[on])
 		return game.Action{}, errHandled
+	case "m", "mark", "cm":
+		seat, slot := v.Seat, ""
+		switch len(f) {
+		case 2:
+			slot = f[1]
+		case 3:
+			p, ok := h.parseTarget(f[1])
+			if !ok {
+				return game.Action{}, fmt.Errorf("找不到玩家 %q", f[1])
+			}
+			seat, slot = p, f[2]
+		default:
+			return game.Action{}, errors.New("格式：m [玩家] <位置>，例如 m 1 4、m 5（自己的牌）")
+		}
+		n, err := strconv.Atoi(slot)
+		if err != nil || n < 1 || n > len(v.Hands[seat]) {
+			return game.Action{}, fmt.Errorf("位置要是 1–%d", len(v.Hands[seat]))
+		}
+		on := h.r.ToggleCM(v.Hands[seat][n-1].Card.ID)
+		h.r.Board(v)
+		fmt.Fprintf(h.out, " %s 的位置 %d：%s\n", h.names[seat], n, map[bool]string{true: "標記為 Chop Moved（cm）", false: "取消 cm 標記"}[on])
+		return game.Action{}, errHandled
 	case "u", "undo":
 		return player.UndoAction, nil
 	case "x", "peek":
@@ -222,6 +246,10 @@ func splitCompact(f []string) []string {
 		return []string{s[:1], s[1:]}
 	case s[0] == 'h' && len(s) == 3 && isDigits(s[1:2]):
 		return []string{"h", s[1:2], s[2:]}
+	case s[0] == 'm' && len(s) == 2 && isDigits(s[1:]):
+		return []string{"m", s[1:]}
+	case s[0] == 'm' && len(s) == 3 && isDigits(s[1:]):
+		return []string{"m", s[1:2], s[2:]}
 	}
 	return f
 }

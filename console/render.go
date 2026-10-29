@@ -39,10 +39,22 @@ type Renderer struct {
 	// showNeg 為 false 時手牌認知只顯示正向提示（被點到的值），
 	// 不顯示「不是紅色」這類由沒被點到推出的反向資訊
 	showNeg bool
+	// cm 是玩家自己用 m 指令標記成被 Chop Move 的牌（牌 ID → 標記）。AI 的判斷不會自動顯示，
+	// 和 Hanab Live 一樣由玩家自己寫 cm 筆記；用牌 ID 記，手牌移位、回溯（同一個種子重新開局，ID 相同）後都還在
+	cm map[int]bool
 }
 
 func NewRenderer(w io.Writer, names []string, color, showNeg bool) *Renderer {
-	return &Renderer{w: w, names: names, color: color, showNeg: showNeg}
+	return &Renderer{w: w, names: names, color: color, showNeg: showNeg, cm: map[int]bool{}}
+}
+
+// ToggleCM 切換牌 id 的 Chop Move 標記，回傳切換後的狀態。
+func (r *Renderer) ToggleCM(id int) bool {
+	r.cm[id] = !r.cm[id]
+	if !r.cm[id] {
+		delete(r.cm, id)
+	}
+	return r.cm[id]
 }
 
 // ToggleNeg 切換是否顯示反向提示資訊，回傳切換後的狀態（遊戲中用 n 指令即時切換）。
@@ -158,7 +170,12 @@ func (r *Renderer) hand(v game.PlayerView, seat int) {
 		if vc.Know.Clued {
 			s += "*"
 		}
-		pos.WriteString(cell(s, len(s)))
+		styled := s
+		if r.cm[vc.Card.ID] {
+			styled += r.style(ansiBold, "cm")
+			s += "cm"
+		}
+		pos.WriteString(cell(styled, len(s)))
 	}
 	r.printf("     位置  %s\n", pos.String())
 
