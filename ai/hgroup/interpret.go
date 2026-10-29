@@ -29,6 +29,8 @@ type interp struct {
 	cm     []int
 	// endStall：Level 8 終局中像 5's Chop Move 的提示，改當 5 Stall（只救下點到的 5，不 Chop Move）
 	endStall bool
+	// anySave：Level 9 Locked Hand Save / 8 Clue Save——焦點只是被救下（任何有用的牌），不是要人打出的 play clue
+	anySave bool
 	// distribution：Level 8 The Distribution Clue（焦點和別人手上已被拿到的牌重複，是把那張牌分給接收者打）
 	distribution bool
 
@@ -106,6 +108,8 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		}
 	}
 
+	it.anySave = s.anySaveStall(giver, R, touched, &it)
+
 	defer s.saveSim()()
 	// 我看得到被點到的牌時：這次提示的 Good Touch 推論立刻生效（給提示者看得到我的已提示牌，
 	// 就不會點到和它們一樣的牌），算解讀時就用得上
@@ -149,9 +153,13 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	}
 
 	base := s.overlay[it.focus]
-	maySave := it.chopFocus || it.cmKind == cmFive || it.endStall || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
+	maySave := it.chopFocus || it.anySave || it.cmKind == cmFive || it.endStall || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
 	candsOf := func() []cand {
 		cs := s.playCands(R, giver, R, it.focus, base)
+		if it.anySave {
+			// 拖延時的救牌：只有直接能打的牌面才可能是 play clue，不會有人照它盲打
+			cs = slices.DeleteFunc(cs, func(c cand) bool { return len(c.deps) > 0 })
+		}
 		if maySave {
 			cs = append(cs, s.saveCands(R, giver, R, &it, h, base)...)
 		}
@@ -197,8 +205,9 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		it.cands = slices.DeleteFunc(it.cands, selfFin)
 	}
 	// Level 7：被 Scream / Shout Discard 叫到的人必須給提示，只補已提示牌資訊的提示是拖延，不會讓人盲打
-	// （Level 9 Double Discard Situation 也一樣：「should not be read as a Play Clue or a Finesse」）
-	if it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.dda != nil && s.dda.target == giver && s.stallValid(giver, R)) {
+	// （Level 9 Fill-In Clue：嚴重度 2 以上——Double Discard Situation、鎖手、提示滿 8——也一樣，
+	// 「should not be read as a Play Clue or a Finesse」；給提示者有事可做時不是拖延，stallValid）
+	if it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.stallSeverity(giver) >= 2 && s.stallValid(giver)) {
 		finesses := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse }) }
 		it.cands = slices.DeleteFunc(it.cands, finesses)
 		it.fallback = slices.DeleteFunc(it.fallback, finesses)
@@ -332,6 +341,8 @@ func (s *state) saveCands(obs, giver, R int, it *interp, h game.Hint, base idSet
 		}
 		ok := false
 		switch {
+		case it.anySave:
+			ok = true
 		case t.color() == game.Black && h.Kind == game.HintColor && (t.rank() == 2 || t.rank() == game.MaxRank):
 			ok = s.blackColorSave(it)
 		case t.color() == game.Black && h.Kind == game.HintRank && (t.rank() == 3 || t.rank() == 4):

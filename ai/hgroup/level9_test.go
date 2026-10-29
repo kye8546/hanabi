@@ -74,3 +74,36 @@ func TestL9EarlyGameNextMustFiveStall(t *testing.T) {
 		}
 	}
 }
+
+func TestL9EightClueSave(t *testing.T) {
+	// 原文 8 Clue Save：提示滿 8（不是第一回合）時，點到不在 slot 1 的新牌可以只是救牌。
+	// Alice 提示、Bob 棄牌回到 8 個提示、Cathy 打出 y1；Alice 紅色點到 Cathy slot 4 的 r2，而 Bob 的 finesse position 是 r1。
+	// Lv8 讀成 finesse Bob 的 r1，Bob 盲打；Lv9 是 8 Clue Save，Bob 不盲打
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "g4 y4 b4 w4 g3", "r1 b3 y3 w3 g3", "y1 b4 w4 r2 b3")
+		force(t, g, game.HintRankTo(2, 4))
+		force(t, g, game.Discard(4))
+		force(t, g, game.Play(0))
+		force(t, g, game.HintColorTo(2, game.Red))
+		if a := step(t, g, bots); (a == game.Play(0)) != (lv < 9) {
+			t.Errorf("Lv%d：Bob 盲打 = %v（%+v）", lv, a == game.Play(0), a)
+		}
+	}
+}
+
+func TestL9LockedHandSave(t *testing.T) {
+	// 原文 Locked Hand Save：鎖手的 Bob 用紅色點到 Cathy chop 上的 r2（不是 critical），Alice 的 finesse position 是 r1。
+	// Lv8 讀成 finesse Alice 的 r1；Lv9 只是救下 Cathy 的 chop，Alice 不盲打
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "r1 y4 b4 w4 g3", "g5 y5 b5 w5 r5", "y4 b4 w4 g4 r2")
+		for slot := range 5 {
+			known(t, g, bots, 1, slot, []string{"g5", "y5", "b5", "w5", "r5"}[slot])
+		}
+		g.Hints, g.Current = 5, 1
+		force(t, g, game.HintColorTo(2, game.Red))
+		force(t, g, game.HintRankTo(0, 4)) // Cathy 給個無關的提示
+		if a := step(t, g, bots); (a == game.Play(0)) != (lv < 9) {
+			t.Errorf("Lv%d：Alice 盲打 = %v（%+v）", lv, a == game.Play(0), a)
+		}
+	}
+}

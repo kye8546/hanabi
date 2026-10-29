@@ -42,7 +42,7 @@ func (s *state) myDDA() bool {
 // stallSeverity（Level 9 Stall Table）：giver 這一手的拖延情況嚴重度。4 = 提示滿 8（第一回合除外）、3 = 鎖手、
 // 2 = Double Discard Situation 或被 Scream / Shout Discard 叫到、1 = Early Game、0 = 一般情況。
 // Double Discard Situation 中，他手上有大家都知道能打 / 沒用的牌時（loaded）不必拖延，不算。
-// 只用大家都知道的條件：試過再加上「看得到他還有更好的提示」（betterClueVisible），各家看到的牌不同，
+// 只用大家都知道的條件：試過再加上「看得到他還有更好的提示」，各家看到的牌不同（見 stallValid），
 // 5 Stall / 5's Chop Move 等讀法不一致，Black 4 人局 1000 局 -0.06。
 // 嚴重度越高，能當成拖延的提示越多（5 Stall 從 1 起，Tempo Clue Stall、Fill-In Clue、Hard Burn 從 2 起）。
 func (s *state) stallSeverity(giver int) int {
@@ -61,38 +61,17 @@ func (s *state) stallSeverity(giver int) int {
 
 // stallValid（Level 9 Stall Table 的優先順序）：giver 在拖延情況下給的提示，大家才把它當成拖延提示。
 // 他手上有大家都知道能打的牌、或（還能棄牌時）大家都知道沒用的牌，就不必拖延（5 Stalls are a Last Resort，
-// hanabi-bot 的 giver_loaded）；接收者看得到他還有一般的 play / save clue 可給（betterClueVisible），也不是拖延——
-// 「if it can be seen that there is a better clue available for them to give, then everyone can know that they are not
-// giving a stall clue」。被 Scream / Shout 叫到的人（Level 7）一定要給提示，不看這些。
-func (s *state) stallValid(giver, R int) bool {
-	if s.screamed(giver) {
-		return true
-	}
-	return !s.loaded(giver) && !s.betterClueVisible(giver, R)
+// hanabi-bot 的 giver_loaded）。被 Scream / Shout 叫到的人（Level 7）一定要給提示，不看這個。
+// 原文另外說「看得到他還有更好的提示可給，大家就知道他不是在拖延」，但每個人看得到的牌不同（看不到自己的手牌，
+// 被 finesse 的人常常就是那個「更好的提示」的對象），試過照做：各家讀法不一致，3000 局 3–5 人局略差（Rainbow -0.02–0.05），
+// 不採用——拖延情況下大家一律照拖延解讀。
+func (s *state) stallValid(giver int) bool {
+	return s.screamed(giver) || !s.loaded(giver)
 }
 
 // loaded：p 手上有大家都知道能打的牌，或（還能棄牌時）大家都知道沒用的牌——他有事可做，不必拖延。
 func (s *state) loaded(p int) bool {
 	return s.publicPlayable(p, -1) || s.hints < game.MaxHints && s.hasPublicTrash(p, -1)
-}
-
-// betterClueVisible：從接收者 R 的角度，giver 還有一般的 play clue（不違反 Good Touch、焦點就是那張能打的牌）或
-// save clue 可給別人。只看 R 也看得到的玩家（不含 giver、R，也不含看不到自己手牌的我）。
-func (s *state) betterClueVisible(giver, R int) bool {
-	for p := range s.n {
-		if p == giver || p == R || p == s.me {
-			continue
-		}
-		for _, id := range s.hands[p] {
-			if t := identOfCard(s.cards[id]); !s.gotten(id) && s.playableNow(t) && !s.gottenAs(s.me, s.me, t, id) && s.cleanClueFor(p, id) {
-				return true
-			}
-		}
-		if ch := s.chop(p); ch >= 0 && s.needsSave(p, ch) {
-			return true
-		}
-	}
-	return false
 }
 
 // fiveStallTarget（Level 9 Early Game）：p 手上可以被 5 Stall 的牌（沒被提示、沒被 Chop Move、不在 chop 上的 5，
@@ -133,4 +112,24 @@ func (s *state) stallDistance(e clueEval) int {
 		}
 	}
 	return d
+}
+
+// anySaveStall（Level 9 Stall Table 的 Locked Hand Save / 8 Clue Save）：giver 在拖延情況下給的這個提示只是救下焦點
+// （任何有用的牌，不只 critical / 2 / 5），不是 play clue——只有直接能打的牌面可能讓人打出，不會有人照它盲打。
+//   - Locked Hand Save：giver 鎖手（嚴重度 3），點到接收者 chop 上的新牌，而且提示後接收者沒有鎖手。
+//   - 8 Clue Save：提示滿 8（嚴重度 4，第一回合除外），點到新牌、沒點到 slot 1。
+//
+// 給提示者有事可做時不是拖延（stallValid）。hanabi-bot 在鎖手時的嚴重度 3 以上
+// 都允許 Locked Hand Save（提示滿 8 時 chop 本來就在 8 Clue Save 的範圍內）。
+func (s *state) anySaveStall(giver, R int, touched []int, it *interp) bool {
+	if !s.knows(lvStall) || it.fix || it.cmKind != 0 || it.endStall || len(it.newCards) == 0 {
+		return false
+	}
+	switch sev := s.stallSeverity(giver); {
+	case sev == 4 && !slices.Contains(touched, s.hands[R][0]):
+	case sev >= 3 && it.chopFocus && s.publicChop(R, touched) >= 0:
+	default:
+		return false
+	}
+	return s.stallValid(giver)
 }
