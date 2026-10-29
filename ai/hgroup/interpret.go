@@ -274,9 +274,47 @@ func (s *state) playCands(obs, giver, R, focus int, base idSet) []cand {
 		}
 		if deps, ok := s.connect(obs, giver, R, focus, t); ok {
 			out = append(out, cand{id: t, deps: deps})
+			if alt, ok := s.reverseInsteadOfSelfPrompt(obs, giver, R, focus, t, deps); ok {
+				out = append(out, cand{id: t, deps: alt})
+			}
 		}
 	}
 	return out
+}
+
+// reverseInsteadOfSelfPrompt：接收者自己的角度，t 要 self-prompt 他看不到的已提示牌，但那張也可能不是連接牌——
+// 給提示者與後面的人都看得到它。Prompts > Finesses 是第一人稱的規則：看得到它不是連接牌的人，會照 finesse
+// 去找，可能就是他自己（Reverse Finesse）。所以另外列出「那張不是連接牌、改 finesse 別人」的解讀，接收者照
+// Reverse Finesse 的規矩先等一回合，讓看得到的人決定（使用者回報 20261029-124451 t7：「2」點到 AI-1 被綠色點過的
+// G2，AI-1 另一張綠牌可能是 G1，AI-2 的 finesse position 是 G1。AI-1 只想到 self-prompt 或直接的 M2，立刻打出而打錯）。
+func (s *state) reverseInsteadOfSelfPrompt(obs, giver, R, focus int, t ident, deps []dep) ([]dep, bool) {
+	if obs != R || !s.knows(lvReverseFinesse) {
+		return nil, false
+	}
+	var mine []int
+	for _, d := range deps {
+		if d.player == R && !d.finesse {
+			if _, ok := s.see(obs, d.card); !ok {
+				mine = append(mine, d.card)
+			}
+		}
+	}
+	if len(mine) == 0 {
+		return nil, false
+	}
+	defer s.saveSim()()
+	s.notPrompt = append(slices.Clone(s.notPrompt), mine...)
+	alt, ok := s.connect(obs, giver, R, focus, t)
+	if !ok || slices.ContainsFunc(alt, func(d dep) bool { return d.player == R }) {
+		return nil, false
+	}
+	// 只限要接收者之後的人盲打的（他要等的 Reverse Finesse）。給提示者與接收者之間的人在接收者之前就輪到了，
+	// 他真的盲打時 blindProves 會處理；先當成他會被 finesse，會讓接收者在他行動前誤讀別的提示
+	pos := func(p int) int { return (p - giver + s.n) % s.n }
+	if !slices.ContainsFunc(alt, func(d dep) bool { return d.finesse && pos(d.player) > pos(R) }) {
+		return nil, false
+	}
+	return alt, true
 }
 
 // saveCands 列出焦點在 chop 上時，作為 save clue 可能的牌面：

@@ -72,12 +72,14 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		// 要靠接收者自己或我（看不到）的，不補——原文：那人沒盲打時，通常是另一種直接的解讀
 		visible, selfOK, self := true, true, false
 		for _, d := range deps {
-			if !d.finesse {
-				continue
-			}
 			if d.player == rec.target {
+				// 要接收者自己 self-prompt / self-finesse 的：只在其他解讀都不成立後才成立，放進 fallback
+				// （例如「那張不是 prompt、改 finesse 別人」的解讀（reverseInsteadOfSelfPrompt）他沒打，重找就回到 self-prompt）
 				self = true
 				visible = false
+				continue
+			}
+			if !d.finesse {
 				continue
 			}
 			if t, ok := s.see(rec.target, d.card); !ok || t != d.id && d.layers == 0 || d.player == s.me {

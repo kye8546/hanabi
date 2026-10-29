@@ -135,6 +135,7 @@ type sim struct {
 	// 從接收者的角度它們還在 finesse position 上
 	unclaimed []int
 	sameClue  []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
+	notPrompt []int // 找連接牌時不當 prompt 候選的已提示牌（接收者假設自己看不到的那張不是連接牌）
 	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
 	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
 	assumeMine bool

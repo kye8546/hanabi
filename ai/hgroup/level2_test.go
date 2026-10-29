@@ -698,3 +698,21 @@ func TestNoEarlyProtectBehindChop(t *testing.T) {
 		}
 	}
 }
+
+func TestReceiverWaitsForReverseFinesseDespiteSelfPrompt(t *testing.T) {
+	// 使用者回報 20261029-124451 t7（Rainbow）：使用者「2」點 AI-1 slot 5 被綠色點過的 G2，要 Reverse Finesse AI-2 slot 1 的 G1。
+	// AI-1 另一張被綠色點過的牌（實際 M4）可能是 G1，那張也可能是直接能打的 M2；但 AI-2 看得到那張不是 G1，
+	// 會照 finesse 找到自己（Prompts > Finesses 是第一人稱的規則）。AI-1 看到 AI-2 的 finesse position 是 G1，要先等一回合。
+	codes := "h1G h21 p1 h2R p5 p5 h12"
+	for _, lv := range []int{2, 8} {
+		g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1793249091841445000, lv, codes)
+		if a := bots[1].Act(g.View(1)); a.Type == game.ActPlay {
+			t.Errorf("Lv%d AI-1 應先等 AI-2 盲打 G1，卻打出 slot %d（%s）", lv, a.Slot+1, bots[1].Why())
+			continue
+		}
+		force(t, g, bots[1].Act(g.View(1)))
+		if a := bots[2].Act(g.View(2)); a != game.Play(0) {
+			t.Errorf("Lv%d AI-2 應盲打 slot 1 的 G1，卻做了 %+v（%s）", lv, a, bots[2].Why())
+		}
+	}
+}

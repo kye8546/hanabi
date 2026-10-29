@@ -121,7 +121,7 @@ func (s *state) findPrompt(obs, giver int, m ident, used []int) (d dep, took []i
 		p := (giver + k) % s.n
 		for _, id := range s.promptOrder(p) {
 			n := s.notes[id]
-			if slices.Contains(used, id) || !n.clued || !s.possOf(id).has(m) || n.willPlay || s.holderKnowsPlayable(id) ||
+			if slices.Contains(used, id) || slices.Contains(s.notPrompt, id) || !n.clued || !s.possOf(id).has(m) || n.willPlay || s.holderKnowsPlayable(id) ||
 				s.freeChoiceFinesse(obs, id, m) {
 				continue
 			}
