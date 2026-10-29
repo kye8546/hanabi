@@ -226,6 +226,30 @@ func (s *state) cmSave(evs []clueEval, e clueEval) bool {
 		})
 		return !direct
 	}
+	if e.cmKind == cmTrash {
+		// 一次保護好幾張也一樣：另一個不是 Trash Chop Move 的提示也保護到同樣這幾張必須保留的牌，而且直接點到其中一些
+		// （例如 5's Chop Move 點到 w5、Chop Move chop 上的 r1），就給那個——直接點到的牌多了正向資訊。
+		// 使用者回報 20261029-122253 t42：黃色只點到垃圾 m1、保護 w5 與 r1，勝過「5」
+		var must []int
+		for _, id := range e.cm {
+			if s.needsSave(e.target, id) {
+				must = append(must, id)
+			}
+		}
+		_, other := best(evs, func(d clueEval) bool {
+			if d.target != e.target || d.misleads || d.bad > 0 || d.cmKind == cmTrash ||
+				!(d.kind == kindPlay || d.kind == kindSave || d.kind == kindChopMove && s.cmSave(evs, d)) {
+				return false
+			}
+			for _, id := range must {
+				if !d.covers(e.target, id) {
+					return false
+				}
+			}
+			return true
+		})
+		return !other
+	}
 	return true
 }
 

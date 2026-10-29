@@ -271,13 +271,24 @@ func TestL4GiveFivesChopMove(t *testing.T) {
 }
 
 func TestL4GiveTrashChopMoveForTwoCriticals(t *testing.T) {
-	// Bob 的 chop 連著兩張 critical（slot 4 的 y4、slot 5 的 r4），slot 3 是垃圾 b1：
-	// 一個 save clue 只能救一張，Trash Chop Move 一次保護兩張
-	g, bots := scenarioAt(t, 4, allOnes, "y3 g4 b4 w4 b3", "g3 b1 y4 r4 y3", "y3 b3 w3 g3 w4")
-	g.Discards = append(g.Discards, card(t, "r4"), card(t, "y4"))
+	// Bob 棄掉 y3、抽一張牌後，chop 連著兩張 critical（slot 4 的 y4、slot 5 的 w3），slot 3 是垃圾 b1：
+	// 沒有一個提示能同時直接點到兩張，Trash Chop Move 一次保護兩張
+	g, bots := scenarioAt(t, 4, allOnes, "y3 g4 b4 w4 b3", "g3 b1 y4 w3 y3", "y3 b3 r3 g3 w4")
+	g.Discards = append(g.Discards, card(t, "w3"), card(t, "y4"))
 	midGame(t, g)
 	if a := step(t, g, bots); a != game.HintRankTo(1, 1) {
 		t.Fatalf("Alice 應給 Bob「1」（Trash Chop Move 兩張 critical），卻做了 %+v", a)
+	}
+}
+
+func TestL4DirectSaveOverTrashChopMove(t *testing.T) {
+	// 同上，但 chop 上的兩張 critical 是 y4、r4：「4」能同時直接救下兩張（還有正向資訊），
+	// 原文只在「no other choice」時才用 Trash Chop Move 救能直接提示的牌
+	g, bots := scenarioAt(t, 4, allOnes, "y3 g4 b4 w4 b3", "g3 b1 y4 r4 y3", "y3 b3 w3 g3 w4")
+	g.Discards = append(g.Discards, card(t, "r4"), card(t, "y4"))
+	midGame(t, g)
+	if a := step(t, g, bots); a != game.HintRankTo(1, 4) {
+		t.Fatalf("Alice 應給 Bob「4」（直接救兩張 critical），卻做了 %+v", a)
 	}
 }
 
@@ -367,5 +378,18 @@ func TestOCMAfterFinesseUnknownToLaterGiver(t *testing.T) {
 	}
 	if a := bots[1].Act(g.View(1)); a == game.Discard(3) {
 		t.Errorf("AI-1 不該棄掉被 Chop Move 的 G2（%s）", bots[1].Why())
+	}
+}
+
+func TestFiveCMOverTrashCMSameProtection(t *testing.T) {
+	// 使用者回報 20261029-122253 t42（Rainbow，提示剩 1 個）：AI-1 的手牌 W1 M1 W5 R1(chop) B5(已提示)，黃色、彩虹都已完成。
+	// 黃色只點到 M1 = Trash Chop Move，保護 W5、R1；「5」點到 W5 = 5's Chop Move，保護 R1、也救下 W5，
+	// 保護的牌一樣、還多了 W5 是 5 的正向資訊，應該給「5」（原文：能直接提示的牌不該用 Trash Chop Move 保護）。
+	codes := "h11 p3 h1G p1 p5 h0W p3 h03 h05 h15 h21 p3 p2 h02 d5 p4 h2W p2 d2 h0Y d5 p2 d2 h1Y p2 p1 h0R p2 p4 d5 h25 d3 p1 h1G p3 h14 p2 p4 h04 p1 p3"
+	for _, lv := range []int{4, 8} {
+		g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1793247773385695000, lv, codes)
+		if a := bots[2].Act(g.View(2)); a != game.HintRankTo(1, 5) {
+			t.Errorf("Lv%d AI-2 應給 AI-1「5」（5's Chop Move），卻做了 %+v（%s）", lv, a, bots[2].Why())
+		}
 	}
 }
