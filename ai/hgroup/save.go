@@ -281,6 +281,10 @@ func (s *state) nextWillClue(next, hints int, used []int) bool {
 		if ch := s.chop(p); ch >= 0 && !slices.Contains(used, ch) && s.needsSave(p, ch) {
 			return true // 有 save clue 可給
 		}
+		// Level 9 Early Game 5 Stalls：還沒有人做過 5 Stall 時，全隊必須做一次（給我的不算，Permission to Discard）
+		if s.knows(lvStall) && !s.stalled5 && s.fiveStallTarget(p, used) >= 0 {
+			return true
+		}
 	}
 	return false
 }

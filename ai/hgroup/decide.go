@@ -262,7 +262,18 @@ func (s *state) stepEarlyTrash(t *turn) (game.Action, string, bool) {
 // stepFiveStall（Level 2）：Early Game 沒有 play / save clue 可給時，用 5 Stall 代替棄牌，延長 Early Game。
 func (s *state) stepFiveStall(t *turn) (game.Action, string, bool) {
 	if !s.midGame && t.v.Hints >= fiveStallHints {
-		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindStall }); ok {
+		evs := t.clues(s)
+		if s.knows(lvStall) {
+			// Level 9 5 Stalls Closest to Chop：必須 5 Stall 最靠近 chop 的那張 5
+			d := -1
+			for _, e := range evs {
+				if x := s.stallDistance(e); e.kind == kindStall && (d < 0 || x < d) {
+					d = x
+				}
+			}
+			evs = slices.DeleteFunc(slices.Clone(evs), func(e clueEval) bool { return e.kind != kindStall || s.stallDistance(e) != d })
+		}
+		if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindStall }); ok {
 			return ev.act, "5 Stall：Early Game 沒有其他提示可給，救下不在 chop 上的 5 代替棄牌", true
 		}
 	}

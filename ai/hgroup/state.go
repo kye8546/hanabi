@@ -88,6 +88,7 @@ type state struct {
 	seq       int  // 目前處理到的事件序號
 	midGame   bool // 已經有人棄過牌（Early Game 結束）
 	moved     bool // 已經有人行動過（Level 9：第一回合的 8 個提示不算拖延情況）
+	stalled5  bool // 這個 Early Game 已經有人做過 5 Stall（Level 9：Early Game 必須做的 5 Stall 全隊只要一次）
 
 	why   string                                     // 最近一次決策的理由（寫進對局紀錄）
 	trace func(e game.Event, id int, old, new idSet) // 除錯用：筆記變化時呼叫

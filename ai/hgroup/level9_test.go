@@ -42,3 +42,35 @@ func TestL9NoDDAWhenOtherCopyVisible(t *testing.T) {
 		t.Errorf("Bob 應棄 chop，卻做了 %+v", a)
 	}
 }
+func TestL9FiveStallClosestToChop(t *testing.T) {
+	// 原文 5 Stalls Closest to Chop（位置對調）：Early Game，Alice 只剩 5 Stall 可給。Bob 的 g5 在 slot 3（離 chop 兩張），
+	// Cathy 的 w5 在 slot 4（離 chop 一張）。Lv9 必須 5 Stall 最靠近 chop 的那張，提示 Cathy；Lv8 照分數提示比較近的 Bob
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "y4 g4 b4 w4 r4", "y3 b3 g5 y4 w3", "b3 y3 g3 w5 b4")
+		a := step(t, g, bots)
+		want := game.HintRankTo(1, 5)
+		if lv >= 9 {
+			want = game.HintRankTo(2, 5)
+		}
+		if a != want {
+			t.Errorf("Lv%d：Alice 應 %+v，卻做了 %+v", lv, want, a)
+		}
+	}
+}
+
+func TestL9EarlyGameNextMustFiveStall(t *testing.T) {
+	// Early Game：Bob 的 chop 是 y2，Bob 能給的提示只有 Cathy 的 r1 和 Cathy slot 3 的 w5（5 Stall）。
+	// Alice 給 Cathy 紅色（r1）。Lv8 認為用掉 r1 之後 Bob 就沒有提示可給、會棄 chop，先救 y2；
+	// Lv9 的 Early Game 全隊必須做一次 5 Stall，Bob 會 5 Stall w5、不會棄牌，Alice 照樣給 play clue
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "g4 y4 b4 w4 g3", "y3 b3 g3 w3 y2", "r1 b3 w5 g3 y4")
+		a := step(t, g, bots)
+		saved := a == game.HintRankTo(1, 2) || a == game.HintColorTo(1, game.Yellow)
+		if saved != (lv < 9) {
+			t.Errorf("Lv%d：Alice 救 Bob 的 y2 = %v（%+v）", lv, saved, a)
+		}
+		if lv >= 9 && a != game.HintColorTo(2, game.Red) && a != game.HintRankTo(2, 1) {
+			t.Errorf("Lv%d：Alice 應提示 Cathy 的 r1，卻做了 %+v", lv, a)
+		}
+	}
+}

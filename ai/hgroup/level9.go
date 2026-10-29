@@ -2,7 +2,11 @@
 
 package hgroup
 
-import "hanabi/game"
+import (
+	"slices"
+
+	"hanabi/game"
+)
 
 // ddaRec：Level 9 Double Discard Avoidance。上一位剛棄掉（或打錯）牌面 id，它只剩最後一張，
 // 而 target（下一位）的 chop 依提示本身可能就是它——他這一手棄 chop 可能就棄掉最後一張。
@@ -89,4 +93,44 @@ func (s *state) betterClueVisible(giver, R int) bool {
 		}
 	}
 	return false
+}
+
+// fiveStallTarget（Level 9 Early Game）：p 手上可以被 5 Stall 的牌（沒被提示、沒被 Chop Move、不在 chop 上的 5，
+// 不含 used）中最靠近 chop 的那張；沒有則回傳 -1。
+func (s *state) fiveStallTarget(p int, used []int) int {
+	best, bestDist := -1, 0
+	for _, id := range s.hands[p] {
+		if c := s.cards[id]; c.Rank != game.MaxRank || s.gotten(id) || s.notes[id].cm || id == s.chop(p) || slices.Contains(used, id) {
+			continue
+		}
+		if d := s.chopDistance(p, id); best < 0 || d < bestDist {
+			best, bestDist = id, d
+		}
+	}
+	return best
+}
+
+// chopDistance：p 的牌 id 右邊還有幾張沒被提示、沒被 Chop Move 的牌（chop 左邊一張是 1；原文 5 Stalls Closest to Chop 的「one-away from chop」）。
+func (s *state) chopDistance(p, id int) int {
+	h := s.hands[p]
+	d := 0
+	for _, o := range h[slices.Index(h, id)+1:] {
+		if !s.gotten(o) && !s.notes[o].cm {
+			d++
+		}
+	}
+	return d
+}
+
+// stallDistance（Level 9 5 Stalls Closest to Chop）：5 Stall e 點到的新 5 中最靠近 chop 的那張離 chop 多遠。
+func (s *state) stallDistance(e clueEval) int {
+	d := -1
+	for _, id := range e.touched {
+		if !s.gotten(id) && !s.notes[id].cm {
+			if x := s.chopDistance(e.target, id); d < 0 || x < d {
+				d = x
+			}
+		}
+	}
+	return d
 }

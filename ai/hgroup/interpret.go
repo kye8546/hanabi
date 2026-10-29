@@ -375,6 +375,9 @@ func (s *state) onClue(e game.Event) {
 		touched = append(touched, s.hands[R][sl])
 	}
 	it := s.interpret(e.Player, R, e.Hint, touched)
+	if !s.midGame && e.Hint.Kind == game.HintRank && e.Hint.Rank == game.MaxRank && len(it.newCards) > 0 && !it.chopFocus && it.cmKind == 0 {
+		s.stalled5 = true
+	}
 	fpAt := make([]int, s.n)
 	for p := range s.n {
 		fpAt[p] = s.finessePos(p)
