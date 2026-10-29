@@ -75,6 +75,14 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		if !ok || mustClue && (a.Type != game.ActHint || s.misreadAsGeneration(a)) {
 			continue
 		}
+		// Level 9 The Anxiety Play：這一手之後下一位鎖手、提示 0 個，他就會打出最可能能打的牌；那張其實不能打時，
+		// 必須棄牌換一個提示給他（原文：「you have to discard to generate a clue for them」；不能被下面的 Scream 改回打牌）
+		if s.leavesLockedAnxious(a, v.Hints) {
+			if slot := s.feedSlot(); slot >= 0 {
+				s.why = "下一位鎖手：不讓他停在 0 個提示（他的 Anxiety Play 會打錯），棄牌換一個提示給他"
+				return game.Discard(slot)
+			}
+		}
 		// Level 8：這次棄牌會被當成 Positional Discard，我卻不是要叫人盲打：改棄該棄的牌（已知垃圾或 chop）
 		if a.Type == game.ActDiscard && !positionalWhy(why) && s.posDiscardLike(s.me, s.hands[s.me][a.Slot]) {
 			if exp := s.posExpected(s.me); exp >= 0 {
@@ -466,17 +474,11 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 		}
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
-	bestSlot, bestRisk := len(hand)-1, 2.0
-	for slot := len(hand) - 1; slot >= 0; slot-- {
-		p := s.myPoss(hand[slot]).list()
-		crit := 0
-		for _, i := range p {
-			if s.critical(i) {
-				crit++
-			}
-		}
-		if risk := float64(crit) / float64(max(len(p), 1)); risk < bestRisk {
-			bestSlot, bestRisk = slot, risk
+	bestSlot, bestRisk := s.lockedDiscard()
+	// Level 9 The Anxiety Play：鎖手又提示 0 個——隊友刻意讓我停在 0 個提示，表示我有一張牌能打
+	if s.knows(lvStall) && v.Hints == 0 && s.publicChop(s.me, nil) < 0 {
+		if slot := s.anxietySlot(s.me); slot >= 0 {
+			return game.Play(slot), "Anxiety Play：鎖手、提示 0 個，打出最可能能打的牌"
 		}
 	}
 	if len(evs) > 0 {
@@ -498,4 +500,23 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 		}
 	}
 	return game.Discard(bestSlot), "鎖手棄牌"
+}
+
+// lockedDiscard：鎖手時最不可能是 critical 的牌（由右而左找）與它是 critical 的機率。
+func (s *state) lockedDiscard() (int, float64) {
+	hand := s.hands[s.me]
+	bestSlot, bestRisk := len(hand)-1, 2.0
+	for slot := len(hand) - 1; slot >= 0; slot-- {
+		p := s.myPoss(hand[slot]).list()
+		crit := 0
+		for _, i := range p {
+			if s.critical(i) {
+				crit++
+			}
+		}
+		if risk := float64(crit) / float64(max(len(p), 1)); risk < bestRisk {
+			bestSlot, bestRisk = slot, risk
+		}
+	}
+	return bestSlot, bestRisk
 }

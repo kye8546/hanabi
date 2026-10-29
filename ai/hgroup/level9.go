@@ -133,3 +133,91 @@ func (s *state) anySaveStall(giver, R int, touched []int, it *interp) bool {
 	}
 	return s.stallValid(giver)
 }
+
+// anxietySlot（Level 9 The Anxiety Play）：鎖手的 p 在提示 0 個時要打的牌——最可能能打的那張（筆記扣掉沒用的牌面後，
+// 能打的牌面所佔的比例），一樣時打最左邊的（Leftmost Playable Principle）。都不可能能打時回傳 -1（他只能棄牌）。
+// 原文：刻意讓鎖手的人停在 0 個提示，就表示他有一張牌能打。
+func (s *state) anxietySlot(p int) int {
+	best, bestP := -1, 0.0
+	for slot, id := range s.hands[p] {
+		n := s.notes[id]
+		if n.bad {
+			continue
+		}
+		poss := n.poss
+		if p == s.me {
+			poss = s.myPoss(id)
+		}
+		if u := poss & s.useful(); u != 0 {
+			poss = u
+		}
+		k := 0
+		for _, i := range poss.list() {
+			if s.playableNow(i) {
+				k++
+			}
+		}
+		if pr := float64(k) / float64(max(poss.count(), 1)); pr > bestP {
+			best, bestP = slot, pr
+		}
+	}
+	return best
+}
+
+// leavesLockedAnxious（Level 9 The Anxiety Play）：我做了 a 之後提示是 0 個、下一位鎖手又不知道有牌可打——他就會
+// 打出最可能能打的牌（anxietySlot）；我看得到那張其實不能打（或他沒有可打的候選）時回傳 true。a 是提示他、讓他從此鎖手的
+// 提示時，他要打哪張不好預測，一律算會打錯。原文：「If the team is out of clues and someone's hand is fully clued, then you
+// have to discard to generate a clue for them. Similarly, if there is only 1 clue left, you cannot steal it from them.」
+func (s *state) leavesLockedAnxious(a game.Action, hints int) bool {
+	if !s.knows(lvStall) || a.Type == game.ActDiscard {
+		return false
+	}
+	if a.Type == game.ActHint {
+		hints--
+	} else if c, ok := s.myPoss(s.hands[s.me][a.Slot]).single(); ok && s.playableNow(c) {
+		if c.rank() == game.MaxRank {
+			hints++ // 打出 5 換回一個提示
+		}
+		// 照我打出之後的煙火判斷他要打的牌（例如我打出的正是他那張的同一張，他那張就不能打了）
+		old := s.stacks[c.color()]
+		s.stacks[c.color()] = c.rank()
+		defer func() { s.stacks[c.color()] = old }()
+	}
+	next := (s.me + 1) % s.n
+	if hints > 0 || next == s.me {
+		return false
+	}
+	if a.Type == game.ActHint && a.Target == next {
+		h := a.Hint
+		var touched []int
+		for _, id := range s.hands[next] {
+			if h.Matches(s.cards[id]) {
+				touched = append(touched, id)
+			}
+		}
+		if s.publicChop(next, nil) >= 0 {
+			it := s.interpret(s.me, next, h, touched) // Chop Move 的牌也算保護住了
+			return s.chopAfter(next, append(touched, it.cm...)) < 0
+		}
+		// 他本來就鎖手：提示點到能打的牌，他多半就知道能打了
+		return !slices.ContainsFunc(touched, func(id int) bool { return s.playableNow(identOfCard(s.cards[id])) })
+	}
+	// 鎖手只看大家都知道的（被提示、被 Chop Move）：被 finesse 的牌他自己不一定知道，各家判斷會不一致
+	if s.publicChop(next, nil) >= 0 || s.keepsChop(next) {
+		return false
+	}
+	slot := s.anxietySlot(next)
+	return slot < 0 || !s.playableNow(identOfCard(s.cards[s.hands[next][slot]]))
+}
+
+// feedSlot：棄牌換提示給鎖手的下一位時要棄的牌：已知垃圾、chop，我也鎖手時是最不可能 critical 的已提示牌。
+func (s *state) feedSlot() int {
+	if slot := s.trashSlot(false); slot >= 0 {
+		return slot
+	}
+	if c := s.chop(s.me); c >= 0 {
+		return slices.Index(s.hands[s.me], c)
+	}
+	slot, _ := s.lockedDiscard()
+	return slot
+}

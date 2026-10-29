@@ -91,6 +91,30 @@ func TestL9EightClueSave(t *testing.T) {
 	}
 }
 
+// lockBob 讓 Bob 鎖手：slot 1 只知道是紅色，slot 2–3 是 5，slot 4–5 是 4。
+func lockBob(t *testing.T, g *game.Game, bots []*Bot) {
+	t.Helper()
+	preClued(t, g, bots, 1, 0, idents(t, "r1 r2 r3 r4 r5"))
+	preClued(t, g, bots, 1, 1, idents(t, "r5 y5 g5 b5 w5"))
+	preClued(t, g, bots, 1, 2, idents(t, "r5 y5 g5 b5 w5"))
+	preClued(t, g, bots, 1, 3, idents(t, "r4 y4 g4 b4 w4"))
+	preClued(t, g, bots, 1, 4, idents(t, "r4 y4 g4 b4 w4"))
+}
+
+func TestL9AnxietyPlay(t *testing.T) {
+	// 原文 The Anxiety Play：Bob 鎖手、提示 0 個——隊友刻意讓他停在 0 個提示，表示他有一張牌能打。
+	// 最可能能打的是只知道是紅色的 slot 1（r1）。Lv9 打出它；Lv8 照舊棄牌
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "g4 y4 b4 w4 g3", "r1 g5 y5 b4 w4", "y3 b3 g3 w3 y4")
+		g.Hints, g.Current = 0, 1
+		lockBob(t, g, bots)
+		a := step(t, g, bots)
+		if got := a == game.Play(0); got != (lv >= 9) {
+			t.Errorf("Lv%d：Bob 打出 slot 1 = %v（%+v）", lv, got, a)
+		}
+	}
+}
+
 func TestL9LockedHandSave(t *testing.T) {
 	// 原文 Locked Hand Save：鎖手的 Bob 用紅色點到 Cathy chop 上的 r2（不是 critical），Alice 的 finesse position 是 r1。
 	// Lv8 讀成 finesse Alice 的 r1；Lv9 只是救下 Cathy 的 chop，Alice 不盲打
@@ -104,6 +128,21 @@ func TestL9LockedHandSave(t *testing.T) {
 		force(t, g, game.HintRankTo(0, 4)) // Cathy 給個無關的提示
 		if a := step(t, g, bots); (a == game.Play(0)) != (lv < 9) {
 			t.Errorf("Lv%d：Alice 盲打 = %v（%+v）", lv, a == game.Play(0), a)
+		}
+	}
+}
+
+func TestL9FeedLockedPlayer(t *testing.T) {
+	// 同上，但 Bob 的紅牌是 r3，Anxiety Play 會打錯。提示 0 個，Alice 有大家都知道的 y1：
+	// Lv9 的 Alice 不能讓他停在 0 個提示，棄牌換一個提示給他；Lv8 照常打出 y1
+	for _, lv := range []int{8, 9} {
+		g, bots := scenarioAt(t, lv, "", "y1 y4 b4 w4 g3", "r3 g5 y5 b4 w4", "y3 b3 g3 w3 y4")
+		g.Hints = 0
+		lockBob(t, g, bots)
+		known(t, g, bots, 0, 0, "y1")
+		a := step(t, g, bots)
+		if got := a.Type == game.ActDiscard; got != (lv >= 9) {
+			t.Errorf("Lv%d：Alice 棄牌 = %v（%+v）", lv, got, a)
 		}
 	}
 }
