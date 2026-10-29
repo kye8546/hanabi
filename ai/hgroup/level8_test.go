@@ -290,3 +290,16 @@ func TestBurnWhenLastDrawStrandsChain(t *testing.T) {
 		}
 	}
 }
+
+func TestEndGameCountsOnlyTimelyPlays(t *testing.T) {
+	// 使用者回報 20261029-144249 t74（Rainbow）：只剩 W3、W4、W5，牌堆 1 張、提示 1 個；W3、W4 都在使用者手上，
+	// W5 在 AI-2 手上。白色點 W5（Reverse Finesse 使用者的 W3）和「3」直接點 W3 都只來得及打出 W3，
+	// 直接的提示不必靠對方讀懂 finesse。以前把 W5 也算成會打出，選了白色
+	codes := "h21 d5 p5 h11 p4 p2 h1B p3 d5 h22 p5 d5 h2G h21 p4 h24 d5 h0Y d4 h0G p2 p5 d5 p3 d5 d4 p4 d4 h04 h05 p1 h0G h0B p1 p5 h14 p3 h2R d4 p1 d5 p2 d3 h03 h01 p5 p2 d4 h24 p1 p5 d3 h02 d5 p1 h2B p1 h24 d4 p1 h14 p1 d2 h25 h05 h0Y p2 h2R h1G p2 h0R h05 p1"
+	for _, lv := range []int{1, 8} {
+		g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1793256169623026000, lv, codes)
+		if a := bots[1].Act(g.View(1)); a != game.HintRankTo(0, 3) {
+			t.Errorf("Lv%d AI-1 應直接用「3」提示使用者的 W3，卻做了 %+v（%s）", lv, a, bots[1].Why())
+		}
+	}
+}

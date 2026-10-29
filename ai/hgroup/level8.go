@@ -300,6 +300,62 @@ func (s *state) unblocksIdle(slot int) bool {
 	return false
 }
 
+// timelyPlays：給 R 的 play clue（焦點是 t，照 plan 打連接牌）之後，遊戲結束前最多真的打得出幾張新牌（連接牌 + 焦點）。
+// 這串牌照順序、由各自的持有者在他的回合打出（每人每回合一張）；我給提示之後最多還有
+// 牌堆張數 + 剩下的提示（每個提示能拖延一回合不抽牌）+ 人數（最後一輪）個回合，牌堆抽完後就是最後一輪剩下的回合。
+// 打不到的牌不算這個提示的價值（常識，所有等級）：使用者回報 20261029-144249 t74，只剩 W3、W4、W5，牌堆 1 張、
+// 提示 1 個，W3、W4 都在使用者手上、來不及都打；白色點 AI-2 的 W5（Reverse Finesse 使用者的 W3）被算成打出兩張，
+// 勝過直接用「3」提示 W3，其實一樣只打得出 W3，直接的提示不必靠對方讀懂 finesse。
+// 中間的牌不在計畫裡、也找不到已被拿到的那張時（例如在我手上不確定的牌），照舊算全部。
+// 這次提示點到、持有者本來不知道要打的連接牌，也是這個提示讓它打出的（例如綠色點到新的 g5 和只被「4」點過的 g4，
+// 來得及的只有 g4）。結果不超過原本的算法（焦點 + 連接牌）。
+func (s *state) timelyPlays(R int, t ident, plan []dep, touched []int) int {
+	all := 1 + len(plan)
+	budget := s.deck + max(s.hints-1, 0) + s.n
+	if s.deck == 0 && s.final > 0 {
+		budget = s.final - 1
+	}
+	if budget >= s.n*(int(t.rank())+1) {
+		return all // 回合綽綽有餘
+	}
+	c := t.color()
+	turn, n := 0, 0
+	for r := s.stacks[c] + 1; r <= t.rank(); r++ {
+		m := identOf(c, r)
+		p, fresh := -1, true
+		if m == t {
+			p = R
+		} else if i := slices.IndexFunc(plan, func(d dep) bool { return d.id == m }); i >= 0 {
+			p = plan[i].player
+		} else if id := s.alreadyGotten(s.me, s.me, m, nil); id >= 0 {
+			p, fresh = s.holder(id), slices.Contains(touched, id) && !s.notes[id].willPlay && !s.holderKnowsPlayable(id)
+		}
+		if p < 0 {
+			return all
+		}
+		// 他在 turn 之後的第一個回合（我後面第 k 位的回合是 k、k+n、k+2n…；我自己是 n、2n…）
+		k := (p - s.me + s.n) % s.n
+		if k == 0 {
+			k = s.n
+		}
+		next := k
+		if next <= turn {
+			next += (turn - k + s.n) / s.n * s.n
+			if next <= turn {
+				next += s.n
+			}
+		}
+		if next > budget {
+			break
+		}
+		turn = next
+		if fresh {
+			n++
+		}
+	}
+	return min(n, all)
+}
+
 // turnsLeft：我行動後牌堆剩 deck 張，之後每回合都抽牌的話，我後面第 k 位還有幾回合
 // （再 deck 回合抽完，接著每人最後一回合，共 deck + n 回合）。
 func (s *state) turnsLeft(k, deck int) int {

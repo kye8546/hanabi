@@ -241,9 +241,11 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	switch {
 	case ev.danger:
 		return ev, true
+	case soon && ev.bad == 0 && s.timelyPlays(R, t, plan, touched)+it.tempoExtra == 0:
+		return ev, true // 遊戲結束前一張都打不到：不是 play clue，只能當拖延
 	case soon && ev.bad == 0:
 		ev.kind = kindPlay
-		ev.gets = 1 + len(plan) + it.tempoExtra
+		ev.gets = s.timelyPlays(R, t, plan, touched) + it.tempoExtra
 		ev.plan = plan
 		ev.plays = s.chainPlays(t, plan, it.newCards, it.focus)
 		ev.immediate = len(plan) == 0 && s.playableNow(t)
