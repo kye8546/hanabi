@@ -158,9 +158,12 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.misleads = true
 		return ev, true
 	}
-	if s.knows(lvFixClue) && len(it.newCards) == 0 && !slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
+	if s.knows(lvFixClue) && len(it.newCards) == 0 && !s.lockedRetouch &&
+		!slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
 		// 不給任何新資訊的提示：接收者若已經（私下推得）知道其中某張是他下一手要打的牌，就會當成 Stop Clue
-		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險
+		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險。
+		// 我鎖手、又只能棄很可能是 critical 的已提示牌時例外（discard 的 lockedRetouch）：鎖手的人重新點已提示的牌
+		// 是拖延，不是 Stop Clue（findFix），照一般的解讀評估
 		ev.misleads = true
 		return ev, true
 	}

@@ -36,7 +36,10 @@ func (s *state) markExcessOnes() {
 //   - 補資訊（fill in）：點到 R 手上已被拿到、原本被當成有用的牌，提示後它只可能是沒用的牌（垃圾，或別處已被拿到的重複），
 //     或和原本的筆記矛盾（Breaking Information Lock）。
 //   - 不給新資訊（Stop Clue）：沒點到新牌、點到的牌也沒多任何資訊，卻點到 R 下一手要打的牌：那張是壞的。
-//     （提示滿 8 / 鎖手時重新點 5 是 5 Stall，不算。）
+//     （提示滿 8 / 鎖手時重新點 5 是 5 Stall，不算；給提示者鎖手時一律不算——他不能棄牌，只能給提示拖延，
+//     重新點已提示的牌照 Tempo Clue / 拖延解讀。使用者回報 20261029-101614 t29：AI-1 鎖手、只剩 1 個提示，
+//     重新點 AI-2 的 R2（Tempo Clue）或使用者的 Y5（5 Stall）都不會被誤會，卻因「不給新資訊」被當成誤導而改棄
+//     已提示的牌，棄掉了 W5。）
 //
 // 「A clue cannot be a Play Clue and a Fix Clue at the same time」：是 fix clue 就沒有 play / save 的解讀。
 func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
@@ -119,7 +122,7 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 			}
 		}
 	}
-	if it.fix || len(it.newCards) > 0 || s.fiveStall(giver, h) && s.mustStall(giver) {
+	if it.fix || len(it.newCards) > 0 || s.fiveStall(giver, h) && s.mustStall(giver) || s.chop(giver) < 0 {
 		return
 	}
 	for _, y := range touched {

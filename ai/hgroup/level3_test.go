@@ -459,3 +459,20 @@ func TestL3FixRevealsDuplicateAgainstPrivateTrashNote(t *testing.T) {
 		t.Errorf("AI-1 不該盲打 finesse position（%s）", bots[1].Why())
 	}
 }
+
+func TestLockedGiverRetouchIsStallNotStop(t *testing.T) {
+	// 使用者回報 20261029-101614 t29（Black）：AI-1 鎖手、只剩 1 個提示。重新點 AI-2 已提示的 R2 是 Tempo Clue（他會打出），
+	// 鎖手的人不能棄牌，這不是 Stop Clue；以前一律當成「不給新資訊」的誤導提示而改棄已提示的牌，棄掉了 W5
+	const codes = "h1Y h2R p1 h1G p5 h05 h15 p2 h0B d4 p1 p2 p2 d5 h0K p1 d5 h1K h2K p1 p3 h2B h24 p1 d4 d3 p3 h1W"
+	for _, lv := range []int{3, 8} {
+		g, bots := replayCodesVariant(t, 3, game.BlackSix, 1793240174367996000, lv, codes)
+		a := bots[1].Act(g.View(1))
+		if a.Type != game.ActHint {
+			t.Fatalf("Lv%d：AI-1 鎖手應該給提示，做了 %+v（%s）", lv, a, bots[1].Why())
+		}
+		force(t, g, a)
+		if b := bots[2].Act(g.View(2)); b != game.Play(3) {
+			t.Errorf("Lv%d：AI-2 應該打出 R2（位置 4），做了 %+v（%s）", lv, b, bots[2].Why())
+		}
+	}
+}

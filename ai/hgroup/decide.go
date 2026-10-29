@@ -447,11 +447,6 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 	if chop := s.chop(s.me); chop >= 0 {
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
-	if len(evs) > 0 {
-		if a, tier := s.stallTier(evs); tier > 2 {
-			return a, "鎖手，給提示"
-		}
-	}
 	bestSlot, bestRisk := len(hand)-1, 2.0
 	for slot := len(hand) - 1; slot >= 0; slot-- {
 		p := s.myPoss(hand[slot]).list()
@@ -463,6 +458,24 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 		}
 		if risk := float64(crit) / float64(max(len(p), 1)); risk < bestRisk {
 			bestSlot, bestRisk = slot, risk
+		}
+	}
+	if len(evs) > 0 {
+		if a, tier := s.stallTier(evs); tier > 2 {
+			return a, "鎖手，給提示"
+		}
+		// 沒有一般的拖延提示可給，而要棄的牌很可能是 critical（≥ 70%）時，「不給新資訊」的提示（重新點已提示的牌：
+		// Tempo Clue、5 Stall 等拖延）也可以給——鎖手的人不能棄牌，接收者不會當成 Stop Clue（findFix）。否則照舊棄牌
+		// 換回提示：一律改給這種提示時 2 人局 -0.1–0.55（白白花掉提示），門檻 50% 時 Black 2 人局仍 -0.15，70% 起持平。
+		// 使用者回報 20261029-101614 t29：AI-1 鎖手，重新點 AI-2 的 R2 就是 Tempo Clue，卻棄了 W5
+		if bestRisk >= 0.7 {
+			restore := s.saveSim()
+			s.lockedRetouch = true
+			retouch := s.allClues()
+			restore()
+			if a, tier := s.stallTier(retouch); tier > 2 {
+				return a, "鎖手，給提示（重新點已提示的牌拖延）"
+			}
 		}
 	}
 	return game.Discard(bestSlot), "鎖手棄牌"
