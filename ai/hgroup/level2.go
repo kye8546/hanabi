@@ -13,7 +13,11 @@ import (
 var fiveStallHints = 1
 
 // mustStall：給提示者這一手不能棄牌（提示滿 8、手牌全被拿到，或 Level 7 被 Scream / Shout Discard 叫到），只能給拖延提示。
+// Level 9 起照 Stall Table：嚴重度 2 以上（另外包括 Double Discard Situation）。
 func (s *state) mustStall(giver int) bool {
+	if s.knows(lvStall) {
+		return s.stallSeverity(giver) >= 2 || s.hints >= game.MaxHints
+	}
 	return s.hints >= game.MaxHints || s.chop(giver) < 0 || s.screamed(giver)
 }
 
@@ -23,6 +27,9 @@ func (s *state) mustStall(giver int) bool {
 func (s *state) fiveStall(giver int, h game.Hint) bool {
 	if !s.knows(lvFiveStall) || h.Kind != game.HintRank || h.Rank != game.MaxRank {
 		return false
+	}
+	if s.knows(lvStall) {
+		return s.stallSeverity(giver) >= 1 || s.hints >= game.MaxHints
 	}
 	return !s.midGame || s.hints >= game.MaxHints || s.chop(giver) < 0
 }

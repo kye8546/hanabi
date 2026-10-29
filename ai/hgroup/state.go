@@ -87,6 +87,7 @@ type state struct {
 	processed int  // 已處理的事件數
 	seq       int  // 目前處理到的事件序號
 	midGame   bool // 已經有人棄過牌（Early Game 結束）
+	moved     bool // 已經有人行動過（Level 9：第一回合的 8 個提示不算拖延情況）
 
 	why   string                                     // 最近一次決策的理由（寫進對局紀錄）
 	trace func(e game.Event, id int, old, new idSet) // 除錯用：筆記變化時呼叫
@@ -112,6 +113,8 @@ type state struct {
 	// （checkDeps 不拿它當其他提示的證據）
 	pos     *posRec
 	posResp bool
+	// dda：Level 9 Double Discard Avoidance——上一位剛棄掉（或打錯）的牌只剩最後一張，可能就在下一位的 chop 上
+	dda *ddaRec
 }
 
 // sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
@@ -349,6 +352,17 @@ func (s *state) apply(e game.Event) {
 			s.resolveScream(sc, e, p3Chop)
 		}()
 	}
+	if e.Type != game.EvDraw {
+		defer func() { s.moved = true }()
+	}
+	// Level 9：Double Discard Avoidance 只管上一位棄牌後的下一個行動（抽牌不算）
+	if dd := s.dda; dd != nil && e.Type != game.EvDraw {
+		defer func() {
+			if s.dda == dd {
+				s.dda = nil
+			}
+		}()
+	}
 	// Level 8：Positional Discard / Misplay 之後的行動，記下有沒有回應
 	resp := s.posResponse(e)
 	s.posStep(e)
@@ -438,6 +452,9 @@ func (s *state) apply(e game.Event) {
 		}
 		if pos != nil {
 			s.pos = pos
+		}
+		if e.Type != game.EvPlay {
+			s.dda = s.detectDDA(e.Player, id)
 		}
 		s.afterPlay()
 	case game.EvDraw:

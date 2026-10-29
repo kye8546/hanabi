@@ -445,6 +445,14 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 		return game.Discard(slot), "棄已知沒用的牌"
 	}
 	if chop := s.chop(s.me); chop >= 0 {
+		// Level 9 Double Discard Avoidance：上一位剛棄掉的牌只剩一張、可能就在我的 chop 上，不棄 chop，改給提示
+		// （拖延提示也可以：5 Stall、Tempo Clue、補資訊）。只有會誤導或讓人打錯的提示時照樣棄牌
+		if v.Hints >= 2 && s.myDDA() {
+			allowed := slices.DeleteFunc(slices.Clone(evs), func(e clueEval) bool { return e.kind != kindStall && e.kind != kindTempo })
+			if a, tier := s.stallTier(allowed); tier > 2 {
+				return a, "Double Discard Avoidance：上一位棄掉的牌只剩一張，可能就在我的 chop 上，給拖延提示"
+			}
+		}
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
 	bestSlot, bestRisk := len(hand)-1, 2.0

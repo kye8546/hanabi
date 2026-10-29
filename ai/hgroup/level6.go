@@ -327,7 +327,7 @@ func (s *state) oneAwayValuable(p, id int) bool {
 // 他也沒有別的事可做（會棄 chop）：我棄牌、讓他給這個提示，他的 chop 就多保住一陣子。
 // Early Game 必須先給完 play / save clue，不這樣做。
 func (s *state) discardModulation(ev clueEval, hints int) bool {
-	if !s.knows(lvTempo) || !s.midGame || hints >= game.MaxHints || ev.kind != kindPlay {
+	if !s.knows(lvTempo) || !s.midGame || hints >= game.MaxHints || ev.kind != kindPlay || s.myDDA() {
 		return false
 	}
 	N := (s.me + 1) % s.n

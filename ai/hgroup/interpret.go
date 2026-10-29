@@ -197,7 +197,8 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		it.cands = slices.DeleteFunc(it.cands, selfFin)
 	}
 	// Level 7：被 Scream / Shout Discard 叫到的人必須給提示，只補已提示牌資訊的提示是拖延，不會讓人盲打
-	if it.tempo && s.screamed(giver) {
+	// （Level 9 Double Discard Situation 也一樣：「should not be read as a Play Clue or a Finesse」）
+	if it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.dda != nil && s.dda.target == giver && s.stallValid(giver, R)) {
 		finesses := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse }) }
 		it.cands = slices.DeleteFunc(it.cands, finesses)
 		it.fallback = slices.DeleteFunc(it.fallback, finesses)
