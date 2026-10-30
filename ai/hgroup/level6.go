@@ -70,6 +70,29 @@ func (s *state) publicKnown(id int) bool {
 	return p != 0 && !slices.ContainsFunc(p.list(), func(i ident) bool { return !s.playableNow(i) })
 }
 
+// giverMayDoubt：給提示者看不到自己的手牌，從他的角度，接收者的牌 id 可能還是某個現在打不出去的牌面——
+// 我（接收者或旁觀者）是靠他手上那張排除的：提示資訊容許、還沒用的牌面 u，剩下的都在他手上（接收者看得到、我也看得到）。
+// 這時他以為接收者還不知道能打，他的 Tempo Clue 就是 Tempo Clue Chop Move
+// （使用者回報 20261030-173757 t39：AI-2 用「3」點 AI-1 被白色救下的 W3，最後一張 W4 在 AI-2 手上，
+// AI-1 早就推得出是 W3、沒 Chop Move K5，AI-2 卻記成 Chop Move 了，之後 AI-1 棄掉 K5）。
+func (s *state) giverMayDoubt(giver, R, id int) bool {
+	if giver == s.me {
+		return false
+	}
+	n, pp := s.notes[id], s.publicPoss(id)
+	for _, g := range s.hands[giver] {
+		c, ok := s.card(g)
+		if !ok {
+			continue
+		}
+		u := identOfCard(c)
+		if n.explicit.has(u) && s.useful().has(u) && !pp.has(u) && !s.playableNow(u) && s.remainingFor(R, u) == 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // publicElsewhere：除了 except，有已提示的牌大家都知道確定是 m。
 func (s *state) publicElsewhere(m ident, except int) bool {
 	for _, h := range s.hands {
@@ -278,7 +301,7 @@ func (s *state) publicPace() int {
 // 有價值的 Tempo Clue 記在 it.valuable（和一般 play clue 一樣，可以隨時給）。
 func (s *state) tempoChopMove(giver, R int, it *interp, touched []int) {
 	// Level 8 終局不 Chop Move：沒有價值的 Tempo Clue 只是讓焦點打出（拖延）
-	if !s.knows(lvTempo) || !it.tempo || s.publicKnown(it.focus) || s.endGame() ||
+	if !s.knows(lvTempo) || !it.tempo || s.publicKnown(it.focus) && !s.giverMayDoubt(giver, R, it.focus) || s.endGame() ||
 		slices.ContainsFunc(touched, func(y int) bool { return !s.notes[y].clued && !slices.Contains(it.trashNew, y) }) {
 		return
 	}

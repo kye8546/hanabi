@@ -271,3 +271,18 @@ func TestL6DiscardModulationDiscardsKnownTrash(t *testing.T) {
 		t.Errorf("AI-2 應棄掉 slot 4 的已知垃圾，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestTCCMGiverCannotSeeOwnCard(t *testing.T) {
+	// 使用者回報 20261030-173757 t39（Black，3 人局）：AI-2 用「3」點 AI-1 被白色救下的 W3（Tempo Clue），
+	// 最後一張 W4 在 AI-2 手上。AI-1 看得到它、早就推得出是 W3，但 AI-2 看不到自己的牌，以為 AI-1 不知道能打：
+	// 這是 Tempo Clue Chop Move，兩人都要記成 chop 上的 K5 被 Chop Move
+	const codes = "h15 h0K h1G p4 p1 h0G p5 h04 h03 p3 h0W d5 p4 p5 h0B p2 d5 h15 p2 h0R h02 p1 d5 d5 h2K p1 p3 p3 h03 d5 p2 h25 d4 d5 d5 h12 h1W p1 h13"
+	g, bots := replayCodesVariant(t, 3, game.BlackSix, 1793353077812745000, 9, codes)
+	k5 := g.Hands[1][1].Card.ID
+	for p := 1; p < 3; p++ {
+		bots[p].Act(g.View(p))
+		if !bots[p].s.notes[k5].cm {
+			t.Errorf("AI-%d 沒記成 K5 被 Chop Move", p)
+		}
+	}
+}
