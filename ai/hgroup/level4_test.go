@@ -393,3 +393,14 @@ func TestFiveCMOverTrashCMSameProtection(t *testing.T) {
 		}
 	}
 }
+
+func TestFiveCMWhenSaveExposesCritical(t *testing.T) {
+	// 使用者回報 20261030-111700 t44（2 人局）：使用者手牌 G1 W5 B1 G5 W4，chop 上的 W4、G5、W5 都是 critical。
+	// 白色救下 W4、W5，新 chop 就是 G5，使用者沒牌可打、接著棄掉；「5」的 5's Chop Move 保住 W5、G5 與 chop 上的 W4，
+	// 新 chop 是垃圾 B1。以前白色因為 W4 之後會打出而分數較高
+	const codes = "h11 p3 h1B h0W p1 h0Y p1 d3 h15 d4 h12 p5 d5 h0B p1 h0G p1 h02 p3 h0G p4 h02 p2 d4 d3 d4 h1B p1 d4 p3 h1B h0R p1 d1 p5 d1 h13 p4 h1R p3 h1W p5 d5"
+	g, bots := replayCodes(t, 2, 1793330220139714000, 9, codes)
+	if a := bots[1].Act(g.View(1)); a != game.HintRankTo(0, 5) {
+		t.Errorf("AI-1 應該給「5」（5's Chop Move），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

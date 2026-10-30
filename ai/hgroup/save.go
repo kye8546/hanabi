@@ -202,11 +202,27 @@ func (s *state) urgentSave(evs []clueEval, hints int, trust bool) (game.Action, 
 	if slot := s.shoutSave(hints); slot >= 0 && hints > 0 && shoutOverClue {
 		return game.Discard(slot), "Shout Discard Chop Move：不打能打的牌、棄已知垃圾，要下一位 Chop Move 他 chop 上必須保留的牌", true
 	}
-	ev, ok := best(evs, func(e clueEval) bool {
+	saves := func(e clueEval) bool {
 		return e.target == next && (e.focus == chop && (e.kind == kindPlay || e.kind == kindSave) || s.cmSave(evs, e))
-	})
+	}
+	ev, ok := best(evs, saves)
 	if !ok {
 		return game.Action{}, "", false
+	}
+	// 救了之後他的新 chop 也是必須保留的牌（他沒牌可打，下一手就棄它），而另一個救法連那張一起保住：改給那個
+	// （策略，不是慣例。使用者回報 20261030-111700 t44：白色救下 W4、W5，新 chop 是 G5，使用者接著棄掉；
+	// 「5」的 5's Chop Move 保住 W5、G5，又 Chop Move chop 上的 W4，新 chop 是垃圾。白色因為 W4 之後會打出而分數較高）
+	exposes := func(e clueEval) bool {
+		if e.nextPlays {
+			return false // 他下一手打牌、不棄 chop，新 chop 上的牌之後還有機會救
+		}
+		nc := s.chopAfter(next, append(slices.Clone(e.touched), e.cm...))
+		return nc >= 0 && s.needsSave(next, nc)
+	}
+	if exposes(ev) {
+		if alt, ok := best(evs, func(e clueEval) bool { return saves(e) && !e.misleads && !exposes(e) }); ok {
+			ev = alt
+		}
 	}
 	if a, ok := laterFirst(ev); ok {
 		return a, laterWhy, true
