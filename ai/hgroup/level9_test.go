@@ -146,3 +146,15 @@ func TestL9FeedLockedPlayer(t *testing.T) {
 		}
 	}
 }
+
+func TestL9SaveCriticalOverFeed(t *testing.T) {
+	// 使用者回報 20261030-120740 t30（2 人局）：提示剩 1 個，使用者除了 chop 上剛抽到的 Y5 都已被提示、沒牌可打。
+	// 用最後一個提示救 Y5 會讓他鎖手、停在 0 個提示（Anxiety Play 可能打錯）；改棄牌換提示的話，他沒事可做，
+	// 下一手就棄掉 Y5（確定少分）。應該救 Y5
+	const codes = "h11 p2 h1W p3 h12 p1 h11 p2 h1W p4 h15 p2 d4 h0Y p3 h01 p4 h05 d3 h02 p1 d5 h1B p3 d3 d5 h1R h0Y d1"
+	g, bots := replayCodes(t, 2, 1793333260744621000, 9, codes)
+	a := bots[1].Act(g.View(1))
+	if a.Type != game.ActHint || a.Target != 0 || !a.Hint.Matches(g.Hands[0][0].Card) {
+		t.Errorf("AI-1 應該提示使用者救下 Y5，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

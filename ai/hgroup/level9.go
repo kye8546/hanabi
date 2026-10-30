@@ -195,9 +195,18 @@ func (s *state) leavesLockedAnxious(a game.Action, hints int) bool {
 				touched = append(touched, id)
 			}
 		}
-		if s.publicChop(next, nil) >= 0 {
+		if pc := s.publicChop(next, nil); pc >= 0 {
 			it := s.interpret(s.me, next, h, touched) // Chop Move 的牌也算保護住了
-			return s.chopAfter(next, append(touched, it.cm...)) < 0
+			saved := append(touched, it.cm...)
+			if s.n == 2 && slices.Contains(saved, pc) && s.critical(identOfCard(s.cards[pc])) && !s.keepsChop(next) {
+				// 2 人局，這個提示救下他 chop 上的 critical：改棄牌換提示的話，他沒牌可打、只能提示我，多半沒事可做，
+				// 下一手就棄掉它（確定少分），寧可讓他鎖手、之後 Anxiety Play 可能打錯（閃電，打掉的牌也許還有另一張）。
+				// 3 人以上他常有提示可給（給別人或給我），會去給提示、不棄 chop，照舊棄牌換提示（套用時 3–5 人局
+				// 10000 局 -0.05–0.12，加上「他沒有提示可給別人」的條件仍 -0.03–0.05）
+				// （使用者回報 20261030-120740 t30：AI-1 棄牌換提示，使用者接著棄掉 chop 上的 Y5）
+				return false
+			}
+			return s.chopAfter(next, saved) < 0
 		}
 		// 他本來就鎖手：提示點到能打的牌，他多半就知道能打了
 		return !slices.ContainsFunc(touched, func(id int) bool { return s.playableNow(identOfCard(s.cards[id])) })
