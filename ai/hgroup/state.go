@@ -410,9 +410,10 @@ func (s *state) apply(e game.Event) {
 			s.revealConnection(connRecs, e.Card.ID, identOfCard(e.Card))
 			s.revealToReceiver(eitherWay, e.Card.ID, identOfCard(e.Card))
 		}
+		sarcastic := false
 		if e.Type == game.EvDiscard {
 			s.focusDiscarded(e.Card.ID)
-			s.sarcastic(e)
+			sarcastic = s.sarcastic(e)
 			s.undoChopMove(e)
 		}
 		s.removeCard(e.Player, e.Card.ID)
@@ -455,7 +456,7 @@ func (s *state) apply(e game.Event) {
 			s.pos = pos
 		}
 		if e.Type != game.EvPlay {
-			s.dda = s.detectDDA(e.Player, id)
+			s.dda = s.detectDDA(e.Player, id, sarcastic)
 		}
 		s.afterPlay()
 	case game.EvDraw:

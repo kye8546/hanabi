@@ -18,8 +18,10 @@ type ddaRec struct {
 // detectDDA：p 剛棄掉（或打錯）牌面 id 之後，下一位是否處在 Double Discard Situation（原文的定義：上一位棄牌或打錯，
 // 而這一位棄牌可能棄掉那張牌的最後一張）。「可能」照大家都知道的資訊：他 chop 上的牌依提示本身可能是它
 // （hanabi-bot 同樣用共同的可能牌面）。只剩一張的牌本來就有的（例如 5）不算：這次棄牌沒有讓它變成最後一張。
-func (s *state) detectDDA(p int, id ident) *ddaRec {
-	if !s.knows(lvStall) || id.copies() < 2 || !s.critical(id) {
+// Sarcastic Discard 也不算：棄牌的人表示最後那張在別人已被拿到的牌裡，不會在 chop 上
+// （使用者回報 20261030-151814 t27：使用者 Sarcastic Discard 掉 R2，AI-1 以為自己 chop 可能是最後的 R2 而拖延）。
+func (s *state) detectDDA(p int, id ident, sarcastic bool) *ddaRec {
+	if !s.knows(lvStall) || sarcastic || id.copies() < 2 || !s.critical(id) {
 		return nil
 	}
 	q := (p + 1) % s.n

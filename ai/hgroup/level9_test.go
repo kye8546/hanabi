@@ -179,3 +179,16 @@ func TestL9PlayInsteadOfFeed(t *testing.T) {
 		t.Errorf("AI-1 應該打出 W5，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL9NoDDAAfterSarcastic(t *testing.T) {
+	// 使用者回報 20261030-151814 t27（2 人局）：使用者 Sarcastic Discard 掉 R2（AI-1 已提示的牌裡有 R2），
+	// 最後那張 R2 大家都知道在 AI-1 已提示的牌裡，不會在 chop 上：不是 Double Discard Situation
+	const codes = "h1Y h0B p1 h02 h15 p4 d4 d4 h12 d2 h1G p1 d4 p3 d4 h05 d3 d3 h12 d2 h1Y d1 h1B h0R h12 p1 d5"
+	g, bots := replayCodes(t, 2, 1793344694379233000, 9, codes)
+	if bots[1].s.dda != nil {
+		t.Errorf("Sarcastic Discard 之後不該是 Double Discard Situation：%+v", *bots[1].s.dda)
+	}
+	if a := bots[1].Act(g.View(1)); a.Type != game.ActDiscard {
+		t.Errorf("AI-1 沒事可做，應該棄 chop，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

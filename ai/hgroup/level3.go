@@ -469,11 +469,11 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 
 // sarcastic（Level 3 The Sarcastic Discard）：有人棄掉一張被拿到、而且不是垃圾的牌 t，表示別人手上已被拿到的牌裡有 t
 // （他發現自己那張是重複的）。看得到的人知道是誰；都看不到就是我。那人手上只有一張可能是 t 的牌時，它就是 t
-// （有好幾張時不保證是哪一張）。鎖手被迫棄牌不算。
-func (s *state) sarcastic(e game.Event) {
+// （有好幾張時不保證是哪一張）。鎖手被迫棄牌不算。回傳這次棄牌是不是 Sarcastic Discard。
+func (s *state) sarcastic(e game.Event) bool {
 	t := identOfCard(e.Card)
 	if !s.knows(lvSarcastic) || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 {
-		return
+		return false
 	}
 	holder := -1
 	for p, h := range s.hands {
@@ -490,7 +490,7 @@ func (s *state) sarcastic(e game.Event) {
 		holder = s.me
 	}
 	if holder < 0 {
-		return
+		return true
 	}
 	var cands []int
 	for _, id := range s.hands[holder] {
@@ -501,6 +501,7 @@ func (s *state) sarcastic(e game.Event) {
 	if len(cands) == 1 {
 		s.notes[cands[0]].poss = setOf(t)
 	}
+	return true
 }
 
 // sarcasticSlot（Level 3 The Sarcastic Discard）：我手上被拿到、確定是 t 的牌，而別人手上已被拿到的牌實際就是 t：
