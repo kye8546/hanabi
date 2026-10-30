@@ -158,3 +158,14 @@ func TestL9SaveCriticalOverFeed(t *testing.T) {
 		t.Errorf("AI-1 應該提示使用者救下 Y5，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL9FillInNoPrompt(t *testing.T) {
+	// 使用者回報 20261030-140936 t15（2 人局）：提示滿 8，使用者用「3」補上 AI-1 被黃色點過的 chop 牌的資訊（Fill-In Clue）。
+	// AI-1 另一張黃牌是 Y4，Fill-In Clue 不是 play clue，不能讀成 prompt 那張黃牌當 Y2 而打出它
+	const codes = "h11 p1 h15 h02 d3 p4 d3 h05 d3 h0Y d3 d3 h1Y d2 h13 h0G d2"
+	g, bots := replayCodes(t, 2, 1793340576724361000, 9, codes)
+	a := bots[1].Act(g.View(1))
+	if a.Type == game.ActPlay && a.Slot == 1 {
+		t.Errorf("AI-1 不應該把 Y4 當成被 prompt 的 Y2 打出（%s）", bots[1].Why())
+	}
+}

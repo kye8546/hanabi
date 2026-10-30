@@ -206,11 +206,15 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	}
 	// Level 7：被 Scream / Shout Discard 叫到的人必須給提示，只補已提示牌資訊的提示是拖延，不會讓人盲打
 	// （Level 9 Fill-In Clue：嚴重度 2 以上——Double Discard Situation、鎖手、提示滿 8——也一樣，
-	// 「should not be read as a Play Clue or a Finesse」；給提示者有事可做時不是拖延，stallValid）
+	// 「should not be read as a Play Clue or a Finesse」；給提示者有事可做時不是拖延，stallValid）。
+	// prompt 別的已提示牌也不行，只留直接能打（Tempo Clue Stall）與 prompt 這次一起點到的牌（補資訊讓兩張都能打）
+	// （使用者回報 20261030-140936 t15：提示滿 8，「3」補上 AI-1 黃牌的資訊，AI-1 以為是 prompt 另一張黃牌當 Y2 而打錯 Y4）
 	if it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.stallSeverity(giver) >= 2 && s.stallValid(giver)) {
-		finesses := func(c cand) bool { return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse }) }
-		it.cands = slices.DeleteFunc(it.cands, finesses)
-		it.fallback = slices.DeleteFunc(it.fallback, finesses)
+		connects := func(c cand) bool {
+			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse || !slices.Contains(touched, d.card) })
+		}
+		it.cands = slices.DeleteFunc(it.cands, connects)
+		it.fallback = slices.DeleteFunc(it.fallback, connects)
 	}
 	// Level 6：沒有價值、又不是拖延時給的 Tempo Clue 另外 Chop Move 接收者的 chop
 	if it.tempo && s.knows(lvTempo) {
