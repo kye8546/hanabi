@@ -169,3 +169,13 @@ func TestL9FillInNoPrompt(t *testing.T) {
 		t.Errorf("AI-1 不應該把 Y4 當成被 prompt 的 Y2 打出（%s）", bots[1].Why())
 	}
 }
+
+func TestL9PlayInsteadOfFeed(t *testing.T) {
+	// 使用者回報 20261030-145128 t42（2 人局）：提示剩 1 個，用它救使用者 chop 上的 B2 會讓他鎖手、停在 0 個提示。
+	// AI-1 有確定能打的 W5：打出它不用掉提示（還換回一個），不該棄掉已提示的 B3 換提示
+	const codes = "h1R h0B p3 h01 p1 h0W p5 h05 h15 p3 d4 h01 p1 h04 d2 d5 d2 h05 h13 d2 h1B d1 h1Y p1 h1G d1 h15 d1 h11 d1 h15 d1 h11 d1 h1B d3 h1W p1 p4 d1 h1W"
+	g, bots := replayCodes(t, 2, 1793343088261705000, 9, codes)
+	if a := bots[1].Act(g.View(1)); a.Type != game.ActPlay || a.Slot != 0 {
+		t.Errorf("AI-1 應該打出 W5，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

@@ -65,21 +65,33 @@ var decideSteps = []decideStep{
 	(*state).stepDiscard,           // 7. 棄牌
 }
 
+const feedWhy = "下一位鎖手：不讓他停在 0 個提示（他的 Anxiety Play 會打錯），棄牌換一個提示給他"
+
 func (s *state) decide(v game.PlayerView) game.Action {
 	t := &turn{v: v}
 	// Level 7：被 Scream / Shout Discard 叫到的人這一手不能棄牌，必須給提示（先照平常的順序找 play / save clue，
 	// 沒有就拖延：5 Stall 或補已提示牌的資訊）
 	mustClue := s.screamed(s.me) && v.Hints > 0
+	var anxious *game.Action // 被跳過的、用掉最後一個提示的提示
+	anxiousWhy := ""
 	for _, step := range decideSteps {
 		a, why, ok := step(s, t)
 		if !ok || mustClue && (a.Type != game.ActHint || s.misreadAsGeneration(a)) {
 			continue
 		}
 		// Level 9 The Anxiety Play：這一手之後下一位鎖手、提示 0 個，他就會打出最可能能打的牌；那張其實不能打時，
-		// 必須棄牌換一個提示給他（原文：「you have to discard to generate a clue for them」；不能被下面的 Scream 改回打牌）
+		// 必須棄牌換一個提示給他（原文：「you have to discard to generate a clue for them」；不能被下面的 Scream 改回打牌）。
+		// 用掉最後一個提示的是提示時，先看後面的步驟有沒有別的事可做：打出確定能打的牌不會用掉提示（打出 5 還換回一個），
+		// 比棄牌好（使用者回報 20261030-145128 t42：AI-1 有確定能打的 W5，卻棄掉已提示的 B3 換提示）
 		if s.leavesLockedAnxious(a, v.Hints) {
+			if a.Type == game.ActHint && !mustClue {
+				if anxious == nil {
+					anxious, anxiousWhy = &a, why
+				}
+				continue
+			}
 			if slot := s.feedSlot(); slot >= 0 {
-				s.why = "下一位鎖手：不讓他停在 0 個提示（他的 Anxiety Play 會打錯），棄牌換一個提示給他"
+				s.why = feedWhy
 				return game.Discard(slot)
 			}
 		}
@@ -97,6 +109,14 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		}
 		s.why = why
 		return a
+	}
+	if anxious != nil {
+		if slot := s.feedSlot(); slot >= 0 {
+			s.why = feedWhy
+			return game.Discard(slot)
+		}
+		s.why = anxiousWhy
+		return *anxious
 	}
 	if mustClue {
 		s.why = "被 Scream Discard 叫到，不能棄牌：拖延提示"
