@@ -125,6 +125,10 @@ func (s *state) tempoOverTrash(R int, touched, fresh []int, it *interp) bool {
 					return false
 				}
 			}
+		case s.trashFor(y, n.explicit):
+			// 提示本身早就確定沒用的舊牌（例如其他 1 都打出後的「1」）不是 Tempo Clue 的對象，和新的垃圾一樣
+			// （使用者回報 20261030-095942 t58：白色點到已知垃圾的 W1 與新的 W3，以前被當成 W1 的 Tempo Clue、沒人看得懂，
+			// 終局拖延找不到提示而棄牌）
 		case !n.bad:
 			old = append(old, y)
 		}

@@ -303,3 +303,16 @@ func TestEndGameCountsOnlyTimelyPlays(t *testing.T) {
 		}
 	}
 }
+
+func TestBurnWithTrashOnlyClue(t *testing.T) {
+	// 使用者回報 20261030-095942 t58（2 人局）：pace 0、提示 6 個，使用者手上只剩「1」點過的已知垃圾 W1、R1、已知的 R5，
+	// 沒被提示的 B4、W3（chop）。白色點到 W1 與 W3，全是大家都知道的垃圾，終局只是拖延；以前被當成 W1 的 Tempo Clue、
+	// 沒人看得懂，找不到拖延提示而棄牌
+	const codes = "h11 p1 h1G h0W p5 p5 d5 h01 p2 d4 h1Y p1 h1R p2 h12 d3 h11 p1 d4 h0B p3 d2 h1R p1 h15 d2 h1G p1 d4 p5 d4 p4 d4 h02 h1W d3 p5 p2 h1Y p1 d5 h03 p5 d2 d5 h05 d4 d2 d4 h01 h1W p3 d4 h0R p1 h05 p1"
+	for _, lv := range []int{8, 9} {
+		g, bots := replayCodes(t, 2, 1793325582766795000, lv, codes)
+		if a := bots[1].Act(g.View(1)); a != game.HintColorTo(0, game.White) {
+			t.Errorf("Lv%d：AI-1 應該用白色拖延，做了 %+v（%s）", lv, a, bots[1].Why())
+		}
+	}
+}

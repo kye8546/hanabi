@@ -402,7 +402,15 @@ func (s *state) burnClue(evs []clueEval) (clueEval, bool) {
 	if ev, ok := best(evs, func(e clueEval) bool { return e.kind == kindTempo && e.knowsPlay && !e.misleads }); ok {
 		return ev, true
 	}
-	return best(evs, func(e clueEval) bool { return e.understood && e.bad == 0 && !e.misleads })
+	return best(evs, func(e clueEval) bool {
+		if e.kind == kindChopMove && slices.Contains(e.touched, s.chop(e.target)) && (!s.willPlay(e.target) || s.deck > s.hints) {
+			// 只標出他 chop 上的垃圾：他沒牌可打就會接著棄掉它（本來就會棄的那張），pace 照樣減少，白花一個提示；
+			// 牌堆比提示多時也不用——提示撐不到牌堆抽完，早早拖延只是把提示耗光，之後照樣得棄牌
+			// （Black 3 人局 10000 局 -0.05：兩人互點已完成顏色的垃圾拖延，或耗光提示後鎖手的人棄掉 critical）
+			return false
+		}
+		return e.understood && e.bad == 0 && !e.misleads
+	})
 }
 
 // posRec：Level 8 Positional Discard / Positional Misplay。from 在終局棄掉（或打錯）slot 位置上「不該棄」的牌，

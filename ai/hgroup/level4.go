@@ -32,8 +32,9 @@ func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it
 	// 會讓各家對「是不是 Chop Move、Chop Move 哪幾張」看法不一
 	allTrash := true
 	for _, y := range touched {
-		// 點到還被當成有用的舊牌是 Fix Clue 的範圍（接收者私下可能早就知道它沒用，各家看法會不一樣）
-		if s.live(y) || !s.trashFor(y, it.explicit[y]) {
+		// 點到還被當成有用的舊牌是 Fix Clue 的範圍（接收者私下可能早就知道它沒用，各家看法會不一樣）；
+		// 提示本身早就確定沒用的舊牌大家都知道，算垃圾
+		if s.live(y) && !s.trashFor(y, s.notes[y].explicit) || !s.trashFor(y, it.explicit[y]) {
 			allTrash = false
 			break
 		}
@@ -51,12 +52,13 @@ func (s *state) findChopMove(giver, R int, h game.Hint, touched, fresh []int, it
 				cm = append(cm, id)
 			}
 		}
-		if len(cm) > 0 {
+		switch {
+		case s.endGame():
+			// Level 8 No Chop Moves in the End-Game：只是拖延提示，點到的牌照樣是已知垃圾，不 Chop Move
+			// （垃圾就在 chop 上、沒牌可 Chop Move 時也一樣，終局沒有 Trash Push 的問題）
+			it.cmKind, it.cm, it.focus = cmTrash, nil, last
+		case len(cm) > 0:
 			it.cmKind, it.cm, it.focus = cmTrash, cm, last
-			if s.endGame() {
-				// Level 8 No Chop Moves in the End-Game：只是拖延提示，點到的牌照樣是已知垃圾，不 Chop Move
-				it.cm = nil
-			}
 		}
 		return
 	}
