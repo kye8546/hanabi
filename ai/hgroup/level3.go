@@ -43,7 +43,7 @@ func (s *state) markExcessOnes() {
 //
 // 「A clue cannot be a Play Clue and a Fix Clue at the same time」：是 fix clue 就沒有 play / save 的解讀。
 func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
-	if !s.knows(lvFixClue) {
+	if !s.knows(lvFixClue) || s.notFix {
 		return
 	}
 	good := func(set idSet, y int) idSet {
@@ -223,12 +223,42 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 			ev.newGood++
 		}
 	}
+	if s.fixMisreadByBystander(it, h, ev.target, ev.touched) {
+		ev.misleads, ev.danger = true, true
+	}
 	ev.understood = !ev.misleads
 	ev.score = scoreFixNow*ev.fixesNow + scoreFix*ev.fixes + scoreNewGood*ev.newGood - scoreBadTouch*ev.bad - dist
 	if h.Kind == game.HintColor {
 		ev.score += scoreColor
 	}
 	return ev
+}
+
+// fixMisreadByBystander：（我是給提示者）有旁觀者看不出這是 Fix Clue——重複的那張在他自己手上，他看不到——
+// 而照一般的解讀，他會以為要打自己的牌。旁觀者預設自己的牌都是好的，照 play clue 讀（使用者回報 20261102-155921 t30：
+// AI-2 用綠色揭露 AI-1 被「3」點到的是 M3，和使用者手上已提示的 M3 重複；使用者看不到自己那張，讀成 M3 的 play clue、
+// finesse 自己的 M2 而盲打錯）。
+func (s *state) fixMisreadByBystander(it interp, h game.Hint, R int, touched []int) bool {
+	blind := false
+	for y := range it.fixPoss {
+		t := identOfCard(s.cards[y])
+		for q, hand := range s.hands {
+			if q == s.me || q == R {
+				continue
+			}
+			blind = blind || slices.ContainsFunc(hand, func(z int) bool {
+				c, ok := s.card(z)
+				u, known := s.possOf(z).single()
+				return ok && s.gotten(z) && identOfCard(c) == t && (!known || u != t)
+			})
+		}
+	}
+	if !blind {
+		return false
+	}
+	defer s.saveSim()()
+	s.notFix = true
+	return s.interpret(s.me, R, h, touched).stray
 }
 
 // certainMine：我手上一定有的牌面（張數）。我的 k 張已被拿到的牌合起來只可能是 k 種牌面、而每種都只剩 1 張時，

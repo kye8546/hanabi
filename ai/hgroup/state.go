@@ -152,6 +152,9 @@ type sim struct {
 	// clueSeq：替已發生的提示重新找連接牌時，那個提示的事件序號——finesse position 照提示當下的手牌算，之後才抽到的牌不算
 	clueSeq int
 
+	// notFix：照一般的 play / save 解讀，不當成 Fix Clue（給提示者推測看不出是 Fix Clue 的旁觀者怎麼讀，evalFix）
+	notFix bool
+
 	// lockedRetouch：我鎖手、要棄的已提示牌很可能是 critical 時，評估「不給新資訊」的提示（重新點已提示的牌拖延）
 	lockedRetouch bool
 }

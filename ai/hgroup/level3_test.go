@@ -476,3 +476,14 @@ func TestLockedGiverRetouchIsStallNotStop(t *testing.T) {
 		}
 	}
 }
+
+func TestL3FixNotMisreadByBystander(t *testing.T) {
+	// 使用者回報 20261102-155921 t30（Rainbow 3 人局）：AI-1 被「3」點到的 M3 和使用者手上已提示的 M3 重複。
+	// 用綠色揭露 AI-1 那張是 M3 的 Fix Clue，使用者看不到自己那張，會讀成 M3 的 play clue、finesse 自己的 M2 而盲打錯；
+	// AI-2 不能給這個提示
+	const codes = "h21 h01 p5 p4 h22 p5 p4 h2B p5 p3 h02 p2 p2 h03 p3 h25 d5 p4 p1 d5 d5 h2B d5 p1 h15 d4 h13 d5 p4"
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1793606361665224000, 9, codes)
+	if a := bots[2].Act(g.View(2)); a.Type == game.ActHint && a.Target == 1 && a.Hint.Kind == game.HintColor && a.Hint.Color == game.Green {
+		t.Errorf("使用者看不出是 Fix Clue，會讀成 finesse 自己，AI-2 卻給了 %+v（%s）", a, bots[2].Why())
+	}
+}
