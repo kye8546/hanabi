@@ -494,3 +494,15 @@ func TestL5DeferFinesseWhenPlayIsNotTheOneThatHelps(t *testing.T) {
 		t.Errorf("AI-2 應先救使用者 chop 上的 G5，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL5LaterCluedPlayNotProof(t *testing.T) {
+	// 使用者回報 20261102-165637 t15（Rainbow 3 人局）：AI-2 的紅色點使用者的 M3、要 Reverse Finesse AI-1 的 M2，
+	// 使用者接著用「2」點到那張 M2，AI-1 才打出它——後來才被提示的牌打出，不是照紅色盲打的證據，使用者不知道紅牌是 M3。
+	// AI-2 以前只看「被拿到」的時間（被自己記成 finesse 的那一刻），認定是證據，把使用者點到 Y1 的黃色讀成
+	// 「M5，使用者的 M3、prompt AI-1 的 M4」而不打 Y1
+	const codes = "h21 h02 p4 h1W h25 p3 d4 p1 h0R h12 p1 d5 h2Y p3"
+	g, bots := replayCodesVariant(t, 3, game.RainbowSix, 1793609797294932000, 9, codes)
+	if a := bots[2].Act(g.View(2)); a.Type != game.ActPlay || a.Slot != 0 {
+		t.Errorf("黃色點到的 Y1 應該打出，AI-2 卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

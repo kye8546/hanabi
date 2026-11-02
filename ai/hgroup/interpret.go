@@ -449,6 +449,9 @@ func (s *state) onClue(e game.Event) {
 	for _, id := range touched {
 		s.got(id, e.Player)
 		n := s.notes[id]
+		if !n.clued {
+			n.cluedAt = s.seq
+		}
 		n.clued, n.cm = true, false // 被提示點到後就是一般的已提示牌
 		n.touches++
 		n.hinted |= hintBit(e.Hint)

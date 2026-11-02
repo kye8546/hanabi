@@ -572,9 +572,13 @@ func (s *state) checkDeps(e game.Event, played int) {
 			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == done && d.finesse })
 		})
 		// Level 5：要盲打的牌後來被別的提示點到才打出，不是照這個提示盲打的，不能當證據
-		// （例如 Layered Finesse 的真正那張被直接提示，接收者不該因此以為是那個解讀）
+		// （例如 Layered Finesse 的真正那張被直接提示，接收者不該因此以為是那個解讀）。
+		// 看「被提示點到」的時間，不是「被拿到」的時間：看得到焦點的人早就把它記成被這個提示 finesse，
+		// 只有他們把打出當成證據，筆記就不一致（使用者回報 20261102-165637：AI-2 的紅色要 Reverse Finesse AI-1 的 M2，
+		// 使用者接著用「2」點到它，AI-1 打出後只有 AI-2 認定使用者知道紅牌是 M3，把使用者點到 Y1 的黃色讀成「M5，
+		// 使用者的 M3、prompt AI-1 的 M4」而不打 Y1）
 		clued := s.knows(lvLayeredFinesse) && played >= 0 && s.notes[played].clued &&
-			!slices.Contains(rec.fresh, played) && s.notes[played].seq > rec.seq
+			!slices.Contains(rec.fresh, played) && s.notes[played].cluedAt > rec.seq
 		if hit := done >= 0 || peeled != 0; hit && (mayBeSave && !blind || otherExplains(rec) && !explained[rec] || clued || layerOnly(rec, peeled, done)) {
 			// 別的提示已解釋這次打出：不排除，只把這個連接視為已完成
 			if done >= 0 {

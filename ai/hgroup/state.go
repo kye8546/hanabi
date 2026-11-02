@@ -14,6 +14,7 @@ type note struct {
 	willPlay bool     // 是 play clue 的焦點（或被 prompt / finesse），持有者遲早會打
 	giver    int      // 第一次「拿到」這張牌（提示或 finesse）的給提示者；-1 = 還沒被拿到
 	seq      int      // 第一次被拿到時的事件序號
+	cluedAt  int      // 第一次被提示點到時的事件序號（先被 finesse、後來才被提示時和 seq 不同）
 	start    bool     // 起手牌（Level 3 Playing Multiple 1's：起手牌的 1 由舊到新打）
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
