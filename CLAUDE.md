@@ -52,6 +52,7 @@ cmd/hanabi 組裝
 - **`player.Player`**：`Name()` + `Act(PlayerView) Action`。真人額外實作 `player.Rejecter`，`Run` 遇到不合法行動會呼叫 `Reject` 後重新 `Act`；AI 回傳不合法行動視為程式錯誤，`Run` 直接回傳 error。
 - **`Knowledge`**（[game/knowledge.go](game/knowledge.go)）：每張手牌可能顏色/數字的 bitmask，保留負向資訊；`Clued` = 曾被提示點到（chop 等進階策略用）；`HintedColors/HintedRanks` 只記正向提示，供 console 在預設（反向資訊關閉，`-showneg` 或遊戲中 `n` 開啟）時隱藏反向資訊。這只影響畫面，AI 永遠拿完整的 `Knowledge`。
 - **Chop Move 標記（`m`）**：玩家自己用 `m [玩家] <位置>` 標記 / 取消標記被 Chop Move 的牌（Renderer 的 `cm`，用牌 ID 記，回溯後仍在），位置列顯示 cm；AI 的 Chop Move 不會自動顯示（使用者的要求）。
+- **AI 代打（`a`）**：`Human.Auto` 由 `cmd/hanabi` 提供，用一個同等級的 `hgroup.Bot`（`helper`）替真人決定這一手；它和其他 AI 一樣每次輪到座位 0 都先 `Observe`（只更新筆記、不做決定，`seat0` 包裝；`rewind` 重播時也呼叫），筆記的建立節奏和其他座位相同。紀錄那一行的理由寫「AI 代打：…」（`gameLog.why`；回溯時刪掉被撤銷回合的理由，否則重來的那一手會沿用）。分析使用者回報時注意那一手是 AI 選的。
 - **回溯（`u`）與偷看（`x`）**：真人回傳 `player.UndoAction` 時 `Run` 回傳 `player.ErrUndo`，`cmd/hanabi` 的 `rewind` 用同一個 seed 重新開局、把真人上一次行動之前的行動照順序重播（AI 每手都重新 Act，直接呼叫 bot、不經過紀錄包裝），`gameLog.rewind` 刪掉被撤銷的行。偷看由 `Human.Peek` 讀真實手牌。兩者都在紀錄裡留 `#` 開頭的註記（重播時忽略），分析使用者回報時要注意「他偷看過」「回溯過」。
 - **Pace**（[game/view.go](game/view.go) 的 `PlayerView.Pace` / `MaxReachable`，Hanab Live 的算法：分數 + 牌堆張數 + 人數 − 還拿得到的最高分，牌堆空了沒有 pace）：console 盤面顯示（小於人數是 H-Group 的終局、黃色，0 以下紅色；有牌面全被棄掉時分數後面加「最多 N」），說明頁（`?`）寫了算法。AI 用重播時算的同一個值（`publicPace`）。
 - **可重現**：`game.New(n, seed)` 用 `math/rand/v2` PCG；Card ID 在洗牌後才配，不洩漏牌面。
@@ -106,7 +107,7 @@ cmd/hanabi 組裝
 
 ## Status & next steps
 
-- 已完成：規則、console 介面、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits、Black (6 Suits) 與 Rainbow (6 Suits) 變體、Level 1–9 AI、盤面顯示 pace。
+- 已完成：規則、console 介面（含 AI 代打 `a`）、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits、Black (6 Suits) 與 Rainbow (6 Suits) 變體、Level 1–9 AI、盤面顯示 pace。
 - **做下一個等級前，先確認這一級沒有退步**（使用者的規則）：同一批種子 3000 局（`HGAMES=3000 HLEVEL=<上一級>,<這一級>`，5 色，再加 1000 局 Black / Rainbow）各人數都不能比上一級差（超過誤差就要查清楚、修好），確認後才往下做。1000 局有約 ±0.1 的誤差，不能拿來下結論。
 - **README.md 要同步更新**（使用者指正過：曾停在 Level 4 沒更新）：加新等級、變體、console 指令或啟動參數時，README 的變體列表、各等級摘要、指令表、結構段一起改。
 - 下一步：依使用者指示逐級加入 Level 9+（`hgroup.MaxLevel`、`lvXxx` 常數）；之後的多色變體（雙色等）沿用 `hintSet`、`multiColor`、`promptOrder`。

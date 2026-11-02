@@ -83,6 +83,14 @@ func (b *Bot) Why() string {
 	return b.s.why
 }
 
+// Observe 只更新筆記、不做決定：讓代打用的 AI 和其他 AI 一樣每個回合跟上局面（console 的 a 指令）。
+func (b *Bot) Observe(v game.PlayerView) {
+	if b.s == nil {
+		b.s = newState(v, b.level)
+	}
+	b.s.sync(v)
+}
+
 func (b *Bot) Act(v game.PlayerView) game.Action {
 	if b.s == nil {
 		b.s = newState(v, b.level)

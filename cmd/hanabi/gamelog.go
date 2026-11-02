@@ -94,6 +94,11 @@ func (l *gameLog) rewind(g *game.Game, turn int) {
 		}
 	}
 	l.lines = kept
+	for t := range l.why {
+		if t >= turn {
+			delete(l.why, t) // 被撤銷的回合（例如真人的 AI 代打）不能把理由留給重來的那一手
+		}
+	}
 	l.done = len(g.Log)
 	l.note(turn, fmt.Sprintf("t%d 回溯：撤銷第 %d 回合起的行動", turn, turn))
 }

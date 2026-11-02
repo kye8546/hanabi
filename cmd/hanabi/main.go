@@ -70,8 +70,16 @@ func main() {
 		}
 		return cs
 	}
+	// 代打用的 AI：和其他 AI 一樣每個回合跟上局面（seat0.Observe），輸入 a 時才替你決定
+	var helper *hgroup.Bot
+	human.Auto = func(v game.PlayerView) (game.Action, string) {
+		a := helper.Act(v)
+		gl.why[v.Turn] = "AI 代打：" + helper.Why()
+		return a, helper.Why()
+	}
 	newPlayers := func() []player.Player {
-		ps := []player.Player{loggedHuman{logged{human, gl}, human}}
+		helper = hgroup.New(names[0], set.Level)
+		ps := []player.Player{seat0{loggedHuman{logged{human, gl}, human}, helper}}
 		for i := 1; i < n; i++ {
 			ps = append(ps, logged{hgroup.New(names[i], set.Level), gl})
 		}
@@ -147,6 +155,9 @@ func rewind(g *game.Game, seed uint64, newPlayers func() []player.Player) (*game
 	ps := newPlayers()
 	for _, x := range acts[:last] {
 		p := ng.Current
+		if o, ok := ps[p].(seat0); ok {
+			o.helper.Observe(ng.View(p))
+		}
 		if p != 0 {
 			// 讓 AI 照原本的節奏建立筆記（它會選出同一個行動）；直接呼叫 AI，不經過紀錄（那些行已經寫過）
 			bot := ps[p]
@@ -160,4 +171,15 @@ func rewind(g *game.Game, seed uint64, newPlayers func() []player.Player) (*game
 		}
 	}
 	return ng, ps, acts[last].turn, true
+}
+
+// seat0 是真人的座位：每次輪到他時先讓代打用的 AI 跟上局面（a 指令才用得到它的決定）。
+type seat0 struct {
+	loggedHuman
+	helper *hgroup.Bot
+}
+
+func (p seat0) Act(v game.PlayerView) game.Action {
+	p.helper.Observe(v)
+	return p.loggedHuman.Act(v)
 }

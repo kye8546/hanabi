@@ -13,7 +13,7 @@ import (
 	"hanabi/player"
 )
 
-const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ m [玩家] <位置> 標記 cm │ u 回溯 │ x 偷看 │ n 反向資訊 │ ? 說明"
+const commandHint = "指令： p <位置> 打出 │ d <位置> 棄牌 │ h <玩家> <顏色|數字> 提示 │ m [玩家] <位置> 標記 cm │ a AI 代打 │ u 回溯 │ x 偷看 │ n 反向資訊 │ ? 說明"
 
 const helpText = `
  p <位置>              打出手牌，例如 p 1（位置從左邊 1 開始；新抽的牌放最左邊）
@@ -22,6 +22,7 @@ const helpText = `
                        玩家可用編號或名字；顏色 r/y/g/b/w 或 紅/黃/綠/藍/白（6 Suits 多一個 t / 青，Black 多一個 k / 黑；Rainbow 的彩虹色不能提示，每種顏色提示都會點到它）
  m [玩家] <位置>       標記 / 取消標記一張牌被 Chop Move（位置列顯示 cm），例如 m 1 4（1 號的位置 4）、m 5（自己的位置 5）
                        標記只是你自己的筆記，跟著那張牌移動；AI 的 Chop Move 不會自動顯示
+ a                     AI 代打一手：照開局選的慣例等級替你決定這一手並直接執行（紀錄檔會註明，附上 AI 的理由）
  u                     回溯：回到你上一次行動之前（撤銷你那一手和之後 AI 的行動），可連續使用
  x                     偷看自己手牌的真實牌面（紀錄檔會註明你在第幾回合偷看過）
  log                   顯示完整紀錄
@@ -56,6 +57,8 @@ type Human struct {
 
 	OnQuit func()             // 選用：玩家離開（q 或輸入結束）前呼叫，例如寫完對局紀錄
 	Peek   func() []game.Card // 選用：偷看自己手牌的真實牌面（由持有整局遊戲的呼叫端提供）
+	// Auto 選用：AI 替你決定這一手，回傳行動與理由（a 指令）
+	Auto func(v game.PlayerView) (game.Action, string)
 }
 
 // Rewound 在回溯重建局面後呼叫：之前的事件不再當成「最近發生」重播。
@@ -167,6 +170,13 @@ func (h *Human) parse(line string, v game.PlayerView) (game.Action, error) {
 		h.r.Board(v)
 		fmt.Fprintf(h.out, " %s 的位置 %d：%s\n", h.names[seat], n, map[bool]string{true: "標記為 Chop Moved（cm）", false: "取消 cm 標記"}[on])
 		return game.Action{}, errHandled
+	case "a", "auto", "ai":
+		if h.Auto == nil {
+			return game.Action{}, errors.New("這個模式不能代打")
+		}
+		a, why := h.Auto(v)
+		fmt.Fprintf(h.out, " AI 代打：%s（%s）\n", h.actionText(a), why)
+		return a, nil
 	case "u", "undo":
 		return player.UndoAction, nil
 	case "x", "peek":
@@ -221,6 +231,17 @@ func (h *Human) parse(line string, v game.PlayerView) (game.Action, error) {
 		return game.Action{}, fmt.Errorf("看不懂提示內容 %q，請用 %s 或 1–5", f[2], strings.Join(letters, "/"))
 	}
 	return game.Action{}, fmt.Errorf("看不懂指令 %q", f[0])
+}
+
+// actionText 用文字描述一個還沒執行的行動（位置 1-based）。
+func (h *Human) actionText(a game.Action) string {
+	switch a.Type {
+	case game.ActPlay:
+		return fmt.Sprintf("打出位置 %d", a.Slot+1)
+	case game.ActDiscard:
+		return fmt.Sprintf("棄掉位置 %d", a.Slot+1)
+	}
+	return fmt.Sprintf("提示 %s「%s」", h.names[a.Target], h.r.hintText(a.Hint))
 }
 
 func (h *Human) parseTarget(s string) (int, bool) {
