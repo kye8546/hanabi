@@ -150,15 +150,10 @@ func (s *state) holderMayAct(p int) bool {
 	return false
 }
 
-// myTrashSlot：我手上大家都知道沒用的已提示牌（由右而左第一張）；沒有則回傳 -1。
+// myTrashSlot：我手上大家都知道沒用的已提示牌（由左而右第一張——原文 summary：好幾張已知垃圾時照慣例由左而右棄，
+// Level 14 的 Trash Order Chop Move 就是跳過它；Level 8 Positional Discard「該棄的牌」也照這個順序）；沒有則回傳 -1。
 func (s *state) myTrashSlot() int {
-	h := s.hands[s.me]
-	for slot := len(h) - 1; slot >= 0; slot-- {
-		if s.screamTrash(h[slot]) {
-			return slot
-		}
-	}
-	return -1
+	return slices.IndexFunc(s.hands[s.me], s.screamTrash)
 }
 
 // stepEmergencyDiscard（Level 7）：提示 0 個時用棄牌救人（最後手段，Order Chop Move 等不花提示的救法在前面）：

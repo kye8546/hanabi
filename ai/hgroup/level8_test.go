@@ -316,3 +316,16 @@ func TestBurnWithTrashOnlyClue(t *testing.T) {
 		}
 	}
 }
+
+func TestPositionalMisplayKnownTrash(t *testing.T) {
+	// 使用者回報 20261102-094044 t61（Black 3 人局）：提示 0 個、牌堆 3 張，使用者 slot 4 的 G1、slot 5 的 R1 都是大家都知道
+	// 沒用的已提示牌，該棄的是左邊那張 G1（已知垃圾由左而右棄），棄它只是一般的棄牌；故意打錯它就是 Positional Misplay，
+	// AI-2 同一位置的 G5（他只知道是「G5、B5 或 W5」）要盲打
+	const codes = "h1G h2R p1 h1Y h0B p2 p3 p1 p5 h22 p5 p1 h14 h0G p1 p2 p1 h02 d2 h0R d5 p4 d5 h1K h15 d1 d5 d4 d1 h11 " +
+		"d3 p1 h0W d3 p1 h1B p5 p1 h02 h1B p1 h04 p4 p2 d5 p4 h01 d5 h22 p5 h0R p4 p4 d1 h2Y p5 p1 h24 h25 p1 p4"
+	g, bots := replayCodesVariant(t, 3, game.BlackSix, 1793583644267462000, 9, codes)
+	step(t, g, bots)
+	if a := bots[2].Act(g.View(2)); a.Type != game.ActPlay || a.Slot != 3 {
+		t.Errorf("AI-2 應該回應 Positional Misplay 盲打 slot 4 的 G5，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

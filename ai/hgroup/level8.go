@@ -425,14 +425,11 @@ type posRec struct {
 	done              int    // 已經回應（打出那張牌）的人數
 }
 
-// posExpected：P 這一手「該棄」的牌——大家都知道沒用的已提示牌（myTrashSlot 的順序），否則 chop（publicChop）。
+// posExpected：P 這一手「該棄」的牌——大家都知道沒用的已提示牌（由左而右，myTrashSlot 的順序），否則 chop（publicChop）。
 // 鎖手（沒有 chop、也沒有已知垃圾）回傳 -1，他棄什麼都不是 Positional Discard。
 func (s *state) posExpected(P int) int {
-	h := s.hands[P]
-	for slot := len(h) - 1; slot >= 0; slot-- {
-		if s.screamTrash(h[slot]) {
-			return h[slot]
-		}
+	if i := slices.IndexFunc(s.hands[P], s.screamTrash); i >= 0 {
+		return s.hands[P][i]
 	}
 	return s.publicChop(P, nil)
 }
@@ -476,11 +473,11 @@ func (s *state) detectPositional(e game.Event, resp bool) *posRec {
 	return pr
 }
 
-// posUnknown：P 的牌 id 可以拿來做 Positional Discard / Misplay：終局、沒被提示、沒被 Chop Move、沒被 finesse，
-// 而且 P 有該棄的牌（不是鎖手）。
+// posUnknown：P 的牌 id 可以拿來做 Positional Discard / Misplay：終局、沒被提示、沒被 Chop Move、沒被 finesse
+// （或是大家都知道沒用的已提示牌——打錯它不可能是失誤），而且 P 有該棄的牌（不是鎖手）。
 func (s *state) posUnknown(P, id int) bool {
 	n := s.notes[id]
-	return s.knows(lvEndGame) && s.endGame() && !n.clued && !n.cm && !n.finessed && s.posExpected(P) >= 0
+	return s.knows(lvEndGame) && s.endGame() && (!n.clued && !n.cm && !n.finessed || s.screamTrash(id)) && s.posExpected(P) >= 0
 }
 
 // posDiscardLike：P 棄掉牌 id 會被當成 Positional Discard（不看牌面是不是 critical）：posUnknown，
@@ -493,8 +490,13 @@ func (s *state) posDiscardLike(P, id int) bool {
 // （有提示時直接提示那張就好，原文的例子也是 0 個）、打錯後還不到三個閃電、沒有提示要他盲打、也不是他的
 // finesse position（大家都看得到的最左邊那張沒被提示的牌）——打錯沒被提示的牌多半只是以為自己被 finesse
 // （自我對局 5 人局：誤認成 Double Positional Misplay 又害兩個人盲打，一錯就是三個閃電）。
+// 打錯大家都知道沒用的已提示牌不會是誤以為被 finesse，不看後兩項（原文：「the card misplayed for "no reason"」；
+// 使用者回報 20261102-094044 t61：該棄的是已知垃圾 G1，棄它只是一般的棄牌，打錯它才叫得到 AI-2 同一位置的 G5）。
 func (s *state) posMisplayLike(P, id int) bool {
-	return s.posUnknown(P, id) && s.hints == 0 && s.strikes < game.MaxStrikes-1 && !s.mayBlindPlay(P, id) &&
+	if !s.posUnknown(P, id) || s.hints != 0 || s.strikes >= game.MaxStrikes-1 {
+		return false
+	}
+	return s.screamTrash(id) || !s.mayBlindPlay(P, id) &&
 		slices.ContainsFunc(s.hands[P][:max(slices.Index(s.hands[P], id), 0)], func(c int) bool { n := s.notes[c]; return !n.clued && !n.cm })
 }
 
