@@ -192,3 +192,14 @@ func TestL9NoDDAAfterSarcastic(t *testing.T) {
 		t.Errorf("AI-1 沒事可做，應該棄 chop，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL9FillInNoPlanForBystander(t *testing.T) {
+	// 使用者回報 20261102-114621 t25（Black 3 人局）：AI-2 棄掉 R3，只剩最後一張，使用者的 chop 可能是它（Double Discard
+	// Situation）；使用者用綠色補 AI-2 已提示的 G5、G2 是 Fill-In Clue，不是 play clue。AI-1 看得到焦點是 G5，
+	// 不能照實際牌面當成「finesse 我的 G1、G3、G4」而盲打
+	const codes = "h21 h05 p5 h11 p4 p4 h12 p3 h1Y h2B p1 p3 h1B p3 h15 d5 p4 d5 h25 h2Y p4 d5 h22 d4 h2G"
+	g, bots := replayCodesVariant(t, 3, game.BlackSix, 1793591181031498000, 9, codes)
+	if a := bots[1].Act(g.View(1)); a.Type == game.ActPlay {
+		t.Errorf("Fill-In Clue 不會叫人盲打，AI-1 卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

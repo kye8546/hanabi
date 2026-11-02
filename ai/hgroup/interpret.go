@@ -209,10 +209,10 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	// 「should not be read as a Play Clue or a Finesse」；給提示者有事可做時不是拖延，stallValid）。
 	// prompt 別的已提示牌也不行，只留直接能打（Tempo Clue Stall）與 prompt 這次一起點到的牌（補資訊讓兩張都能打）
 	// （使用者回報 20261030-140936 t15：提示滿 8，「3」補上 AI-1 黃牌的資訊，AI-1 以為是 prompt 另一張黃牌當 Y2 而打錯 Y4）
-	if it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.stallSeverity(giver) >= 2 && s.stallValid(giver)) {
-		connects := func(c cand) bool {
-			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.finesse || !slices.Contains(touched, d.card) })
-		}
+	connectsDep := func(d dep) bool { return d.finesse || !slices.Contains(touched, d.card) }
+	fillIn := it.tempo && (s.screamed(giver) || s.knows(lvStall) && s.stallSeverity(giver) >= 2 && s.stallValid(giver))
+	if fillIn {
+		connects := func(c cand) bool { return slices.ContainsFunc(c.deps, connectsDep) }
 		it.cands = slices.DeleteFunc(it.cands, connects)
 		it.fallback = slices.DeleteFunc(it.fallback, connects)
 	}
@@ -240,6 +240,13 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		s.ownMaybe = false
 		it.plan, it.planOK = s.connect(s.me, giver, R, it.focus, t)
 		it.ownMaybe = s.ownMaybe
+		if fillIn && slices.ContainsFunc(it.plan, connectsDep) {
+			// Fill-In Clue 不是 play clue：看得到焦點的人也不照實際牌面 prompt / finesse 別人的牌，沒有人要行動
+			// （使用者回報 20261102-114621 t25：使用者在 Double Discard Situation 用綠色補 AI-2 的 G5、G2，
+			// 解讀裡的 finesse 拿掉了，AI-1 卻照實際的 G5 算出「finesse 我的 G1、G3、G4」而盲打錯）
+			it.plan, it.planOK, it.agreed = nil, false, true
+			return it
+		}
 		it.agreed = it.planOK
 		for _, d := range it.plan {
 			if d.player == s.me {
