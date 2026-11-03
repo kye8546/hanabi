@@ -228,6 +228,12 @@ func (s *state) findFinesse(obs, giver, R int, m ident, used []int) (d dep, took
 			if t == m {
 				return dep{player: p, card: fp, id: m, finesse: true}, []int{fp}, true
 			}
+			// 接收者自己的 Self-Finesse 沒有 layer（Bob is Lazy：他盲打出 layer 就會以為焦點接在它後面）。旁觀者看到接收者
+			// finesse position 後面藏著那張，也不能拿它優先於自己看不到的 finesse position（使用者回報 20261103-122248：
+			// 「4」點 AI-2 的 y4，AI-1 的 slot 1–4 是 w1、y1、y2、y3；AI-1 看到 AI-2 的 b1 後面是 y3，以為 y3 是她的事）
+			if p == R {
+				continue
+			}
 			if d, took, ok := s.layered(obs, p, fp, t, m, used); ok {
 				return d, took, true
 			}
@@ -446,7 +452,7 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 		// that was the Finesse target must match」），其他要它是別張的解讀不成立
 		selfFin := d.finesse && d.player == rec.target
 		if e.Type == game.EvPlay && !selfFin && (d.finesse && s.knows(lvLayeredFinesse) || !d.finesse && s.knows(lvHiddenFinesse)) {
-			if nc := s.layerSlot(rec, d.player, played); nc >= 0 {
+			if nc := s.layerSlot(rec, d.player, played, nil); nc >= 0 {
 				st := depPending
 				if d.layers > 0 {
 					d.layers--
@@ -640,10 +646,14 @@ func (s *state) checkDeps(e game.Event, played int) {
 			case depGone:
 				s.release(rec, d)
 			case depPending, depPeel:
-				if nd.card != d.card {
-					s.markDep(rec, nd)
-				}
 				plan = append(plan, nd)
+			}
+		}
+		old := slices.Clone(rec.plan)
+		s.shiftLayered(rec, plan, e.Player, played)
+		for _, nd := range plan {
+			if !slices.ContainsFunc(old, func(d dep) bool { return d.card == nd.card && d.id == nd.id }) {
+				s.markDep(rec, nd)
 			}
 		}
 		rec.plan = plan
@@ -789,6 +799,7 @@ func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor
 	done = -1
 	for _, c := range cs {
 		fail, gone := false, false
+		c.deps = slices.Clone(c.deps)
 		for i, d := range c.deps {
 			nd, st := s.stepDep(rec, d, e, played, d.player == waitFor)
 			switch st {
@@ -804,6 +815,7 @@ func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor
 			}
 			c.deps[i] = nd
 		}
+		s.shiftLayered(rec, c.deps, e.Player, played)
 		if !fail && s.promptPassed(rec, c, e, played, waitFor) {
 			fail = true
 		}
@@ -819,6 +831,24 @@ func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor
 		kept = append(kept, c)
 	}
 	return kept, changed, done, peeled
+}
+
+// shiftLayered：同一人在同一串連接裡的 finesse 要落在不同的牌上。打出 layer 後前一個連接移到他下一張被這個提示
+// finesse 的牌（layerSlot），後面的就依序再往右移一張（使用者回報 20261103-122248：AI-1 被 finesse y1、y2、y3，
+// finesse position 是 layer w1；以前 y1 的承諾跳過已記成 y2 的 slot 2、落在 slot 3，就把 y2 當 y1 盲打）。
+func (s *state) shiftLayered(rec *clueRec, deps []dep, p, played int) {
+	var used []int
+	for i, d := range deps {
+		if d.player != p {
+			continue
+		}
+		if d.finesse && slices.Contains(used, d.card) {
+			if nc := s.layerSlot(rec, p, played, used); nc >= 0 {
+				deps[i].card = nc
+			}
+		}
+		used = append(used, deps[i].card)
+	}
 }
 
 // onlyWith：有人照這個提示打出了連接牌 card，只保留需要那張牌的解讀（並把它視為已完成）；

@@ -506,3 +506,22 @@ func TestL5LaterCluedPlayNotProof(t *testing.T) {
 		t.Errorf("黃色點到的 Y1 應該打出，AI-2 卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL5LayeredTripleFinesseShiftsRight(t *testing.T) {
+	// 使用者回報 20261103-122248：Alice「4」點 Cathy 的 y4；Bob 的 slot 1–4 是 w1、y1、y2、y3（Layered Triple Finesse）。
+	// Bob 盲打出 layer w1 後，y1、y2、y3 依序是 slot 2、3、4。以前 y1 的承諾跳過已記成 y2 的 slot 2、落在 slot 3，
+	// Bob 就把 y2 當 y1 打錯；Bob 看到 Cathy 的 b1 後面是 y3，也誤以為 y3 是她的 Layered Self-Finesse
+	g, bots := scenarioAt(t, 5, "", "w3 y2 r1 b3 g4", "w1 y1 y2 y3 b4", "b2 y3 y4 b4 g3")
+	g.Hints = 2
+	force(t, g, game.HintRankTo(2, 4))
+	for i, want := range []string{"w1", "y1", "y2"} {
+		if a := step(t, g, bots); a != game.Play(i) {
+			t.Fatalf("Bob 第 %d 次應盲打 slot %d 的 %s，卻做了 %+v（%s）", i+1, i+1, want, a, bots[1].Why())
+		}
+		force(t, g, game.Discard(0)) // Cathy 棄新抽的牌（不動被提示的 y4）
+		force(t, g, game.Discard(4)) // Alice
+	}
+	if a := step(t, g, bots); a != game.Play(3) || g.Fireworks[game.Yellow] != 3 || g.Strikes != 0 {
+		t.Fatalf("Bob 應盲打出 slot 4 的 y3，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
