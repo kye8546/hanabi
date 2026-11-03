@@ -74,24 +74,6 @@ func TestL10BatonDiscard(t *testing.T) {
 	}
 }
 
-func TestL10GiveBatonDiscard(t *testing.T) {
-	// 給 Baton Discard：Alice 確定手上被點到的是 r3（還不能打），另一張 r3 正好在 Bob 的 finesse position，
-	// Alice 沒有 play / save clue 可給、沒牌可打。Lv10 棄掉 r3 傳給 Bob，不棄可能有用的 chop；Lv9 棄 chop
-	for _, lv := range []int{9, 10} {
-		g, bots := scenario6(t, lv, "r1", "r3 g4 b4 w4 y3", "r3 y4 g3 b3 w3", "y4 g4 b4 w4 g3")
-		g.Hints = 3
-		known(t, g, bots, 0, 0, "r3")
-		a := step(t, g, bots)
-		want := game.Discard(4)
-		if lv >= 10 {
-			want = game.Discard(0)
-		}
-		if a != want {
-			t.Errorf("Lv%d：Alice 應 %+v，卻做了 %+v（%s）", lv, want, a, bots[0].Why())
-		}
-	}
-}
-
 func TestL10SarcasticFinesse(t *testing.T) {
 	// 原文 The Sarcastic Finesse：什麼都沒打出，Alice 有一張不知道顏色的 2（實際是 r2）。Alice 紅色點 Cathy 的 r2，
 	// finesse Bob 的 r1；Bob 盲打出 r1。Cathy 的 r2 確定了，看到 Alice 那張就是 r2：Sarcastic Discard 傳給 Alice
@@ -191,29 +173,6 @@ func TestL10GiveCertainFinesse(t *testing.T) {
 		a := step(t, g, bots)
 		if got := a.Type == game.ActHint && a.Target == 1; got != (lv >= 10) {
 			t.Errorf("Lv%d：Alice 提示 Bob 的 r4 = %v（%+v，%s）", lv, got, a, bots[0].Why())
-		}
-	}
-}
-
-func TestL10GiveLayeredGentlemansDiscard(t *testing.T) {
-	// 給 Layered Gentleman's Discard：Alice 確定手上是 r1，Bob 的 finesse position 是 g1、後面是 r1。
-	// Lv10 棄掉 r1，Bob 會盲打出 g1、再打 r1（多打出一張、還換回一個提示）；Lv9 直接打 r1
-	for _, lv := range []int{9, 10} {
-		g, bots := scenario6(t, lv, "", "y4 r1 b4 w4 y3", "g1 r1 g3 b3 w3", "y4 g4 b4 w4 g3")
-		g.Hints = 5
-		known(t, g, bots, 0, 1, "r1")
-		a := step(t, g, bots)
-		want := game.Play(1)
-		if lv >= 10 {
-			want = game.Discard(1)
-		}
-		if a != want {
-			t.Fatalf("Lv%d：Alice 應 %+v，卻做了 %+v（%s）", lv, want, a, bots[0].Why())
-		}
-		if lv >= 10 {
-			if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.Green] != 1 {
-				t.Fatalf("Bob 應盲打出 g1，卻做了 %+v（%s）", a, bots[1].Why())
-			}
 		}
 	}
 }

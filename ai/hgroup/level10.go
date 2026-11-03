@@ -63,7 +63,7 @@ func (s *state) gdTarget(obs, D int, t ident, discarded int) (p, card, layers in
 				}
 				// 不像 Layered Finesse 那樣排除「別處已被拿到的牌」當 layer：那要看各人看得到的牌（棄牌的人看不到自己手上的），
 				// 讀法會不一致（自我對局 Rainbow 5 人局 seed 130：layer W3 和棄牌者自己不知道的 W3 重複，其他人都找不到目標、
-				// 以為是自己而連續三人盲打錯）。給的人自己避開這種 layer（gdPlan）
+				// 以為是自己而連續三人盲打錯）
 				if !layered || !s.playableNow(u) || slices.Contains(seen, u) {
 					break
 				}
@@ -292,88 +292,4 @@ func (s *state) dupFinesseOK(c ident) bool {
 		k++
 	}
 	return k == 1
-}
-
-// gdPlan（Level 10）：我棄掉手上確定是 t 的牌 x 當 Gentleman's / Baton Discard 時，傳給誰的哪張牌、要先盲打幾張 layer。
-// 每個人都要讀成同一個人：沒有人手上有已被拿到、可能是 t 的牌（那會被當成 Sarcastic Discard），每個人照自己看得到的牌
-// 推出同一張（例如 1 的另外兩張在兩個人的 finesse position 上時不行——原文：「explicitly illegal」）。
-func (s *state) gdPlan(x int) (p, card, layers int, ok bool) {
-	t, known := s.myPoss(x).single()
-	if !s.knows(lvGentleman) || !known || !s.live(x) || s.trash(t) || t.copies()-s.discarded[t] < 2 || s.chop(s.me) < 0 ||
-		s.notes[x].poss != setOf(t) || s.pendingAs(t) {
-		return -1, -1, 0, false
-	}
-	for q, h := range s.hands {
-		for _, id := range h {
-			if id == x || !s.gotten(id) {
-				continue
-			}
-			if q == s.me && s.myPoss(id).has(t) || s.notes[id].poss.has(t) {
-				return -1, -1, 0, false
-			}
-			if c, seen := s.card(id); seen && identOfCard(c) == t {
-				return -1, -1, 0, false
-			}
-		}
-	}
-	p, card, layers = s.gdTarget(s.me, s.me, t, x)
-	if p < 0 || card < 0 {
-		return -1, -1, 0, false
-	}
-	// layer 和別處已被拿到的牌重複時，layer 先打出，那張就成了持有者不知道的重複牌
-	k := 0
-	for _, id := range s.hands[p] {
-		if k >= layers {
-			break
-		}
-		if !s.gotten(id) && !s.notes[id].cm {
-			if s.gottenElsewhere(s.me, identOfCard(s.cards[id]), id) || s.maybeMine(identOfCard(s.cards[id])) {
-				return -1, -1, 0, false
-			}
-			k++
-		}
-	}
-	for obs := range s.n {
-		if obs == s.me {
-			continue
-		}
-		if q, c, _ := s.gdTarget(obs, s.me, t, x); q != p || c != card {
-			return -1, -1, 0, false
-		}
-	}
-	return p, card, layers, true
-}
-
-// layeredGDSlot（Level 10 The Layered Gentleman's Discard）：我確定能打的牌 t 在別人手上還有一張、藏在他 finesse position
-// 幾張能打的牌後面：棄掉我這張，他會一路盲打出那些牌再打出 t——不花提示多打出 layer，還換回一個提示
-// （原文：「One great reason to want to do a Gentleman's Discard is if the card you are discarding is also behind playable cards」）。
-// 終局回合有限，不這樣拖。
-func (s *state) layeredGDSlot(v game.PlayerView) int {
-	if v.Hints >= game.MaxHints || s.endGame() {
-		return -1
-	}
-	for slot, x := range s.hands[s.me] {
-		if !s.knownPlayable(x) {
-			continue
-		}
-		if _, _, layers, ok := s.gdPlan(x); ok && layers > 0 {
-			return slot
-		}
-	}
-	return -1
-}
-
-// batonSlot（Level 10 The Baton Discard）：要棄 chop 時，若手上有確定是 t、還不能打的已提示牌，而另一張 t 正好在別人的
-// finesse position：改棄這張，把它傳過去（那張視同被提示）。隊上一張 t 都沒少，我也不必冒險棄掉可能有用的 chop
-// （原文：「You want to protect your own chop」）。
-func (s *state) batonSlot() int {
-	for slot, x := range s.hands[s.me] {
-		if t, ok := s.myPoss(x).single(); !ok || s.playableNow(t) {
-			continue
-		}
-		if _, _, layers, ok := s.gdPlan(x); ok && layers == 0 {
-			return slot
-		}
-	}
-	return -1
 }

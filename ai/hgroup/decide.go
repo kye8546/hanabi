@@ -53,7 +53,6 @@ var decideSteps = []decideStep{
 	(*state).stepFixMisplay,        //    Level 3 Misplay Cost Principle：隊友會打錯
 	(*state).stepOrderChopMove,     //    Order Chop Move 保護後面其他人的 chop
 	(*state).stepStallBeforePlay,   //    Level 8 終局：有隊友的牌來不及打完時先拖延，自己的牌晚點打
-	(*state).stepLayeredGD,         //    Level 10 Layered Gentleman's Discard：別人手上的同一張藏在能打的牌後面
 	(*state).stepPlay,              // 3. 打出確定能打的牌（例外：先給有時效的 play clue）
 	(*state).stepPlayOrSaveClue,    // 4. play clue 優先於 5. save clue
 	(*state).stepFixGoodTouch,      //    Level 3：其他違反 Good Touch 的牌
@@ -340,13 +339,6 @@ func (s *state) stepEndgameBurn(t *turn) (game.Action, string, bool) {
 	return game.Action{}, "", false
 }
 
-func (s *state) stepLayeredGD(t *turn) (game.Action, string, bool) {
-	if slot := s.layeredGDSlot(t.v); slot >= 0 {
-		return game.Discard(slot), "Layered Gentleman's Discard：別人手上的同一張藏在能打的牌後面，傳給他、他會一路盲打", true
-	}
-	return game.Action{}, "", false
-}
-
 func (s *state) stepDiscard(t *turn) (game.Action, string, bool) {
 	a, why := s.discard(t.v, t.clues(s))
 	return a, why, true
@@ -502,9 +494,6 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 			if a, tier := s.stallTier(allowed); tier > 2 {
 				return a, "Double Discard Avoidance：上一位棄掉的牌只剩一張，可能就在我的 chop 上，給拖延提示"
 			}
-		}
-		if slot := s.batonSlot(); slot >= 0 {
-			return game.Discard(slot), "Baton Discard：手上確定的牌另一張就在別人的 finesse position，傳給他，不棄 chop"
 		}
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
