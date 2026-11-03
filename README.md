@@ -10,7 +10,7 @@
 ## 執行
 
 ```bash
-go run ./cmd/hanabi              # 開局時會要求選人數（2–5）、H-Group 慣例等級（目前可選 Lv1–9）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black，4 = Rainbow）
+go run ./cmd/hanabi              # 開局時會要求選人數（2–5）、H-Group 慣例等級（目前可選 Lv1–10）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black，4 = Rainbow）
 go run ./cmd/hanabi -seed 42     # 固定牌序（不加 -seed 時開局會問種子，直接按 Enter = 隨機）
 go run ./cmd/hanabi -nocolor     # 不用終端顏色（也支援 NO_COLOR 環境變數）
 go run ./cmd/hanabi -showneg     # 開局就顯示反向提示資訊（預設只顯示被點到的顏色/數字；遊戲中可用 n 即時切換，連 AI 手牌一起）
@@ -19,7 +19,7 @@ go run ./cmd/hanabi -showneg     # 開局就顯示反向提示資訊（預設只
 編成 Windows 執行檔：`GOOS=windows GOARCH=amd64 go build -o hanabi.exe ./cmd/hanabi`。
 遊戲結束（含輸入 `q` 離開）時會等你按 Enter 才關閉，直接點兩下 exe 執行時視窗不會一結束就消失。
 
-AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Level 9**（更高的等級還不能選）：
+AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Level 10**（更高的等級還不能選）：
 - Lv1：整份 Beginner's Guide。
 - Lv2：5 Stall、Double/Triple Prompt、Double Finesse、Prompt + Finesse、Reverse Finesse、Self-Finesse、Wrong Prompt。
 - Lv3：Playing Multiple 1's（起手牌的 1 由舊到新、Fresh 1's、Chop-Focus 例外）、Fix Clue（含不給新資訊的 Stop Clue）、Sarcastic Discard、Information Lock。
@@ -29,6 +29,7 @@ AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Le
 - Lv7：Emergency Discards——Scream Discard Chop Move（提示 0 個時不打大家都知道能打的牌、改棄 chop → 下一位 Chop Move 自己 chop 上必須保留的牌，這一手必須給提示；手上有大家都知道沒用的已提示牌卻棄 chop 也一樣）、Shout Discard Chop Move（任何提示數，不打能打的牌、改棄已知垃圾）、Generation Discard（棄牌換提示，讓下一位救再下一位的 chop，不 Chop Move），以及在終局、還能承受閃電時盲打很可能能打的 Chop Moved 牌。
 - Lv8：End-Game——終局（pace < 人數）不 Chop Move（像 Chop Move 的提示改當拖延，也沒有 Scream / Shout Discard）、Positional Discard / Positional Misplay / Double Positional Misplay（看得到每一張還需要的牌時，棄或打錯某個位置，叫那個位置上有能打的牌的最後一位盲打）、Distribution Clue（終局刻意點到別人已提示的牌的重複，分擔他來不及打的牌），以及推演起來先拖延比較好時，自己的牌晚點打。
 - Lv9：Stalling——Double Discard Avoidance（上一位棄掉的牌只剩一張、可能就在我的 chop 上時，不棄 chop，改給提示，拖延提示也可以；別人在這種情況給的提示當拖延解讀）；Early Game 全隊必須做一次 5 Stall（不必提示上一位玩家：Permission to Discard），5 Stall 要給最靠近 chop 的 5；提示滿 8、鎖手、Double Discard 時給的提示當拖延解讀（只補資訊的提示不是 finesse；Locked Hand Save：鎖手的人點到別人 chop 上的牌只是救它；8 Clue Save：提示滿 8 時點到不在 slot 1 的新牌只是救它）；Anxiety Play（鎖手的人提示 0 個時打出最可能能打的牌，所以他那張不能打時，他的上一位必須棄牌換一個提示給他）。
+- Lv10：Special Discards——Gentleman's Discard（棄掉確定能打的已提示牌，傳給 finesse position 上有同一張的人盲打；可以藏在能打的牌後面：Layered）、Baton Discard（還不能打的確定的牌，正好在別人的 finesse position 時傳給他，那張視同被提示；AI 用它代替棄掉可能有用的 chop）；Sarcastic Finesse（焦點可能和給提示者不確定的已提示牌重複的 finesse，接收者看到重複就 Sarcastic Discard 傳回）、Certain Finesse（被 finesse 的牌可能重複時，被 finesse 的人看到給提示者那張就是它，就把自己的 finesse position 棄掉傳回：Certain Discard）。
 - 所有等級都會在終局被迫拖延（取自 Level 8：棄牌會讓最高分拿不到時改給提示）。
 - Black 變體另外照 [黑色的慣例](https://hanabi.github.io/variant-specific/black)（所有等級）：救 chop 上的黑 2、黑 5 用數字，黑 3、黑 4 用黑色；用另一種提示點到它們就是 play clue。例外：黑色點到兩張以上新的黑牌、或補上一張已提示牌的資訊時可以救黑 2 / 黑 5；「3」/「4」同時點到另一張可能是 critical 的新牌（Florrat Save）時可以救黑 3 / 黑 4。（「為了不違反 Good Touch」「給了重要的負向資訊」這兩個例外接收者無從確認，AI 不用也不這樣解讀。）
 - Rainbow 變體另外照 [彩虹的慣例](https://hanabi.github.io/variant-specific/rainbow)（所有等級）：彩虹 2 照一般的 2 Save，critical 的彩虹牌可以用任何顏色或數字救；Free Choice Finesse（顏色提示只點到彩虹牌時，捨棄和已提示牌相同的顏色、改用別的顏色 = finesse）。
@@ -64,7 +65,7 @@ AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Le
 ```
 game/      純規則引擎（無 I/O）：Action → Event，PlayerView 遮蔽自己的手牌
 player/    Player 介面（真人與 AI 共用）＋ Run 主迴圈
-ai/hgroup  H-Group 慣例 AI（目前 Level 1–9）
+ai/hgroup  H-Group 慣例 AI（目前 Level 1–10）
 ai/        其他 AI；DiscardBot（能棄就棄最舊的牌，當基準）
 console/   文字介面：Renderer 畫面、Human 讀指令
 cmd/hanabi 組裝並啟動

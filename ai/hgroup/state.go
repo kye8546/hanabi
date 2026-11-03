@@ -117,6 +117,8 @@ type state struct {
 	posResp bool
 	// dda：Level 9 Double Discard Avoidance——上一位剛棄掉（或打錯）的牌只剩最後一張，可能就在下一位的 chop 上
 	dda *ddaRec
+	// gds：Level 10 Gentleman's Discard 之後還沒盲打出來的牌（Layered 時往右移）
+	gds []gdRec
 }
 
 // sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
@@ -406,8 +408,10 @@ func (s *state) apply(e game.Event) {
 			connRecs = s.recsWanting(e.Card.ID)
 			eitherWay = s.receiverHadIt(connRecs, e.Card.ID, identOfCard(e.Card))
 		}
+		certain := s.certainDiscard(e)
 		s.posResp = resp
 		s.checkDeps(e, e.Card.ID)
+		s.stepGD(e)
 		s.excused, s.posResp = -1, false
 		if e.Type == game.EvPlay {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
@@ -417,7 +421,7 @@ func (s *state) apply(e game.Event) {
 		sarcastic := false
 		if e.Type == game.EvDiscard {
 			s.focusDiscarded(e.Card.ID)
-			sarcastic = s.sarcastic(e)
+			sarcastic = s.sarcastic(e, certain)
 			s.undoChopMove(e)
 		}
 		s.removeCard(e.Player, e.Card.ID)

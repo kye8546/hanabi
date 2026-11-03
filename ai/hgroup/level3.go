@@ -499,8 +499,10 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 
 // sarcastic（Level 3 The Sarcastic Discard）：有人棄掉一張被拿到、而且不是垃圾的牌 t，表示別人手上已被拿到的牌裡有 t
 // （他發現自己那張是重複的）。看得到的人知道是誰；都看不到就是我。那人手上只有一張可能是 t 的牌時，它就是 t
-// （有好幾張時不保證是哪一張）。鎖手被迫棄牌不算。回傳這次棄牌是不是 Sarcastic Discard。
-func (s *state) sarcastic(e game.Event) bool {
+// （有好幾張時不保證是哪一張）。鎖手被迫棄牌不算。回傳這次棄牌是不是 Sarcastic Discard（Level 10 起也可能是
+// Gentleman's / Baton Discard：沒有人手上有已被拿到、可能是 t 的牌時，t 傳到另一張的 finesse position；
+// certain = 這是 Certain Discard，已由 certainDiscard 處理）。
+func (s *state) sarcastic(e game.Event, certain bool) bool {
 	t := identOfCard(e.Card)
 	if !s.knows(lvSarcastic) || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 {
 		return false
@@ -520,6 +522,9 @@ func (s *state) sarcastic(e game.Event) bool {
 		holder = s.me
 	}
 	if holder < 0 {
+		if !certain {
+			s.gentleman(e) // 我自己棄的：別人手上看不到被拿到的 t，是 Gentleman's / Baton Discard
+		}
 		return true
 	}
 	var cands []int
@@ -527,6 +532,9 @@ func (s *state) sarcastic(e game.Event) bool {
 		if s.live(id) && s.knownPoss(holder, id).has(t) {
 			cands = append(cands, id)
 		}
+	}
+	if len(cands) == 0 && !certain {
+		s.gentleman(e) // Sarcastic Discard 優先；我也沒有可能是 t 的已提示牌，就是 Gentleman's / Baton Discard
 	}
 	if len(cands) == 1 {
 		s.notes[cands[0]].poss = setOf(t)

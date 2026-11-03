@@ -127,6 +127,8 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	// Level 8 Distribution Clue：值得給時，焦點和別處已被拿到的牌重複是刻意的，不算違反 Good Touch
 	distWorth := s.distributionWorth(R, it, t)
+	// Level 10 The Sarcastic Finesse：finesse 別人時，焦點可能和我手上不確定的已提示牌重複也可以（dupFinesseOK）
+	sarcastic := slices.ContainsFunc(it.plan, func(d dep) bool { return d.finesse && d.player != s.me })
 	for _, id := range order {
 		c := identOfCard(s.cards[id])
 		switch {
@@ -136,7 +138,8 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		case id != it.focus && (s.trash(c) || seen.has(c)) && s.seenAsTrash(it, id):
 			// 接收者推得出它不可能有用（垃圾，或只可能是焦點的重複）：不會造成誤解，還多知道一張可以先棄的牌
 			ev.trashMarked++
-		case s.trash(c) || seen.has(c) || id != it.focus && planned.has(c) || s.gottenAs(s.me, s.me, c, id) || s.maybeMine(c) || s.awaited(c, id) || s.pendingLayer(c, id):
+		case s.trash(c) || seen.has(c) || id != it.focus && planned.has(c) || s.gottenAs(s.me, s.me, c, id) || s.awaited(c, id) || s.pendingLayer(c, id) ||
+			s.maybeMine(c) && !(id == it.focus && sarcastic && s.dupFinesseOK(c)):
 			ev.bad++
 		case id != it.focus:
 			ev.newGood++
@@ -230,9 +233,12 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		return ev, true
 	}
 	// 被 prompt / finesse 叫出來的連接牌，若可能和我手上不確定的已提示牌重複，同樣違反 Good Touch
-	// （Level 10 Sarcastic Finesse：「Normally, potentially duplicating a card is bad」；那種刻意的用法是 Level 10）
+	// （Level 10 Sarcastic Finesse：「Normally, potentially duplicating a card is bad」）。Level 10 The Certain Finesse 例外：
+	// 正好在 finesse position 上（不能有 layer：「performing a Layered Finesse on a card that could potentially be clued in your own hand
+	// is illegal」）、不是接收者自己的牌——他看到我那張就是它時會 Certain Discard 傳回給我
 	for _, d := range plan {
-		if s.holder(d.card) != s.me && (s.maybeMine(d.id) || s.awaited(d.id, d.card) || s.pendingLayer(d.id, d.card)) {
+		certain := d.finesse && d.layers == 0 && d.player != R && s.dupFinesseOK(d.id)
+		if s.holder(d.card) != s.me && (s.maybeMine(d.id) && !certain || s.awaited(d.id, d.card) || s.pendingLayer(d.id, d.card)) {
 			ev.bad++
 		}
 	}
