@@ -4,6 +4,7 @@
 package hgroup
 
 import (
+	"maps"
 	"slices"
 
 	"hanabi/game"
@@ -46,6 +47,18 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 	if !s.knows(lvFixClue) || s.notFix {
 		return
 	}
+	// R 沒被點到的牌套上這次的負向資訊：筆記被這個提示推翻的牌不再算「已被拿到的那張」（使用者回報 20261104-122437 t6：
+	// 黃色 prompt 時 AI-1 照最左邊把 slot 1 的黃牌記成 Y2，「2」點到 slot 5、沒點 slot 1，以前仍以為 Y2 在 slot 1，
+	// 把真正的 Y2 當重複標成壞的，t26 棄掉）
+	post := maps.Clone(s.overlay)
+	if post == nil {
+		post = map[int]idSet{}
+	}
+	for id, ex := range it.explicit {
+		if !slices.Contains(touched, id) {
+			post[id] = s.possOf(id) & ex
+		}
+	}
 	good := func(set idSet, y int) idSet {
 		var g idSet
 		for _, i := range set.list() {
@@ -54,6 +67,11 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 			}
 		}
 		return g
+	}
+	goodAfter := func(set idSet, y int) idSet {
+		defer s.saveSim()()
+		s.overlay = post
+		return good(set, y)
 	}
 	mark := func(y int, bad bool, poss idSet) {
 		it.fix = true
@@ -77,12 +95,12 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 		switch after := before & ex; {
 		case after == 0:
 			// 筆記被證實是錯的：只剩提示本身的資訊（依 Good Touch 仍先假設是有用的牌）
-			if g := good(ex, y); g != 0 {
+			if g := goodAfter(ex, y); g != 0 {
 				mark(y, false, g)
 			} else {
 				mark(y, true, ex)
 			}
-		case good(after, y) == 0:
+		case goodAfter(after, y) == 0:
 			mark(y, true, after)
 		}
 	}

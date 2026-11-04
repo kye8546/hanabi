@@ -487,3 +487,13 @@ func TestL3FixNotMisreadByBystander(t *testing.T) {
 		t.Errorf("使用者看不出是 Fix Clue，會讀成 finesse 自己，AI-2 卻給了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL3FixClueOverridesWrongPrompt(t *testing.T) {
+	// 使用者回報 20261104-122437：AI-1 手上兩張沒被「1」點到的黃牌（slot 1 實際是 Y5、slot 5 是 Y2）。t4 使用者黃色點 AI-2 的 Y3，
+	// AI-1 照 prompt 最左邊把 slot 1 記成 Y2；t6 AI-2 的「2」點到 slot 5、沒點 slot 1——slot 1 不是 Y2，Y2 就是 slot 5。
+	// 以前 Fix Clue 的判斷仍用舊筆記，以為 Y2 已在 slot 1，把 slot 5 當重複標成壞的，之後棄掉
+	g, bots := replayCodes(t, 3, 1793766277750068000, 10, "h11 p4 h1Y h2Y p3 h12 d5")
+	if a := step(t, g, bots); a != game.Play(4) || g.Fireworks[game.Yellow] != 2 {
+		t.Fatalf("AI-1 應打出 slot 5 的 Y2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
