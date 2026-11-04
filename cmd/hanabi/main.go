@@ -12,6 +12,7 @@ import (
 	"hanabi/console"
 	"hanabi/game"
 	"hanabi/player"
+	"hanabi/session"
 )
 
 func main() {
@@ -50,7 +51,7 @@ func main() {
 	color := !*noColor && os.Getenv("NO_COLOR") == ""
 	r := console.NewRenderer(os.Stdout, names, color, *showNeg)
 
-	gl, err := newGameLog(names, set, *seed)
+	gl, err := session.NewLog("logs", names, set.Level, set.Variant, *seed)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "無法建立對局紀錄：", err)
 		exit(1)
@@ -58,12 +59,12 @@ func main() {
 	human := console.NewHuman(names[0], in, os.Stdout, r, names)
 	// 輸入 q 離開時也要把紀錄寫完（Human 之後會直接結束程式，所以在這裡等 Enter）
 	human.OnQuit = func() {
-		gl.close(g)
+		gl.Close(g)
 		fmt.Printf("本局紀錄：%s\n", gl.Path())
 		console.WaitEnter(in, os.Stdout)
 	}
 	human.Peek = func() []game.Card {
-		gl.note(g.Turn, fmt.Sprintf("t%d 偷看了自己的手牌", g.Turn))
+		gl.Note(g.Turn, fmt.Sprintf("t%d 偷看了自己的手牌", g.Turn))
 		var cs []game.Card
 		for _, hc := range g.Hands[0] {
 			cs = append(cs, hc.Card)
@@ -74,14 +75,14 @@ func main() {
 	var helper *hgroup.Bot
 	human.Auto = func(v game.PlayerView) (game.Action, string) {
 		a := helper.Act(v)
-		gl.why[v.Turn] = "AI 代打：" + helper.Why()
+		gl.SetWhy(v.Turn, "AI 代打："+helper.Why())
 		return a, helper.Why()
 	}
 	newPlayers := func() []player.Player {
 		helper = hgroup.New(names[0], set.Level)
-		ps := []player.Player{seat0{loggedHuman{logged{human, gl}, human}, helper}}
+		ps := []player.Player{session.Helped{Player: session.LoggedHuman{Logged: session.Logged{Player: human, L: gl}, H: human}, Helper: helper}}
 		for i := 1; i < n; i++ {
-			ps = append(ps, logged{hgroup.New(names[i], set.Level), gl})
+			ps = append(ps, session.Logged{Player: hgroup.New(names[i], set.Level), L: gl})
 		}
 		return ps
 	}
@@ -97,18 +98,18 @@ func main() {
 	for {
 		err := player.Run(g, players)
 		if errors.Is(err, player.ErrUndo) {
-			ng, ps, turn, ok := rewind(g, *seed, newPlayers)
+			ng, ps, turn, ok := session.Rewind(g, *seed, 0, newPlayers)
 			if !ok {
 				fmt.Println("✗ 還沒有可以回溯的行動")
 				continue
 			}
 			g, players = ng, ps
-			gl.rewind(g, turn)
+			gl.Rewind(g, turn)
 			human.Rewound(g.View(0))
 			continue
 		}
 		if err != nil {
-			gl.close(g)
+			gl.Close(g)
 			fmt.Fprintln(os.Stderr, err)
 			exit(1)
 		}
@@ -116,70 +117,4 @@ func main() {
 	}
 	human.Final(g.View(0))
 	human.OnQuit()
-}
-
-// rewind 回到真人（座位 0）上一次行動之前：用同一個 seed 重新開局，把那之前的行動照順序重播。
-// AI 每一手都重新呼叫 Act（它們依完整紀錄逐步建立筆記），得到的狀態和原本一樣。
-// 回傳新局面、新的玩家、被撤銷的第一個回合；沒有可回溯的行動時 ok 為 false。
-func rewind(g *game.Game, seed uint64, newPlayers func() []player.Player) (*game.Game, []player.Player, int, bool) {
-	type act struct {
-		turn int
-		a    game.Action
-	}
-	var acts []act
-	last := -1
-	for _, e := range g.Log {
-		var a game.Action
-		switch e.Type {
-		case game.EvPlay, game.EvMisplay:
-			a = game.Play(e.Slot)
-		case game.EvDiscard:
-			a = game.Discard(e.Slot)
-		case game.EvHint:
-			a = game.Action{Type: game.ActHint, Target: e.Target, Hint: e.Hint}
-		default:
-			continue
-		}
-		if e.Player == 0 {
-			last = len(acts)
-		}
-		acts = append(acts, act{e.Turn, a})
-	}
-	if last < 0 {
-		return g, nil, 0, false
-	}
-	ng, err := game.NewVariant(g.NumPlayers, g.Variant, seed)
-	if err != nil {
-		return g, nil, 0, false
-	}
-	ps := newPlayers()
-	for _, x := range acts[:last] {
-		p := ng.Current
-		if o, ok := ps[p].(seat0); ok {
-			o.helper.Observe(ng.View(p))
-		}
-		if p != 0 {
-			// 讓 AI 照原本的節奏建立筆記（它會選出同一個行動）；直接呼叫 AI，不經過紀錄（那些行已經寫過）
-			bot := ps[p]
-			if lp, ok := bot.(logged); ok {
-				bot = lp.Player
-			}
-			bot.Act(ng.View(p))
-		}
-		if _, err := ng.Apply(x.a); err != nil {
-			return g, nil, 0, false
-		}
-	}
-	return ng, ps, acts[last].turn, true
-}
-
-// seat0 是真人的座位：每次輪到他時先讓代打用的 AI 跟上局面（a 指令才用得到它的決定）。
-type seat0 struct {
-	loggedHuman
-	helper *hgroup.Bot
-}
-
-func (p seat0) Act(v game.PlayerView) game.Action {
-	p.helper.Observe(v)
-	return p.loggedHuman.Act(v)
 }
