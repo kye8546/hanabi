@@ -176,3 +176,13 @@ func TestL10GiveCertainFinesse(t *testing.T) {
 		}
 	}
 }
+
+func TestL10CertainFinessePlayDeniesDuplicate(t *testing.T) {
+	// 使用者回報 20261104-145826：AI-1 被使用者「3」finesse 的 slot 1 可能是 R1/Y1/G1/B2/W2，t8 又用黃色 finesse 使用者的 Y1
+	// （Certain Finesse）。使用者照常盲打出 Y1：他看得到 AI-1 那張，是 Y1 的話會 Certain Discard，所以那張不是 Y1。
+	// W1 也已打出，剩下的可能都能打——AI-1 要盲打，以前筆記留著已打出的 Y1、不確定能打而棄牌
+	g, bots := replayCodes(t, 3, 1793775506535839000, 10, "h21 h22 p5 h13 h25 h0G d5 h2Y p2 p1")
+	if a := step(t, g, bots); a != game.Play(0) || g.Strikes != 0 {
+		t.Fatalf("AI-1 應盲打 slot 1，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

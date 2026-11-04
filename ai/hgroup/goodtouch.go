@@ -28,11 +28,26 @@ func (s *state) revealGTP(x int, t ident) {
 			// Bob will write "b2, b3, b4, b5" on his two other blue cards」）。Black 變體裡「1」點到 chop 總是
 			// 可能是救 k1，以前把它當成可能重複，打出一張 1 之後就不敢打其他的 1
 			if xn.seq > n.seq && xn.giver != p || n.seq > xn.seq && (n.giver != hx || p == s.me && s.giverKnew(id, x, t)) ||
-				n.seq == xn.seq {
+				n.seq == xn.seq || s.certainDenied(x, p, t) {
 				n.poss &^= setOf(t)
 			}
 		}
 	}
+}
+
+// certainDenied（Level 10 The Certain Finesse）：被 finesse 的牌 x 照常盲打出 t（大家都知道它要當 t 打），持有者看得到
+// 給提示者 p 手上被拿到的牌——其中有一張是 t 的話，他會 Certain Discard 傳回給 p（certainSlot），不會盲打，所以 p 手上
+// 那些牌都不是 t（原文：「Cathy plays the red 3 ... Alice knows that her card is not the red 3」）。提示滿 8 時不能棄牌，不算。
+// 使用者回報 20261104-145826：AI-1 被「3」finesse 的 slot 1 可能是 Y1，又用黃色 finesse 使用者的 Y1；使用者盲打出 Y1 後，
+// AI-1 的筆記仍留著已打出的 Y1，不確定能打而一直不盲打。
+func (s *state) certainDenied(x, p int, t ident) bool {
+	xn := s.notes[x]
+	if !s.knows(lvCertain) || !xn.finessed || xn.clued || xn.finRec == nil || xn.finRec.giver != p ||
+		s.holder(x) == p || s.hints >= game.MaxHints {
+		return false
+	}
+	u, ok := xn.poss.single()
+	return ok && u == t
 }
 
 // recsWanting：有解讀要牌 x 當連接牌（prompt / finesse）打出的提示（打出前呼叫，打出後提示可能已經結案）。
