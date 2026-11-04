@@ -28,6 +28,15 @@ go run ./cmd/hanabiweb -aidelay 300ms     # AI 每一手的間隔（預設 700ms
 結束時可以下載對局紀錄（格式和 console 版相同）。遊戲在伺服器上跑，瀏覽器只收到自己能看的畫面，看不到自己的手牌。
 對局紀錄存到 `weblogs/`（`-logs` 可改），和 console 版的 `logs/` 分開，不影響 AI 的重播基準；要分析就把檔案複製到 `logs/`。
 前端檔案用 `go:embed` 包進執行檔，部署只需要一個執行檔。重新啟動伺服器時進行中的局會消失。
+畫面用 SSE 推送；代理伺服器把串流緩衝住時（例如 Cloudflare 的免帳號通道）網頁會自動改用長輪詢。
+
+讓朋友連到你電腦上的伺服器（免費、不用註冊；Mac 睡眠時連不到，`caffeinate` 讓它開著時不睡眠，`-s` 只在接電源時有效；闔上蓋子仍會睡）：
+
+```bash
+brew install cloudflared
+caffeinate -is go run ./cmd/hanabiweb
+cloudflared tunnel --url http://localhost:8080   # 另一個視窗；印出的 https://….trycloudflare.com 給朋友（每次啟動網址都不同）
+```
 
 編成 Windows 執行檔：`GOOS=windows GOARCH=amd64 go build -o hanabi.exe ./cmd/hanabi`。
 遊戲結束（含輸入 `q` 離開）時會等你按 Enter 才關閉，直接點兩下 exe 執行時視窗不會一結束就消失。
@@ -82,7 +91,7 @@ ai/hgroup  H-Group 慣例 AI（目前 Level 1–10）
 ai/        其他 AI；DiscardBot（能棄就棄最舊的牌，當基準）
 console/   文字介面：Renderer 畫面、Human 讀指令
 session/   console 與網頁共用：對局紀錄、AI 代打的座位、回溯
-web/       網頁介面：HTTP 伺服器（房間、指令、SSE 推送畫面）＋ 內嵌的前端（web/static，純 HTML/CSS/JS）
+web/       網頁介面：HTTP 伺服器（房間、指令、SSE 推送畫面，備用長輪詢）＋ 內嵌的前端（web/static，純 HTML/CSS/JS）
 cmd/hanabi 組裝並啟動 console 版
 cmd/hanabiweb 啟動網頁版
 ```

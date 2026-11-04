@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,79 @@ func TestBadToken(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&sess)
 	res.Body.Close()
 	res, err = http.Get(ts.URL + "/api/stream?room=" + sess.Room + "&token=wrong")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Errorf("錯的通行碼回傳 %d，應該是 404", res.StatusCode)
+	}
+}
+
+// TestPoll 長輪詢（SSE 的備用方案）：版本不同立刻回傳；版本相同時等到畫面變化。
+func TestPoll(t *testing.T) {
+	srv := New(t.TempDir(), 0)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	res, err := http.Post(ts.URL+"/api/new", "application/json", strings.NewReader(`{"players":2,"level":1,"variant":"none","seed":"3"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sess struct{ Room, Token string }
+	json.NewDecoder(res.Body).Decode(&sess)
+	res.Body.Close()
+	q := "?room=" + sess.Room + "&token=" + sess.Token
+
+	type pollOut struct {
+		Ver   int
+		State snapshot
+		Gone  bool
+	}
+	poll := func(since int) pollOut {
+		t.Helper()
+		res, err := http.Get(ts.URL + "/api/poll" + q + "&since=" + strconv.Itoa(since))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("輪詢回傳 %d", res.StatusCode)
+		}
+		var out pollOut
+		if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	// 等到輪到真人（開局時 AI 不會先動，但 run 的 goroutine 要先 publish）
+	out := poll(0)
+	for !out.State.YourTurn {
+		out = poll(out.Ver)
+	}
+
+	// 版本相同時要等：送出指令後才回傳新的畫面
+	got := make(chan pollOut, 1)
+	go func() { got <- poll(out.Ver) }()
+	select {
+	case <-got:
+		t.Fatal("畫面沒變卻立刻回傳")
+	case <-time.After(200 * time.Millisecond):
+	}
+	r, err := http.Post(ts.URL+"/api/act"+q, "application/json", strings.NewReader(`{"cmd":"auto"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Body.Close()
+	select {
+	case next := <-got:
+		if next.Ver == out.Ver || next.State.Turn == 0 && next.State.YourTurn {
+			t.Errorf("輪詢沒拿到新的畫面：ver %d → %d", out.Ver, next.Ver)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("送出指令後輪詢沒有回傳")
+	}
+
+	res, err = http.Get(ts.URL + "/api/poll?room=" + sess.Room + "&token=wrong")
 	if err != nil {
 		t.Fatal(err)
 	}

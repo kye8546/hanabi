@@ -34,6 +34,7 @@ type room struct {
 
 	mu      sync.Mutex
 	snap    []byte // 真人座位最新的畫面 JSON
+	ver     int    // 畫面的版本，每次 publish 加 1（給輪詢用）
 	subs    map[chan struct{}]bool
 	active  time.Time // 最後一次有人連線或下指令
 	waiting bool      // 真人正在等指令（同一時間只收一個指令）
@@ -148,6 +149,7 @@ func (r *room) publish() {
 		return
 	}
 	r.snap = b
+	r.ver++
 	for ch := range r.subs {
 		select {
 		case ch <- struct{}{}:

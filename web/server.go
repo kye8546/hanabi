@@ -1,4 +1,5 @@
-// Package web 是花火的網頁介面：HTTP 伺服器（房間、指令、用 Server-Sent Events 推送畫面）與內嵌的前端。
+// Package web 是花火的網頁介面：HTTP 伺服器（房間、指令、用 Server-Sent Events 推送畫面，
+// 串流被代理伺服器卡住時改用長輪詢）與內嵌的前端。
 // 遊戲狀態只在伺服器上，每個人只收到自己的 PlayerView，所以看不到自己的手牌（之後的多人連線也靠這點）。
 package web
 
@@ -57,6 +58,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/config", s.config)
 	mux.HandleFunc("POST /api/new", s.newGame)
 	mux.HandleFunc("GET /api/stream", s.stream)
+	mux.HandleFunc("GET /api/poll", s.poll)
 	mux.HandleFunc("POST /api/act", s.act)
 	mux.HandleFunc("GET /api/log", s.downloadLog)
 	return mux
@@ -242,6 +244,55 @@ func (s *Server) stream(w http.ResponseWriter, req *http.Request) {
 		case <-ping.C:
 			fmt.Fprint(w, ": ping\n\n")
 			fl.Flush()
+		}
+	}
+}
+
+// pollWait 是長輪詢最多等多久（要比代理伺服器的逾時短；Cloudflare 是 100 秒）。
+const pollWait = 25 * time.Second
+
+// poll 是 SSE 的備用方案（Cloudflare 的免帳號通道等代理伺服器會把串流整個緩衝住）：
+// 畫面版本和 since 不同就立刻回傳，否則等到畫面變化或 pollWait 到期。
+// 回傳 {"ver":N,"state":畫面}；房間關閉時回傳 {"gone":true}。
+func (s *Server) poll(w http.ResponseWriter, req *http.Request) {
+	r := s.lookup(w, req)
+	if r == nil {
+		return
+	}
+	since, _ := strconv.Atoi(req.URL.Query().Get("since"))
+	ch := make(chan struct{}, 1)
+	r.mu.Lock()
+	r.active = time.Now()
+	r.subs[ch] = true
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.subs, ch)
+		r.mu.Unlock()
+	}()
+
+	timeout := time.NewTimer(pollWait)
+	defer timeout.Stop()
+	for {
+		r.mu.Lock()
+		ver, b := r.ver, r.snap
+		r.mu.Unlock()
+		if ver != since {
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			fmt.Fprintf(w, `{"ver":%d,"state":%s}`, ver, b)
+			return
+		}
+		select {
+		case <-ch:
+		case <-r.ctx.Done():
+			writeJSON(w, http.StatusOK, map[string]bool{"gone": true})
+			return
+		case <-timeout.C:
+			w.WriteHeader(http.StatusNoContent)
+			return
+		case <-req.Context().Done():
+			return
 		}
 	}
 }

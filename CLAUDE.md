@@ -44,13 +44,13 @@ ai/hgroup  H-Group 慣例 AI（目前 Level 1–10）
 ai/        DiscardBot（基準用）
 console/   文字介面：Renderer（畫面）、Human（讀 stdin）
 session/   console 與網頁共用：對局紀錄（Log、Logged）、AI 代打的座位（Helped）、回溯（Rewind）
-web/       網頁介面：伺服器（room、SSE 推送畫面）+ 內嵌前端 web/static
+web/       網頁介面：伺服器（room、SSE 推送畫面，備用長輪詢）+ 內嵌前端 web/static
 cmd/hanabi 組裝 console 版；cmd/hanabiweb 啟動網頁版
 ```
 
 核心原則（之後要換 GUI：Ebitengine / Wails / Web，只取代 `console/`）：
 
-- **網頁版**（[web/](web/)）：每個房間一個 goroutine 跑 `player.Run`（`room.run`），遊戲狀態只在那個 goroutine 裡讀寫；HTTP 只讀 `room.mu` 保護的畫面快照（`snapshot`，由 `PlayerView` 產生，所以看不到自己的手牌），指令經 `webHuman.reqs` 送進去（不是他的回合直接拒絕、不排隊；回傳前先 `Validate`）。AI 座位包成 `paced`：輪到他時先推畫面、每手至少間隔 `aiDelay`。房間過期時 `webHuman` 回傳 `player.QuitAction`，`Run` 回傳 `ErrQuit`。紀錄寫到 `weblogs/`，不進 `logs/`（避免影響 `TestReplayAll`）。之後的多人連線：每個真人座位一個 `webHuman` 和通行碼，`publish` 對每個真人座位各算一份畫面；回溯 / 偷看在多人局要另外決定。
+- **網頁版**（[web/](web/)）：每個房間一個 goroutine 跑 `player.Run`（`room.run`），遊戲狀態只在那個 goroutine 裡讀寫；HTTP 只讀 `room.mu` 保護的畫面快照（`snapshot`，由 `PlayerView` 產生，所以看不到自己的手牌），指令經 `webHuman.reqs` 送進去（不是他的回合直接拒絕、不排隊；回傳前先 `Validate`）。畫面用 SSE（`/api/stream`）推送；前端 4 秒內沒收到畫面（Cloudflare 的免帳號通道會把串流整個緩衝住）就改用長輪詢（`/api/poll?since=<ver>`，`room.ver` 每次 publish 加 1，最多等 25 秒），並在 localStorage 記住這個網址要用輪詢。AI 座位包成 `paced`：輪到他時先推畫面、每手至少間隔 `aiDelay`。房間過期時 `webHuman` 回傳 `player.QuitAction`，`Run` 回傳 `ErrQuit`。紀錄寫到 `weblogs/`，不進 `logs/`（避免影響 `TestReplayAll`）。之後的多人連線：每個真人座位一個 `webHuman` 和通行碼，`publish` 對每個真人座位各算一份畫面；回溯 / 偷看在多人局要另外決定。
 - **`game` 不做 I/O**：`Game.Apply(Action) ([]Event, error)`，`Validate` 回傳具體中文錯誤（sentinel errors 在 [game/rules.go](game/rules.go)）。
 - **玩家只拿 `PlayerView`**（[game/view.go](game/view.go)）：自己手牌與自己抽牌事件被遮蔽（`Visible=false`、`Card` 只留 ID）。AI 結構上無法偷看。
 - **`player.Player`**：`Name()` + `Act(PlayerView) Action`。真人額外實作 `player.Rejecter`，`Run` 遇到不合法行動會呼叫 `Reject` 後重新 `Act`；AI 回傳不合法行動視為程式錯誤，`Run` 直接回傳 error。

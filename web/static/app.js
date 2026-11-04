@@ -141,35 +141,71 @@ function qs() { return `room=${encodeURIComponent(S.room)}&token=${encodeURIComp
 function closeStream() {
   if (S.es) S.es.close();
   S.es = null;
+  clearTimeout(S.sseTimer);
+  S.pollGen = (S.pollGen || 0) + 1; // 讓進行中的輪詢自己結束
 }
 
+function showState(state) {
+  S.snap = state;
+  $('#setup').hidden = true;
+  $('#game').hidden = false;
+  render();
+}
+
+function roomGone(msg) {
+  closeStream();
+  store('hanabi.session', null);
+  if (S.snap) toast(msg, 'error'); else showSetup('找不到上一局（可能已過期或伺服器重新啟動過），請開新的一局');
+}
+
+// 先用 Server-Sent Events；幾秒內沒收到畫面（Cloudflare 的免帳號通道等代理伺服器會把串流整個緩衝住）
+// 或連不上，就改用長輪詢；串流被緩衝時記住這個網址要用輪詢（下一局不必再等）。
 function openStream() {
   closeStream();
   S.cm = new Set(JSON.parse(store('hanabi.cm.' + S.room) || '[]'));
+  if (store('hanabi.poll') === '1') { poll(); return; }
   const es = new EventSource('api/stream?' + qs());
   S.es = es;
   let got = false;
+  const fallback = (buffered) => {
+    if (got || S.es !== es) return;
+    closeStream();
+    if (buffered) store('hanabi.poll', '1'); // 連得上卻收不到畫面才記住；連不上可能只是伺服器重開
+    poll();
+  };
+  S.sseTimer = setTimeout(() => fallback(true), 4000);
   es.addEventListener('state', (ev) => {
     got = true;
-    S.snap = JSON.parse(ev.data);
-    $('#setup').hidden = true;
-    $('#game').hidden = false;
-    render();
+    showState(JSON.parse(ev.data));
   });
-  es.addEventListener('gone', () => {
-    closeStream();
-    store('hanabi.session', null);
-    toast('這局已經關閉（閒置太久）', 'error');
-  });
-  es.onerror = () => {
-    // 連不上又從沒收到畫面：多半是這局已不存在（伺服器重新啟動過），回到開局畫面
-    if (!got) {
-      closeStream();
-      store('hanabi.session', null);
-      showSetup(S.snap ? '' : '找不到上一局（可能已過期或伺服器重新啟動過），請開新的一局');
+  es.addEventListener('gone', () => roomGone('這局已經關閉（閒置太久）'));
+  // 收到過畫面就讓 EventSource 自己重連；從沒收到就改輪詢（找不到這局時由輪詢回到開局畫面）
+  es.onerror = () => fallback(false);
+}
+
+async function poll() {
+  const gen = S.pollGen;
+  let ver = 0;
+  while (gen === S.pollGen) {
+    let res;
+    try {
+      res = await fetch(`api/poll?${qs()}&since=${ver}`, { cache: 'no-store' });
+    } catch {
+      await new Promise((ok) => setTimeout(ok, 2000)); // 網路斷了，稍後再試
+      continue;
     }
-    // 收到過畫面就讓 EventSource 自己重連
-  };
+    if (gen !== S.pollGen) return;
+    if (res.status === 404) { roomGone('這局已經關閉'); return; }
+    if (res.status !== 200) {
+      if (res.status !== 204) await new Promise((ok) => setTimeout(ok, 2000));
+      continue;
+    }
+    const out = await res.json();
+    if (gen !== S.pollGen) return;
+    if (out.gone) { roomGone('這局已經關閉（閒置太久）'); return; }
+    ver = out.ver;
+    showState(out.state);
+  }
 }
 
 async function act(cmd) {
