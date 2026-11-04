@@ -427,6 +427,7 @@ func (s *state) onClue(e game.Event) {
 			}
 		}
 	}
+	s.refutePrompts(R)
 	// 給提示者自己手上被提示的牌，當時的解讀（giverKnew 用）
 	var own map[int][]cand
 	for _, y := range s.hands[e.Player] {

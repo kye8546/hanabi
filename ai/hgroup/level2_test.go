@@ -716,3 +716,13 @@ func TestReceiverWaitsForReverseFinesseDespiteSelfPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestL2PromptRefutedByLaterClue(t *testing.T) {
+	// 使用者回報 20261104-145826：t4 使用者「3」點 AI-1 的 W3。AI-2 有被「1」點到的 W1 與被救下的 2（實際 Y2），
+	// 看不到自己的牌，照 Prompts > Finesses 讀成 prompt 自己的 1 和 2（W1、W2）。t8 AI-1 的黃色揭露那張 2 是 Y2：
+	// prompt 不成立，要重新找連接牌。以前 AI-2 照舊，t9 又給「2」重新 finesse AI-1 的 finesse position；現在先打出 W1
+	g, bots := replayCodes(t, 3, 1793775506535839000, 10, "h21 h22 p5 h13 h25 h0G d5 h2Y")
+	if a := step(t, g, bots); a != game.Play(1) || g.Fireworks[game.White] != 1 {
+		t.Fatalf("AI-2 應打出 slot 2 的 W1，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

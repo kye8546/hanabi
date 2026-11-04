@@ -911,6 +911,56 @@ func (s *state) recheckDelayed() {
 	}
 }
 
+// refutePrompts：R 剛收到的提示資訊推翻了之前某個解讀要 R 的已提示牌當 prompt 打出的牌面（例如以為被 prompt 的 2 是 W2，
+// 之後被黃色點到）——那個連接不成立，照提示當下的手牌重新找（connectRec；Prompts > Finesses 的下一個選擇，多半是 finesse），
+// 找不到就丟掉那個解讀；我的計畫也重算（使用者回報 20261104-145826：使用者「3」點 AI-1 的 W3，AI-2 以為是 prompt 自己被救下的 2
+// 當 W2，t8 AI-1 的黃色揭露那張是 Y2 後仍照舊，不知道 AI-1 的 finesse position 已被 finesse，t9 又給了一個要 finesse 它的提示）。
+func (s *state) refutePrompts(R int) {
+	refuted := func(d dep) bool {
+		return !d.finesse && s.holder(d.card) == R && !s.notes[d.card].explicit.has(d.id)
+	}
+	for _, rec := range s.recs {
+		if s.holder(rec.focus) < 0 {
+			continue
+		}
+		changed := false
+		redo := func(cs []cand) []cand {
+			var out []cand
+			for _, c := range cs {
+				if !slices.ContainsFunc(c.deps, refuted) {
+					out = append(out, c)
+					continue
+				}
+				changed = true
+				if deps, ok := s.connectRec(rec, rec.target, c.id); ok {
+					c.deps = deps
+					out = append(out, c)
+				}
+			}
+			return out
+		}
+		rec.cands, rec.fallback = redo(rec.cands), redo(rec.fallback)
+		promoted := false
+		if len(rec.cands) == 0 && len(rec.fallback) > 0 {
+			rec.cands, rec.fallback = rec.fallback, nil
+			changed, promoted = true, true
+		}
+		if changed {
+			s.refreshFocus(rec)
+		}
+		if promoted {
+			s.promoteFocus(rec)
+			s.selfMark(rec, rec.target)
+		}
+		if changed && rec.target == s.me {
+			s.markCommon(rec)
+		}
+		if slices.ContainsFunc(rec.plan, refuted) {
+			s.replan(rec)
+		}
+	}
+}
+
 // afterPlay 重新檢查還在追蹤的提示，並丟掉已經沒有東西要追蹤的紀錄。
 func (s *state) afterPlay() {
 	for _, rec := range s.recs {
