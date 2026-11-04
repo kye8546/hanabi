@@ -342,8 +342,17 @@ func (s *state) holderView(y int, mine [numIdents]int) idSet {
 // brokenCards 找出隊友手上違反 Good Touch、需要 Fix Clue 的牌（值為 true 表示他會把它當成能打的牌而打錯）：
 // 他以為能打但其實不能打、其實是垃圾、筆記和實際牌面矛盾，或和別處被拿到的牌重複
 // （兩張的持有者都不知道時；有人知道的話他會 Sarcastic Discard）。
+// 我計畫的 Hidden Finesse 要先被當成 prompt 打出的已提示牌（筆記和實際牌面不同是故意的，它現在能打）不算。
 func (s *state) brokenCards() map[int]bool {
 	out := map[int]bool{}
+	hidden := func(y int) bool {
+		for _, rec := range s.recs {
+			if slices.ContainsFunc(rec.plan, func(d dep) bool { return d.card == y && !d.finesse && d.layers > 0 }) {
+				return true
+			}
+		}
+		return false
+	}
 	knows := func(z int, t ident) bool {
 		if s.holder(z) == s.me {
 			return s.myPoss(z) == setOf(t)
@@ -375,7 +384,7 @@ func (s *state) brokenCards() map[int]bool {
 					wrongPlay = true // 兩張都會被打，後打的那張會打錯
 				}
 			}
-			if wrongPlay || dup || s.trash(t) || !p.has(t) {
+			if wrongPlay || dup || s.trash(t) || !p.has(t) && !(s.playableNow(t) && hidden(y)) {
 				out[y] = wrongPlay
 			}
 		}

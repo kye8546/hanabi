@@ -534,3 +534,13 @@ func TestL5NoLayerDuplicatingMyKnownCard(t *testing.T) {
 		t.Errorf("AI-2 不該給 layer 和自己確定的 r1 重複的 Layered Finesse（%s）", bots[2].Why())
 	}
 }
+
+func TestL5NoFixClueOnOwnHiddenFinesse(t *testing.T) {
+	// 使用者回報 20261104-174742：t21 AI-2 的「4」點 AI-1 的 G4，是 finesse AI-1 的 G2、prompt 使用者被「3」點到的牌當 G3——
+	// 那張實際是能打的 B3，使用者打出後要盲打 finesse position 上的 G3（Hidden Finesse）。
+	// AI-2 不能把那張「筆記是 G3、實際是 B3」的牌當成違反 Good Touch 而用藍色修正，那會拆掉自己的 Hidden Finesse
+	g, bots := replayCodes(t, 3, 1793785662167465000, 10, "h11 p5 h0W p2 p3 h1B p1 p3 h1R d5 p2 h03 p5 d5 h05 h22 p1 p3 h12 p4 h14 d3 p1")
+	if a := step(t, g, bots); a.Type == game.ActHint && a.Target == 0 && a.Hint.Kind == game.HintColor {
+		t.Fatalf("AI-2 不應用顏色修正使用者的 B3（%s）", bots[2].Why())
+	}
+}
