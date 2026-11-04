@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>花火 Hanabi</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎆</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 開局設定 -->
+<main id="setup" class="setup" hidden>
+  <h1>花火 <span>Hanabi</span></h1>
+  <p class="lead">和 AI 合作施放煙火。AI 照 <a href="https://hanabi.github.io/" target="_blank" rel="noopener">H-Group 慣例</a> 行動，你給的提示也會照同一個等級解讀。</p>
+  <form id="setup-form">
+    <label class="field">
+      <span>你的名字</span>
+      <input name="name" maxlength="12" placeholder="你" autocomplete="nickname">
+    </label>
+    <fieldset class="field">
+      <legend>玩家人數（含你自己）</legend>
+      <div class="seg" id="players"></div>
+    </fieldset>
+    <label class="field">
+      <span>H-Group 慣例等級</span>
+      <select name="level" id="level"></select>
+    </label>
+    <fieldset class="field">
+      <legend>變體</legend>
+      <div id="variants" class="variants"></div>
+    </fieldset>
+    <label class="field">
+      <span>洗牌種子 <small>（空白 = 隨機；同一個種子就是同一副牌）</small></span>
+      <input name="seed" inputmode="numeric" pattern="[0-9]*" placeholder="隨機">
+    </label>
+    <label class="check">
+      <input type="checkbox" name="showneg"> 顯示反向提示資訊（例如「不是紅色」，遊戲中也可以切換）
+    </label>
+    <p class="error" id="setup-error" hidden></p>
+    <button class="primary" type="submit">開始</button>
+  </form>
+</main>
+
+<!-- 牌桌 -->
+<main id="game" class="game" hidden>
+  <header class="topbar">
+    <div class="title">
+      <strong>花火</strong>
+      <span id="game-info"></span>
+    </div>
+    <nav class="tools">
+      <button data-cmd="auto" title="照這局的慣例等級，讓 AI 替你決定這一手">AI 代打</button>
+      <button data-cmd="undo" title="回到你上一次行動之前">回溯</button>
+      <button data-cmd="peek" title="偷看自己手牌的真實牌面（紀錄會註明）">偷看</button>
+      <button id="btn-neg" title="切換是否顯示反向提示資訊" aria-pressed="false">反向資訊</button>
+      <button id="btn-log" title="下載對局紀錄（回報 AI 問題時附上）">紀錄</button>
+      <button id="btn-help">說明</button>
+      <button id="btn-new">新遊戲</button>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <div class="table">
+      <section class="status" id="status"></section>
+      <section class="board">
+        <div class="fireworks" id="fireworks"></div>
+        <div class="discards"><h3>棄牌</h3><div id="discards"></div></div>
+      </section>
+      <div id="others"></div>
+      <ol id="recent" class="recent-box" aria-label="最近發生"></ol>
+      <div id="me"></div>
+      <p class="turnline" id="turnline"></p>
+    </div>
+    <aside class="log">
+      <h3>紀錄</h3>
+      <ol id="log"></ol>
+    </aside>
+  </div>
+</main>
+
+<div id="menu" class="menu" hidden></div>
+<div id="toast" class="toast" hidden></div>
+
+<dialog id="dialog">
+  <form method="dialog" class="dialog-body">
+    <div id="dialog-content"></div>
+    <div class="dialog-actions" id="dialog-actions"></div>
+  </form>
+</dialog>
+
+<template id="help">
+  <h2>怎麼玩</h2>
+  <ul>
+    <li><b>點自己的牌</b>：打出、棄掉（提示 token 滿 8 個時不能棄）。位置從左邊 1 開始，新抽的牌放最左邊，最右邊是最舊的牌。</li>
+    <li><b>點隊友的牌</b>：給提示。選單列出會點到這張牌的顏色與數字，滑過選項會標出這個提示點到哪些牌。</li>
+    <li><b>標記 cm</b>：兩種選單都可以把一張牌標成被 Chop Move（只是你自己的筆記，跟著那張牌移動；AI 的 Chop Move 不會自動顯示）。</li>
+    <li><b>AI 代打</b>：照這局的慣例等級替你決定這一手並直接執行（紀錄會註明，附上 AI 的理由）。</li>
+    <li><b>回溯</b>：回到你上一次行動之前，可以連續使用。<b>偷看</b>：看自己手牌的真實牌面（紀錄會註明你在第幾回合偷看過）。</li>
+    <li><b>紀錄</b>：下載這局的紀錄檔。覺得 AI 哪一步怪怪的，把檔案和回合數（例如 t23）交給開發者就能完整重現。</li>
+  </ul>
+  <h2>畫面說明</h2>
+  <ul>
+    <li>橘色外框的牌曾被提示點到。</li>
+    <li>你自己的牌顯示被提示點到的顏色與數字；隊友的牌下面是<b>他自己知道的</b>資訊（?? = 完全不知道）。</li>
+    <li><b>反向資訊</b>：開啟時改成列出所有剩下的可能（包含「不是紅色」這類由沒被點到推出的資訊），和 Hanab Live 一樣。</li>
+    <li>Rainbow 變體中，隱藏反向資訊時被兩種以上不同顏色點到的牌才顯示成彩虹色，只被一種顏色點到就顯示那種顏色。</li>
+    <li>分數後面的「最多 N」是這局還拿得到的最高分（有牌面的所有張數都被棄掉時才會出現）。</li>
+  </ul>
+  <h2>Pace（和 Hanab Live 相同）</h2>
+  <p>Pace = 目前分數 + 牌堆張數 + 人數 − 還拿得到的最高分，也就是從現在起最多還能棄幾張牌（打錯也算）而仍有機會拿到最高分。小於人數就是 H-Group 的終局（黃色），0 以下是紅色；牌堆空了之後顯示 -。</p>
+  <h2>規則</h2>
+  <p>手牌 2–3 人 5 張、4–5 人 4 張。提示必須點到至少一張牌；打出 5 時若提示少於 8 個就回收 1 個。第 3 道閃電結束遊戲（依官方規則 0 分）；抽走最後一張牌後，包含抽牌者在內每人再一回合。</p>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

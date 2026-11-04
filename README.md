@@ -16,6 +16,19 @@ go run ./cmd/hanabi -nocolor     # 不用終端顏色（也支援 NO_COLOR 環�
 go run ./cmd/hanabi -showneg     # 開局就顯示反向提示資訊（預設只顯示被點到的顏色/數字；遊戲中可用 n 即時切換，連 AI 手牌一起）
 ```
 
+### 網頁版
+
+```bash
+go run ./cmd/hanabiweb                    # 開 http://localhost:8080 用瀏覽器玩
+go run ./cmd/hanabiweb -addr :9000        # 換位址（沒給 -addr 時用環境變數 PORT，雲端主機多半這樣設定）
+go run ./cmd/hanabiweb -aidelay 300ms     # AI 每一手的間隔（預設 700ms，讓人看得出發生了什麼）
+```
+
+功能和 console 版相同：點自己的牌打出 / 棄掉，點隊友的牌給提示，cm 標記、AI 代打、回溯、偷看、反向資訊切換都有，
+結束時可以下載對局紀錄（格式和 console 版相同）。遊戲在伺服器上跑，瀏覽器只收到自己能看的畫面，看不到自己的手牌。
+對局紀錄存到 `weblogs/`（`-logs` 可改），和 console 版的 `logs/` 分開，不影響 AI 的重播基準；要分析就把檔案複製到 `logs/`。
+前端檔案用 `go:embed` 包進執行檔，部署只需要一個執行檔。重新啟動伺服器時進行中的局會消失。
+
 編成 Windows 執行檔：`GOOS=windows GOARCH=amd64 go build -o hanabi.exe ./cmd/hanabi`。
 遊戲結束（含輸入 `q` 離開）時會等你按 Enter 才關閉，直接點兩下 exe 執行時視窗不會一結束就消失。
 
@@ -68,7 +81,10 @@ player/    Player 介面（真人與 AI 共用）＋ Run 主迴圈
 ai/hgroup  H-Group 慣例 AI（目前 Level 1–10）
 ai/        其他 AI；DiscardBot（能棄就棄最舊的牌，當基準）
 console/   文字介面：Renderer 畫面、Human 讀指令
-cmd/hanabi 組裝並啟動
+session/   console 與網頁共用：對局紀錄、AI 代打的座位、回溯
+web/       網頁介面：HTTP 伺服器（房間、指令、SSE 推送畫面）＋ 內嵌的前端（web/static，純 HTML/CSS/JS）
+cmd/hanabi 組裝並啟動 console 版
+cmd/hanabiweb 啟動網頁版
 ```
 
 - 新 AI：在 `ai/` 實作 `player.Player`，只依賴 `game.PlayerView`。

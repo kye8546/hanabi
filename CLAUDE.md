@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 go run ./cmd/hanabi                       # 開局先問人數（2–5）、慣例等級（1–25）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black (6 Suits)，4 = Rainbow (6 Suits)）、洗牌種子（Enter = 隨機）；座位 0 是真人
+go run ./cmd/hanabiweb                    # 網頁版：http://localhost:8080（-addr 或 PORT 換位址、-aidelay AI 每手間隔、-logs 紀錄資料夾，預設 weblogs/）
 go run ./cmd/hanabi -seed 42 -nocolor     # 固定牌序（有 -seed 就不問種子）/ 關閉 ANSI 顏色（也吃 NO_COLOR）
 go run ./cmd/hanabi -showneg              # 開局就顯示反向提示資訊（預設隱藏；遊戲中 n 指令即時切換，開啟時 AI 手牌的「他知」也分顏色、數字兩列列出所有可能；H-Group 慣例預設大家看得到反向資訊，Hanab Live 預設顯示）
 go test ./...
@@ -42,11 +43,14 @@ player/    Player 介面 + Run 主迴圈
 ai/hgroup  H-Group 慣例 AI（目前 Level 1–10）
 ai/        DiscardBot（基準用）
 console/   文字介面：Renderer（畫面）、Human（讀 stdin）
-cmd/hanabi 組裝
+session/   console 與網頁共用：對局紀錄（Log、Logged）、AI 代打的座位（Helped）、回溯（Rewind）
+web/       網頁介面：伺服器（room、SSE 推送畫面）+ 內嵌前端 web/static
+cmd/hanabi 組裝 console 版；cmd/hanabiweb 啟動網頁版
 ```
 
 核心原則（之後要換 GUI：Ebitengine / Wails / Web，只取代 `console/`）：
 
+- **網頁版**（[web/](web/)）：每個房間一個 goroutine 跑 `player.Run`（`room.run`），遊戲狀態只在那個 goroutine 裡讀寫；HTTP 只讀 `room.mu` 保護的畫面快照（`snapshot`，由 `PlayerView` 產生，所以看不到自己的手牌），指令經 `webHuman.reqs` 送進去（不是他的回合直接拒絕、不排隊；回傳前先 `Validate`）。AI 座位包成 `paced`：輪到他時先推畫面、每手至少間隔 `aiDelay`。房間過期時 `webHuman` 回傳 `player.QuitAction`，`Run` 回傳 `ErrQuit`。紀錄寫到 `weblogs/`，不進 `logs/`（避免影響 `TestReplayAll`）。之後的多人連線：每個真人座位一個 `webHuman` 和通行碼，`publish` 對每個真人座位各算一份畫面；回溯 / 偷看在多人局要另外決定。
 - **`game` 不做 I/O**：`Game.Apply(Action) ([]Event, error)`，`Validate` 回傳具體中文錯誤（sentinel errors 在 [game/rules.go](game/rules.go)）。
 - **玩家只拿 `PlayerView`**（[game/view.go](game/view.go)）：自己手牌與自己抽牌事件被遮蔽（`Visible=false`、`Card` 只留 ID）。AI 結構上無法偷看。
 - **`player.Player`**：`Name()` + `Act(PlayerView) Action`。真人額外實作 `player.Rejecter`，`Run` 遇到不合法行動會呼叫 `Reject` 後重新 `Act`；AI 回傳不合法行動視為程式錯誤，`Run` 直接回傳 error。
@@ -114,7 +118,7 @@ cmd/hanabi 組裝
 
 ## Status & next steps
 
-- 已完成：規則、console 介面（含 AI 代打 `a`）、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits、Black (6 Suits) 與 Rainbow (6 Suits) 變體、Level 1–10 AI、盤面顯示 pace。
+- 已完成：規則、console 介面（含 AI 代打 `a`）、網頁版（單人 + AI，功能同 console；下一步是多人房間）、開局選人數、慣例等級、變體與洗牌種子（[console/setup.go](console/setup.go)，`hgroup.MaxLevel` 以上會被擋下）、6 Suits、Black (6 Suits) 與 Rainbow (6 Suits) 變體、Level 1–10 AI、盤面顯示 pace。
 - **做下一個等級前，先確認這一級沒有退步**（使用者的規則）：同一批種子 3000 局（`HGAMES=3000 HLEVEL=<上一級>,<這一級>`，5 色，再加 1000 局 Black / Rainbow）各人數都不能比上一級差（超過誤差就要查清楚、修好），確認後才往下做。1000 局有約 ±0.1 的誤差，不能拿來下結論。
 - **README.md 要同步更新**（使用者指正過：曾停在 Level 4 沒更新）：加新等級、變體、console 指令或啟動參數時，README 的變體列表、各等級摘要、指令表、結構段一起改。
 - 下一步：依使用者指示逐級加入 Level 11+（`hgroup.MaxLevel`、`lvXxx` 常數）；之後的多色變體（雙色等）沿用 `hintSet`、`multiColor`、`promptOrder`。

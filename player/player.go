@@ -27,6 +27,12 @@ var UndoAction = game.Action{Type: -1}
 // ErrUndo 表示真人要求回溯。
 var ErrUndo = errors.New("回溯")
 
+// QuitAction 是「中止這局」的特殊行動（例如網頁的房間過期）：Run 收到時回傳 ErrQuit。
+var QuitAction = game.Action{Type: -2}
+
+// ErrQuit 表示對局被中止。
+var ErrQuit = errors.New("中止")
+
 // Run 讓 players 依座位輪流行動直到遊戲結束（或有人要求回溯，回傳 ErrUndo）。
 func Run(g *game.Game, players []Player) error {
 	if len(players) != g.NumPlayers {
@@ -36,8 +42,11 @@ func Run(g *game.Game, players []Player) error {
 		p := players[g.Current]
 		for {
 			a := p.Act(g.View(g.Current))
-			if a == UndoAction {
+			switch a {
+			case UndoAction:
 				return ErrUndo
+			case QuitAction:
+				return ErrQuit
 			}
 			_, err := g.Apply(a)
 			if err == nil {
