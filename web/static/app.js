@@ -99,7 +99,6 @@ function showSetup(err) {
      <span><b>${esc(v.name)}</b><small>${esc(v.desc)}</small></span></label>`).join('');
   f.name.value = last.name || '';
   f.seed.value = '';
-  f.showneg.checked = store('hanabi.showNeg') === '1';
   const e = $('#setup-error');
   e.hidden = !err;
   e.textContent = err || '';
@@ -126,8 +125,6 @@ async function startGame(settings) {
 $('#setup-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const f = ev.target;
-  S.showNeg = f.showneg.checked;
-  store('hanabi.showNeg', S.showNeg ? '1' : '0');
   startGame({
     name: f.name.value, players: Number(f.players.value), level: Number(f.level.value),
     variant: f.variant.value, seed: f.seed.value.trim(),
