@@ -286,6 +286,9 @@ func (s *state) layered(obs, p, fp int, t, m ident, used []int) (dep, []int, boo
 
 // gottenElsewhere：obs 看得到 card 以外有一張被拿到的 t（例如別人已提示、確定的 r4）。layer 是它的話，那人先打出它，
 // layer 就打不出去；layer 先打出，那張就成了重複的牌、持有者依 Good Touch 不會知道——給提示者不會這樣 layered finesse。
+// obs 自己手上推得出確定是 t 的已提示牌也算（使用者回報 20261104-103824 t6：AI-2 推得出自己被「1」點到的是 r1，
+// 卻用綠色要使用者盲打 layer r1 再打 g1；使用者打出 r1 後 AI-2 那張成了重複，AI-1 也看得到 r1 已被拿到，
+// 不認得這個 Layered Finesse，把綠牌當 g1 打錯）。
 func (s *state) gottenElsewhere(obs int, t ident, card int) bool {
 	for _, h := range s.hands {
 		for _, id := range h {
@@ -294,6 +297,11 @@ func (s *state) gottenElsewhere(obs int, t ident, card int) bool {
 			}
 			if u, ok := s.see(obs, id); ok && u == t {
 				return true
+			}
+			if s.holder(id) == obs {
+				if u, ok := s.deduce(obs, id).single(); ok && u == t {
+					return true
+				}
 			}
 		}
 	}

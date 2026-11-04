@@ -525,3 +525,12 @@ func TestL5LayeredTripleFinesseShiftsRight(t *testing.T) {
 		t.Fatalf("Bob 應盲打出 slot 4 的 y3，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL5NoLayerDuplicatingMyKnownCard(t *testing.T) {
+	// 使用者回報 20261104-103824 t6：AI-2 推得出自己被「1」點到的是 r1（紅色要 AI-1 的 r2 接它），不能用綠色要使用者
+	// 盲打 layer r1 再打 g1——使用者打出 r1 後 AI-2 那張就成了重複，AI-1 也不認得這個 Layered Finesse 而把 g2 當 g1 打錯
+	g, bots := replayCodes(t, 3, 1793759904862455000, 10, "h21 h25 p5 h1R d4")
+	if a := bots[2].Act(g.View(2)); a == game.HintColorTo(1, game.Green) {
+		t.Errorf("AI-2 不該給 layer 和自己確定的 r1 重複的 Layered Finesse（%s）", bots[2].Why())
+	}
+}
