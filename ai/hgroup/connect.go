@@ -234,7 +234,7 @@ func (s *state) findFinesse(obs, giver, R int, m ident, used []int) (d dep, took
 			if p == R {
 				continue
 			}
-			if d, took, ok := s.layered(obs, p, fp, t, m, used); ok {
+			if d, took, ok := s.layered(obs, giver, p, fp, t, m, used); ok {
 				return d, took, true
 			}
 			continue
@@ -257,14 +257,14 @@ func (s *state) findFinesse(obs, giver, R int, m ident, used []int) (d dep, took
 
 // layered（Level 5 The Layered Finesse）：p 的 finesse position fp 是別張牌 t，往右找 m——中間的 layer 都要現在就能打、
 // 互不相同（依序盲打出來都會成功），也不是 m 的同色牌（那是這條連接本身的牌）。他看不到自己的牌，第一張盲打的仍是 fp。
-func (s *state) layered(obs, p, fp int, t, m ident, used []int) (dep, []int, bool) {
+func (s *state) layered(obs, giver, p, fp int, t, m ident, used []int) (dep, []int, bool) {
 	if !s.knows(lvLayeredFinesse) {
 		return dep{}, nil, false
 	}
 	took := []int{fp}
 	var seen idSet
 	for {
-		if !s.playableNow(t) || seen.has(t) || t.color() == m.color() || s.gottenElsewhere(obs, t, took[len(took)-1]) {
+		if !s.playableNow(t) || seen.has(t) || t.color() == m.color() || s.gottenElsewhere(obs, giver, t, took[len(took)-1]) {
 			return dep{}, nil, false
 		}
 		seen |= setOf(t)
@@ -289,10 +289,16 @@ func (s *state) layered(obs, p, fp int, t, m ident, used []int) (dep, []int, boo
 // obs 自己手上推得出確定是 t 的已提示牌也算（使用者回報 20261104-103824 t6：AI-2 推得出自己被「1」點到的是 r1，
 // 卻用綠色要使用者盲打 layer r1 再打 g1；使用者打出 r1 後 AI-2 那張成了重複，AI-1 也看得到 r1 已被拿到，
 // 不認得這個 Layered Finesse，把綠牌當 g1 打錯）。
-func (s *state) gottenElsewhere(obs int, t ident, card int) bool {
+// 給提示者自己手上的牌，他看不到，只在他可能知道是 t 時才算（使用者回報 20261105-113110 t25：使用者用白色點 AI-1 的 W2，
+// 要 AI-2 先盲打 layer G1 再打 W1；使用者被綠色救下的牌其實是 G1，他自己不知道，AI-1 以前因此不認得這個 Layered Finesse，
+// t29 又用白色直接點 AI-2 的 W1）。giver < 0 表示不看給提示者。
+func (s *state) gottenElsewhere(obs, giver int, t ident, card int) bool {
 	for _, h := range s.hands {
 		for _, id := range h {
 			if id == card || !s.gotten(id) {
+				continue
+			}
+			if q := s.holder(id); q == giver && q != obs && !s.giverMayKnow(obs, id, t) {
 				continue
 			}
 			if u, ok := s.see(obs, id); ok && u == t {

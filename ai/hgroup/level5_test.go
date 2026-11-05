@@ -544,3 +544,18 @@ func TestL5NoFixClueOnOwnHiddenFinesse(t *testing.T) {
 		t.Fatalf("AI-2 不應用顏色修正使用者的 B3（%s）", bots[2].Why())
 	}
 }
+
+func TestL5LayerThroughGiversUnknownDuplicate(t *testing.T) {
+	// 使用者回報 20261105-113110：t25 使用者用白色點 AI-1 的 W2，要 AI-2 先盲打 layer G1 再打 W1（Layered Finesse）。
+	// 使用者被綠色救下的牌其實是 G1，他自己不知道；AI-1 以前因此認為使用者不會拿 G1 當 layer，不認得這個 Layered Finesse，
+	// AI-2 盲打出 G1 後，t29 又用白色直接點 AI-2 的 W1
+	g, bots := replayCodes(t, 3, 1793849470322312000, 10,
+		"h21 h2R p2 h24 h23 p2 h12 h2R p5 h15 d4 p4 h1B p4 p3 d5 h0G d5 d4 h0Y d5 p1 h2Y p4 h1W h22 p1 d4")
+	if a := step(t, g, bots); a.Type == game.ActHint && a.Target == 2 && a.Hint.Kind == game.HintColor && a.Hint.Color == game.White {
+		t.Fatalf("AI-1 不應用白色點 AI-2 已被 Layered Finesse 的 W1（%s）", bots[1].Why())
+	}
+	step(t, g, bots)
+	if g.Strikes != 0 || g.Fireworks[game.White] != 1 {
+		t.Fatalf("AI-2 應盲打出 W1：閃電 %d、白色 %d", g.Strikes, g.Fireworks[game.White])
+	}
+}

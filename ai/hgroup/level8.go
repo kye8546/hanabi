@@ -529,7 +529,7 @@ func (s *state) posTarget(c int) bool {
 // 判斷「之後還有沒有人」時照 posTarget（否則他會以為自己可能有同一張而把後面的人排除，搶著回應）。
 func (s *state) posSafeTarget(c int) bool {
 	t, _ := s.see(s.me, c)
-	return !s.gottenElsewhere(s.me, t, c) && !s.maybeMine(t)
+	return !s.gottenElsewhere(s.me, -1, t, c) && !s.maybeMine(t)
 }
 
 // posStep：有人在 Positional Discard / Misplay 之後行動（e，抽牌不算）：記下他有沒有回應；回應夠了、或輪回棄牌的人就結束。
