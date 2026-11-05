@@ -409,12 +409,16 @@ func (s *state) apply(e game.Event) {
 			eitherWay = s.receiverHadIt(connRecs, e.Card.ID, identOfCard(e.Card))
 		}
 		certain := s.certainDiscard(e)
+		sarcDenied := s.sarcasticDenied(e)
 		s.posResp = resp
 		s.checkDeps(e, e.Card.ID)
 		s.stepGD(e)
 		s.excused, s.posResp = -1, false
 		if e.Type == game.EvPlay {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
+			if sarcDenied >= 0 {
+				s.notes[sarcDenied].poss &^= setOf(identOfCard(e.Card))
+			}
 			s.revealConnection(connRecs, e.Card.ID, identOfCard(e.Card))
 			s.revealToReceiver(eitherWay, e.Card.ID, identOfCard(e.Card))
 		}

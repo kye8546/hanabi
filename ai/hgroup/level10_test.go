@@ -186,3 +186,13 @@ func TestL10CertainFinessePlayDeniesDuplicate(t *testing.T) {
 		t.Fatalf("AI-1 應盲打 slot 1，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL10SarcasticFinessePlayDeniesDuplicate(t *testing.T) {
+	// 使用者回報 20261105-122156：t2 AI-1 用綠色 finesse 使用者的 G3（Sarcastic Finesse：自己被綠色點到的牌可能是 G3）。
+	// 使用者 t7 照常打出 G3：AI-1 那張是 G3 的話，使用者看得到，會 Sarcastic Discard 傳回去，所以它不是 G3，只剩 G5。
+	// G4 打出後 AI-1 要打出它，以前筆記仍是「G3 或 G5」而棄牌
+	g, bots := replayCodes(t, 3, 1793852516886736000, 10, "h1G h0G h02 d1 p5 p1 p5 h0R h1R p1 h24 h1B p1 h05 d5 p3 p2 d5 p5 p3 p3 h2G d5 p2 h1Y")
+	if a := step(t, g, bots); a != game.Play(4) || g.Strikes != 0 {
+		t.Fatalf("AI-1 應打出 slot 5 的 G5，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

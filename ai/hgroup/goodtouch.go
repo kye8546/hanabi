@@ -50,6 +50,39 @@ func (s *state) certainDenied(x, p int, t ident) bool {
 	return ok && u == t
 }
 
+// sarcasticDenied（Level 10 The Sarcastic Finesse）：（打出前呼叫）被提示的牌 x 的持有者知道它是 t（共同筆記確定）而照常打出，
+// 給他提示的人手上卻有一張不確定、可能是 t 的已提示牌——是 t 的話，持有者看得到，會 Sarcastic Discard 傳回給他（sarcasticSlot），
+// 不會打出，所以那張不是 t（原文：「In the best case, you get a "true" Finesse」）。給提示者手上可能是 t 的牌不只一張時
+// 持有者照樣打（棄了也不知道是哪張），提示滿 8 時不能棄牌，都不算。回傳那張牌，沒有則回傳 -1。
+// 使用者回報 20261105-122156：t2 AI-1 用綠色 finesse 使用者的 G3，自己被綠色點到的牌可能是 G3；使用者 t7 照常打出 G3，
+// AI-1 的筆記仍是「G3 或 G5」，G4 打出後不敢打 G5。
+func (s *state) sarcasticDenied(e game.Event) int {
+	if e.Type != game.EvPlay || !s.knows(lvCertain) || s.hints >= game.MaxHints {
+		return -1
+	}
+	x := e.Card.ID
+	xn, ok := s.note(x)
+	if !ok || !xn.clued || xn.giver < 0 || xn.giver == e.Player {
+		return -1
+	}
+	t := identOfCard(e.Card)
+	if u, ok := xn.poss.single(); !ok || u != t {
+		return -1
+	}
+	out := -1
+	for _, id := range s.hands[xn.giver] {
+		n := s.notes[id]
+		if !s.live(id) || !n.poss.has(t) {
+			continue
+		}
+		if n.poss.count() == 1 || out >= 0 {
+			return -1
+		}
+		out = id
+	}
+	return out
+}
+
 // recsWanting：有解讀要牌 x 當連接牌（prompt / finesse）打出的提示（打出前呼叫，打出後提示可能已經結案）。
 func (s *state) recsWanting(x int) []*clueRec {
 	var out []*clueRec
