@@ -511,3 +511,13 @@ func TestL3FixDuplicateFromSaveClue(t *testing.T) {
 		t.Fatalf("AI-2 不應再打那張 2，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL3NoFixWhenTwinPlaysFirst(t *testing.T) {
+	// 使用者回報 20261105-161025 t12（4 人局）：「1」點到使用者 slot 1 新抽的 G1 與 slot 2 的 Y1（Y1 已打出）。
+	// 使用者看得到 AI-3 的 W1，兩張都以為是 G1，照 Level 3 的順序先打新抽的那張（真的是 G1），之後另一張就是已知的重複，
+	// 不會打錯。AI-3 以前當成他會打錯而用黃色 Fix Clue，應該直接打出自己的 W1
+	g, bots := replayCodes(t, 4, 1793866225318093000, 10, "h31 h25 h11 p3 h3B p3 h0R p1 p1 h01 h35")
+	if a := step(t, g, bots); a.Type != game.ActPlay {
+		t.Fatalf("AI-3 不必修，應打出 W1，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}

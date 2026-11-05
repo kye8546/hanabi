@@ -428,7 +428,8 @@ func (s *state) brokenCards() map[int]bool {
 			if hv == 0 || hv&s.useful() == 0 && s.trash(t) {
 				continue
 			}
-			wrongPlay := !s.notes[y].bad && !s.playableNow(t) && !slices.ContainsFunc(hv.list(), func(i ident) bool { return !s.playableNow(i) })
+			wrongPlay := !s.notes[y].bad && !s.playableNow(t) && !slices.ContainsFunc(hv.list(), func(i ident) bool { return !s.playableNow(i) }) &&
+				!s.twinPlaysFirst(y, hv)
 			dup := false
 			if z := s.dupOf(y); z >= 0 && !knows(y, t) && !knows(z, t) {
 				dup = true
@@ -442,6 +443,29 @@ func (s *state) brokenCards() map[int]bool {
 		}
 	}
 	return out
+}
+
+// twinPlaysFirst：持有者以為 y 只可能是 i（hv），而他照出牌順序會先打的是另一張實際就是 i 的牌——打出後 y 就成了他知道的重複，
+// 不會打錯，不必急著修（使用者回報 20261105-161025 t12：「1」點到使用者的 G1 與已打出的 Y1，使用者看得到 AI-3 的 W1，
+// 兩張都以為是 G1，照 Level 3 的順序先打新抽的 G1，另一張就是已知垃圾；AI-3 以前當成他會打錯，花提示用黃色修）。
+func (s *state) twinPlaysFirst(y int, hv idSet) bool {
+	i, ok := hv.single()
+	if !ok {
+		return false
+	}
+	p := s.holder(y)
+	restore := s.saveSim()
+	s.overlay = map[int]idSet{}
+	for _, z := range s.hands[p] {
+		q := s.deduce(p, z)
+		if u := q & s.useful(); s.gotten(z) && u != 0 {
+			q = u
+		}
+		s.overlay[z] = q
+	}
+	z := s.nextPlay(p)
+	restore()
+	return z >= 0 && z != y && identOfCard(s.cards[z]) == i
 }
 
 // badCard：（我看得到的）這張被拿到的牌是沒用的：垃圾，或和別處被拿到的牌重複。
