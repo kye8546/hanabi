@@ -286,3 +286,12 @@ func TestTCCMGiverCannotSeeOwnCard(t *testing.T) {
 		}
 	}
 }
+
+func TestL6DirectSaveOverTCCMWhenFocusPlaysAnyway(t *testing.T) {
+	// 使用者回報 20261105-113110 t5：使用者的「4」已要 prompt AI-2 的 R2、R3；AI-1 用「3」點 R3 做 Tempo Clue Chop Move
+	// 保護 chop 上的 Y2。R3 本來就會打出，這個提示只剩 Chop Move——直接用「2」做 2 Save 還有正向資訊，比較好
+	g, bots := replayCodes(t, 3, 1793849470322312000, 10, "h21 h2R p2 h24")
+	if a := step(t, g, bots); a != game.HintRankTo(2, 2) {
+		t.Fatalf("AI-1 應用「2」救 AI-2 chop 上的 Y2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

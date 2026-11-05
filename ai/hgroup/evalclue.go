@@ -187,10 +187,14 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.understood = ev.understood && plays
 		if plays {
 			ev.gets = 1 + len(it.plan)
-			ev.score += scoreTempoCMPlay
 			// 他本來就會打的牌（已知能打、是之前的提示要打的牌，例如只剩 self-prompt 的解讀）不算這個提示讓他打的
-			ev.nextPlays = R == (s.me+1)%s.n && s.knowsPlayNow(it) && !s.alreadyResolved(R, it.focus, t) &&
-				!s.holderKnowsPlayable(it.focus) && !s.notes[it.focus].willPlay && !s.plannedPlay(it.focus)
+			anyway := s.alreadyResolved(R, it.focus, t) || s.holderKnowsPlayable(it.focus) || s.notes[it.focus].willPlay || s.plannedPlay(it.focus)
+			if !anyway {
+				// 焦點本來就會打出時不加分：這個提示只剩 Chop Move，直接救 chop 有正向資訊、比較好（使用者回報 20261105-113110 t5：
+				// 「4」已要 prompt AI-2 的 R2、R3，AI-1 用「3」點 R3 做 TCCM 保護 chop 上的 Y2，被算成勝過直接的 2 Save）
+				ev.score += scoreTempoCMPlay
+			}
+			ev.nextPlays = R == (s.me+1)%s.n && s.knowsPlayNow(it) && !anyway
 		}
 		return ev, true
 	}
