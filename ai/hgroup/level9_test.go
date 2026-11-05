@@ -203,3 +203,18 @@ func TestL9FillInNoPlanForBystander(t *testing.T) {
 		t.Errorf("Fill-In Clue 不會叫人盲打，AI-1 卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL9DDAFillInWithoutConnection(t *testing.T) {
+	// 使用者回報 20261105-151240 t9：AI-1 棄掉 R4，AI-2 的 chop（實際是最後一張 R4）可能是它，處在 Double Discard Situation。
+	// 綠色補使用者已被「5」救下的 G5 是 Fill-In Clue（拖延）：照實際牌面接不上（沒人看得到 G2–G4），旁觀者也不會當成 finesse 自己。
+	// 以前被算成「AI-1 會以為要盲打自己的 G2–G4」而不給，AI-2 棄掉最後一張 R4
+	g, bots := replayCodes(t, 3, 1793862760616666000, 10, "h2Y h25 p1 h1G p1 h05 h22 d5")
+	a := step(t, g, bots)
+	if a.Type != game.ActHint || a.Target != 0 {
+		t.Fatalf("AI-2 應給使用者拖延提示，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	step(t, g, bots) // 使用者：照紀錄沒有後續，讓 bot 代打
+	if a := step(t, g, bots); a.Type == game.ActPlay {
+		t.Fatalf("AI-1 不應把 Fill-In Clue 當成 finesse 而盲打，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}

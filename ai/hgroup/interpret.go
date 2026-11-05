@@ -240,10 +240,13 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 		s.ownMaybe = false
 		it.plan, it.planOK = s.connect(s.me, giver, R, it.focus, t)
 		it.ownMaybe = s.ownMaybe
-		if fillIn && slices.ContainsFunc(it.plan, connectsDep) {
+		if fillIn && (!it.planOK || slices.ContainsFunc(it.plan, connectsDep)) {
 			// Fill-In Clue 不是 play clue：看得到焦點的人也不照實際牌面 prompt / finesse 別人的牌，沒有人要行動
 			// （使用者回報 20261102-114621 t25：使用者在 Double Discard Situation 用綠色補 AI-2 的 G5、G2，
-			// 解讀裡的 finesse 拿掉了，AI-1 卻照實際的 G5 算出「finesse 我的 G1、G3、G4」而盲打錯）
+			// 解讀裡的 finesse 拿掉了，AI-1 卻照實際的 G5 算出「finesse 我的 G1、G3、G4」而盲打錯）。
+			// 照實際牌面根本接不上時也一樣：旁觀者不會以為是 finesse 自己（下面的 stray），這是拖延
+			// （使用者回報 20261105-151240 t9：AI-2 在 Double Discard Situation，綠色補使用者的 G5 被算成
+			// 「AI-1 會以為要盲打自己的 G2–G4」而不給，棄掉最後一張 R4）
 			it.plan, it.planOK, it.agreed = nil, false, true
 			return it
 		}
