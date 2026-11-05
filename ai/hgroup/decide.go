@@ -92,14 +92,11 @@ func (s *state) decide(v game.PlayerView) game.Action {
 			}
 			if slot := s.feedSlot(); slot >= 0 {
 				s.why = feedWhy
-				return game.Discard(slot)
+				return s.notPositional(game.Discard(slot))
 			}
 		}
-		// Level 8：這次棄牌會被當成 Positional Discard，我卻不是要叫人盲打：改棄該棄的牌（已知垃圾或 chop）
-		if a.Type == game.ActDiscard && !positionalWhy(why) && s.posDiscardLike(s.me, s.hands[s.me][a.Slot]) {
-			if exp := s.posExpected(s.me); exp >= 0 {
-				a = game.Discard(slices.Index(s.hands[s.me], exp))
-			}
+		if !positionalWhy(why) {
+			a = s.notPositional(a)
 		}
 		// Level 7：這次棄牌會被當成 Scream / Shout Discard，我卻不是要救人：改打確定能打的牌
 		if a.Type == game.ActDiscard && s.unintendedScream(a.Slot) {
@@ -113,7 +110,7 @@ func (s *state) decide(v game.PlayerView) game.Action {
 	if anxious != nil {
 		if slot := s.feedSlot(); slot >= 0 {
 			s.why = feedWhy
-			return game.Discard(slot)
+			return s.notPositional(game.Discard(slot))
 		}
 		s.why = anxiousWhy
 		return *anxious
@@ -127,6 +124,17 @@ func (s *state) decide(v game.PlayerView) game.Action {
 		return s.stall(evs)
 	}
 	panic("decide：棄牌那一步一定成立")
+}
+
+// notPositional（Level 8）：這次棄牌會被當成 Positional Discard，我卻不是要叫人盲打：改棄該棄的牌（已知垃圾或 chop）。
+// Anxiety Play 的棄牌換提示也一樣（自我對局 5 人局 seed 700：私下知道是垃圾的牌被當成 Positional Discard，有人盲打錯）。
+func (s *state) notPositional(a game.Action) game.Action {
+	if a.Type == game.ActDiscard && s.posDiscardLike(s.me, s.hands[s.me][a.Slot]) {
+		if exp := s.posExpected(s.me); exp >= 0 {
+			return game.Discard(slices.Index(s.hands[s.me], exp))
+		}
+	}
+	return a
 }
 
 func (s *state) stepFinesseBlindPlay(t *turn) (game.Action, string, bool) {

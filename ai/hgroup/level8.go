@@ -421,6 +421,7 @@ type posRec struct {
 	from, slot, plays int
 	cards             []int  // 每位玩家當時在 slot 位置的牌 ID（from 自己、或沒有那個位置的人是 -1）
 	target            []bool // 我看得到的：那張牌當時能打、持有者還不知道（我自己的那張輪到我時再判斷）
+	live              []bool // 那張牌當時能打（我自己的那張看不到，算能打）：打出它才可能是回應
 	acted             []bool // 之後已經行動過的人
 	done              int    // 已經回應（打出那張牌）的人數
 }
@@ -459,14 +460,17 @@ func (s *state) detectPositional(e game.Event, resp bool) *posRec {
 			plays = 2
 		}
 	}
-	pr := &posRec{from: P, slot: e.Slot, plays: plays, cards: make([]int, s.n), target: make([]bool, s.n), acted: make([]bool, s.n)}
+	pr := &posRec{from: P, slot: e.Slot, plays: plays, cards: make([]int, s.n), target: make([]bool, s.n), live: make([]bool, s.n), acted: make([]bool, s.n)}
 	for q := range s.n {
 		pr.cards[q] = -1
 		if q != P && e.Slot < len(s.hands[q]) {
 			c := s.hands[q][e.Slot]
 			pr.cards[q] = c
+			pr.live[q] = q == s.me
 			if q != s.me {
 				pr.target[q] = s.posTarget(c)
+				t, _ := s.see(s.me, c)
+				pr.live[q] = s.playableNow(t)
 			}
 		}
 	}
@@ -500,12 +504,15 @@ func (s *state) posMisplayLike(P, id int) bool {
 		slices.ContainsFunc(s.hands[P][:max(slices.Index(s.hands[P], id), 0)], func(c int) bool { n := s.notes[c]; return !n.clued && !n.cm })
 }
 
-// mayBlindPlay：有提示的解讀（或我推得的計畫）要 P 盲打——他打錯沒被提示的牌可能只是 finesse 沒接好，不是 Positional Misplay。
+// mayBlindPlay：有提示的解讀要 P 盲打這張牌 id——他打錯它可能只是 finesse 沒接好，不是 Positional Misplay。
+// 只看要盲打的正是這張的解讀（Layered Finesse 會往右盲打，有 layer 的也算）：finesse 盲打的是 finesse position，
+// 打錯更右邊的牌不會是在接它（使用者回報 20261105-175906 t57：提示 0 個，使用者打錯 chop 上的 R1，AI-3 的 slot 4 是 B5；
+// AI-3 自己 t56 的黃色有「Y4，finesse 使用者 slot 1 的 Y3」的解讀，以前因此不當成 Positional Misplay、沒回應）。
 func (s *state) mayBlindPlay(P, id int) bool {
 	if s.mayBeFinessed(id) {
 		return true
 	}
-	fin := func(d dep) bool { return d.player == P && d.finesse }
+	fin := func(d dep) bool { return d.player == P && d.finesse && (d.card == id || d.layers > 0) }
 	for _, rec := range s.recs {
 		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
 			if slices.ContainsFunc(c.deps, fin) {
@@ -542,7 +549,7 @@ func (s *state) posStep(e game.Event) {
 		s.pos = nil
 		return
 	}
-	if (e.Type == game.EvPlay || e.Type == game.EvMisplay) && e.Card.ID == pr.cards[e.Player] {
+	if s.posResponse(e) {
 		pr.done++
 	}
 	pr.acted[e.Player] = true
@@ -551,10 +558,15 @@ func (s *state) posStep(e game.Event) {
 	}
 }
 
-// posResponse：e 是照 Positional Discard / Misplay 的盲打（別的提示不能拿它當證據）。
+// posResponse：e 是照 Positional Discard / Misplay 的盲打（別的提示不能拿它當證據）。那個位置上的牌在 Positional 當時就能打
+// （live；我自己的牌我看不到，都算）才可能是回應——當時還不能打、後來才能打的牌只是剛好在同一個位置（使用者回報
+// 20261105-175906 t57：使用者打錯 chop 上的 R1 叫 AI-3 的 B5，AI-2 接著在同一個位置打出 R3 之後才能打的 R4，AI-3 以為有人回應了）。
+// 不要求持有者當時不知道（target）：旁觀者可能把它記成被 finesse 的牌，而持有者其實是在回應——那樣算的話旁觀者以為還差一張，
+// 自己去盲打（自我對局 5 人局 seed 504 因此三閃電；5 人局 3000 局 -0.03）。
 func (s *state) posResponse(e game.Event) bool {
 	pr := s.pos
-	return pr != nil && (e.Type == game.EvPlay || e.Type == game.EvMisplay) && e.Player != pr.from && e.Card.ID == pr.cards[e.Player]
+	return pr != nil && (e.Type == game.EvPlay || e.Type == game.EvMisplay) && e.Player != pr.from && e.Card.ID == pr.cards[e.Player] &&
+		pr.live[e.Player]
 }
 
 // posWillRespond：p（不是我）輪到時會回應 Positional Discard / Misplay——那個位置上他有能打的牌，
