@@ -59,10 +59,20 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 			post[id] = s.possOf(id) & ex
 		}
 	}
+	// 我是旁觀者時，我手上被可能是 Save Clue 的提示一起點到的牌（`saveLoose`）不一定是好牌：
+	// 依 Good Touch 排除過也一樣——提示本身容許它是 i（張數也還有剩），提示揭露 R 的牌是 i 就可能是在修這個重複，不預設自己的牌是好的而讀成 play clue
+	mineLoose := func(i ident, y int) bool {
+		if s.me == R || s.me == giver || !s.aboutToPlay(y) {
+			return false
+		}
+		return slices.ContainsFunc(s.hands[s.me], func(z int) bool {
+			return z != y && s.live(z) && s.saveLoose(z) && s.notes[z].explicit.has(i) && s.remaining(i) > 0
+		})
+	}
 	good := func(set idSet, y int) idSet {
 		var g idSet
 		for _, i := range set.list() {
-			if !s.trash(i) && !s.gottenAs(R, giver, i, y) {
+			if !s.trash(i) && !s.gottenAs(R, giver, i, y) && !mineLoose(i, y) {
 				g |= setOf(i)
 			}
 		}
@@ -255,7 +265,7 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 // fixMisreadByBystander：（我是給提示者）有旁觀者看不出這是 Fix Clue——重複的那張在他自己手上，他看不到——
 // 而照一般的解讀，他會以為要打自己的牌。旁觀者預設自己的牌都是好的，照 play clue 讀（使用者回報 20261102-155921 t30：
 // AI-2 用綠色揭露 AI-1 被「3」點到的是 M3，和使用者手上已提示的 M3 重複；使用者看不到自己那張，讀成 M3 的 play clue、
-// finesse 自己的 M2 而盲打錯）。
+// finesse 自己的 M2 而盲打錯）。他那張是被可能是 Save Clue 的提示一起點到的牌時（`saveLoose`）他看得懂，不算。
 func (s *state) fixMisreadByBystander(it interp, h game.Hint, R int, touched []int) bool {
 	blind := false
 	for y := range it.fixPoss {
@@ -267,7 +277,7 @@ func (s *state) fixMisreadByBystander(it interp, h game.Hint, R int, touched []i
 			blind = blind || slices.ContainsFunc(hand, func(z int) bool {
 				c, ok := s.card(z)
 				u, known := s.possOf(z).single()
-				return ok && s.gotten(z) && identOfCard(c) == t && (!known || u != t)
+				return ok && s.gotten(z) && identOfCard(c) == t && (!known || u != t) && !(s.saveLoose(z) && s.notes[z].explicit.has(t) && s.aboutToPlay(y))
 			})
 		}
 	}
@@ -277,6 +287,25 @@ func (s *state) fixMisreadByBystander(it interp, h game.Hint, R int, touched []i
 	defer s.saveSim()()
 	s.notFix = true
 	return s.interpret(s.me, R, h, touched).stray
+}
+
+// saveLoose：牌 z 是某個焦點在 chop 上的提示一起點到的非焦點新牌。那個提示可能是 Save Clue，原文 Save Principle 允許
+// 給提示者為了救牌違反 Good Touch，所以持有者看到別人已提示的牌被補成 z 可能的牌面時，不預設 z 是好牌，
+// 會想到那是修正重複的 Fix Clue（使用者回報 20261105-093701：t14 AI-1 用「2」救使用者 chop 上的 G2，一起點到和 AI-2 的 B2
+// 重複的 B2；用藍色修 AI-2 時，使用者以前照「自己的牌是好的」讀成 B2 的 play clue、要自己盲打 B1，所以沒人修，AI-2 打錯）。
+// 只在被補資訊的牌是接收者本來就要打的牌時這樣讀（原文 Fix Clue 第一個例子：「Since Bob was about to play this card,
+// Bob knows that this was a Fix Clue」）；一律這樣讀時，Rainbow 的顏色提示常一起點到彩虹牌，真正的 play clue 也被讀成 Fix Clue，
+// 4–5 人局約 -0.05–0.09。
+func (s *state) saveLoose(z int) bool {
+	return slices.ContainsFunc(s.recs, func(rec *clueRec) bool {
+		return rec.chop && rec.focus != z && slices.Contains(rec.fresh, z)
+	})
+}
+
+// aboutToPlay：（我看得到的）牌 y 的持有者推得出它現在能打（holderView 的每種可能都能打），下一手就會打它。
+func (s *state) aboutToPlay(y int) bool {
+	hv := s.holderView(y, s.certainMine())
+	return hv != 0 && !slices.ContainsFunc(hv.list(), func(i ident) bool { return !s.playableNow(i) })
 }
 
 // certainMine：我手上一定有的牌面（張數）。我的 k 張已被拿到的牌合起來只可能是 k 種牌面、而每種都只剩 1 張時，
@@ -310,7 +339,7 @@ func (s *state) certainMine() [numIdents]int {
 }
 
 // holderView：y 的持有者自己推得出的可能——共同筆記再扣掉他看得到所有剩下張數的牌面
-// （別人手上我看得到的牌，加上我手上一定有的牌面，他都看得到）。
+// （別人手上我看得到的牌，加上我手上一定有的牌面，他都看得到），被拿到的牌再依 Good Touch 扣掉別人手上已提示牌的牌面。
 func (s *state) holderView(y int, mine [numIdents]int) idSet {
 	q := s.holder(y)
 	p := s.notes[y].poss
@@ -334,6 +363,29 @@ func (s *state) holderView(y int, mine [numIdents]int) idSet {
 	for _, i := range p.list() {
 		if !s.trash(i) && seen[i] >= i.copies()-s.discarded[i] {
 			p &^= setOf(i)
+		}
+	}
+	// Good Touch：他看得到別人手上被提示過的牌是哪張，自己被拿到的牌就不是那張
+	// （使用者回報 20261105-093701：AI-2「2」點到的 B2 和使用者被「2」救下的 B2 重複，AI-2 看到那張 B2 就以為自己的是能打的 Y2）
+	if s.gotten(y) {
+		gt := p
+		for r, h := range s.hands {
+			if r == q {
+				continue
+			}
+			for _, z := range h {
+				if !s.notes[z].clued || !s.live(z) {
+					continue
+				}
+				if c, ok := s.card(z); ok && r != s.me {
+					gt &^= setOf(identOfCard(c))
+				} else if t, ok := s.myPoss(z).single(); ok && r == s.me {
+					gt &^= setOf(t)
+				}
+			}
+		}
+		if gt != 0 {
+			p = gt
 		}
 	}
 	return p

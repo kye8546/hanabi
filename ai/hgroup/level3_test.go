@@ -497,3 +497,17 @@ func TestL3FixClueOverridesWrongPrompt(t *testing.T) {
 		t.Fatalf("AI-1 應打出 slot 5 的 Y2，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL3FixDuplicateFromSaveClue(t *testing.T) {
+	// 使用者回報 20261105-093701：t14 AI-1 用「2」救使用者 chop 上的 G2，一起點到使用者的 B2，和 AI-2 被「2」點到的 B2 重複
+	// （Save Principle 允許）。AI-2 依 Good Touch 排除 G2、B2，又看得到兩張 R2，以為自己是能打的 Y2，t19 打錯。
+	// AI-1 要看得出 AI-2 會打錯（持有者的推論也算 Good Touch），並用藍色修正——使用者那張是被可能是 Save Clue 的提示
+	// 一起點到的牌，看得出這是修正重複的 Fix Clue，不會讀成要自己盲打 B1
+	g, bots := replayCodes(t, 4, 1793799599426080000, 9, "h1R p4 h3Y p4 h1W p4 h15 h25 h22 h3W p3 h25 d4 h02 p3 p2 d3")
+	if a := step(t, g, bots); a != game.HintColorTo(2, game.Blue) {
+		t.Fatalf("AI-1 應用藍色修正 AI-2 的 B2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	if a := step(t, g, bots); g.Strikes != 0 || a.Type == game.ActPlay {
+		t.Fatalf("AI-2 不應再打那張 2，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
