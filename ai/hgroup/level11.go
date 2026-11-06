@@ -102,9 +102,13 @@ func (s *state) bluffTargets(rec *clueRec, ex idSet, played int, x ident) (idSet
 	defer s.saveSim()()
 	s.sameClue, s.free, s.clueSeq = rec.fresh, rec.free, rec.seq
 	s.skipCards = append(slices.Clone(s.skipCards), played)
+	// 「差一張就能打」照盲打之前的煙火判斷：原文 Level 13 The 3 Bluff 開頭說 Bluff 點到的牌是差一張就能打的，
+	// 它的 Example 5（「3」點到 r3、Bob 盲打出 r1）是 Level 13 另外約定的 3 Bluff——提示當下差兩張、只因為盲打出
+	// 同色的牌才變成差一張的，不是 Level 11 的 Bluff 目標（使用者回報 20261106-123034 t15：AI-2 用「3」點使用者 chop 上
+	// 的 Y3、要他盲打出 Y1，那時 Y3 還差 Y1、Y2 兩張）
 	saved := s.stacks
 	defer func() { s.stacks = saved }()
-	s.stacks[x.color()] = max(s.stacks[x.color()], x.rank())
+	s.stacks[x.color()] = x.rank() - 1
 
 	R, giver := rec.target, rec.giver
 	var targets idSet
