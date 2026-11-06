@@ -454,7 +454,7 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 			}
 		}
 		if turn == dumpTurn {
-			fmt.Fprintf(out, "=== 第 %d 回合開始前（輪到 P%d）\n", turn, p)
+			fmt.Fprintf(out, "=== 第 %d 回合開始前（輪到 P%d）煙火 %v 提示 %d 牌堆 %d\n", turn, p, g.Fireworks, g.Hints, len(g.Deck))
 			for q := range n {
 				fmt.Fprintf(out, "  實際 P%d: %s\n", q, handIDs(g, q))
 			}

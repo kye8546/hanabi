@@ -39,6 +39,7 @@ func (s *state) pace(v game.PlayerView) int {
 //   - pace 1，有隊友手上沒有能打的牌，而我的牌可能能打（Pace +1 Rule：讓他去做最後一次棄牌）。
 //   - 牌堆只剩 1 張，而某位隊友手上有 2 張以上還需要打的牌（他只剩一回合打不完）。
 //   - 牌堆只剩 1 張，我抽走它後的最後一輪（每人一回合、我最後）照順序打不完還需要的牌（finalRoundShort）。
+//   - 終局（pace < 人數）推演起來，我這一手拖延比棄牌打得出更多牌（burnHelps）。
 func (s *state) mustBurn(v game.PlayerView) bool {
 	if v.DeckSize == 0 || v.Hints == 0 {
 		return false
@@ -63,7 +64,35 @@ func (s *state) mustBurn(v game.PlayerView) bool {
 			return true
 		}
 	}
-	return false
+	// 一般的情況：還需要的牌要照順序由不同人打，我這一手棄牌（抽牌）讓遊戲早一回合結束，後面的牌就來不及
+	return s.pace(v) < s.n && s.burnHelps(v)
+}
+
+// burnHelps：照終局推演（rolloutFrom），我這一手拖延比棄牌打得出更多牌。和 finalRoundShort 一樣是上限的模型：
+// 還需要的牌，別人手上看得到的由他打，看不到的都當成在我手上，每個人都知道自己的牌；之後大家照推演合作
+// （能打就打或拖延）。使用者回報 20261106-114653 t53：只差 B3、B4、B5，B3、B4 在 AI-2 手上、B5 在 AI-1 手上，
+// 牌堆 2 張、提示 4 個。AI-1 棄掉已知垃圾，AI-2 打 B3 時抽走最後一張，B4 要到最後一輪他的回合才打得出，B5 就來不及；
+// AI-1 拖延、使用者也拖延的話，AI-2 打 B4 時才抽走最後一張，AI-1 在最後一輪打 B5。以前只在牌堆剩 1 張時
+// 看整串牌的順序，牌堆 2 張時只看每個隊友自己的牌夠不夠回合打。
+func (s *state) burnHelps(v game.PlayerView) bool {
+	known := make([][]ident, s.n)
+	for _, c := range s.colors {
+		for r := s.stacks[c] + 1; r <= game.MaxRank; r++ {
+			t := identOf(c, r)
+			if s.discarded[t] >= t.copies() {
+				break
+			}
+			holder := s.me
+			for p, h := range s.hands {
+				if p != s.me && slices.ContainsFunc(h, func(id int) bool { return identOfCard(s.cards[id]) == t }) {
+					holder = p
+					break
+				}
+			}
+			known[holder] = append(known[holder], t)
+		}
+	}
+	return s.rolloutFrom(known, firstStall, 0, v) > s.rolloutFrom(known, firstDiscard, 0, v)
 }
 
 // finalRoundShort：牌堆只剩 1 張時，我棄牌抽走它，接著每人只剩一回合（下一位先、我最後）。還需要打的牌中，
@@ -192,6 +221,22 @@ func (s *state) endgameRollout(mine ident, stall bool, v game.PlayerView) int {
 			}
 		}
 	}
+	first := firstPlay
+	if stall {
+		first = firstStall
+	}
+	return s.rolloutFrom(known, first, mine, v)
+}
+
+// rolloutFrom 的第一手（我這一手）
+const (
+	firstPlay    = iota // 打出 mine
+	firstStall          // 拖延：有提示、牌堆還有牌就給提示，否則棄牌
+	firstDiscard        // 棄牌（抽牌、換回一個提示）
+)
+
+// rolloutFrom：endgameRollout 的推演本體。known[p] 是 p 手上推演時會打的牌（還需要的牌面）。
+func (s *state) rolloutFrom(known [][]ident, first int, mine ident, v game.PlayerView) int {
 	type pos struct {
 		stacks                   [game.NumColors]game.Rank
 		hints, deck, final, turn int
@@ -205,8 +250,10 @@ func (s *state) endgameRollout(mine ident, stall bool, v game.PlayerView) int {
 		return n
 	}
 	var best func(q pos) int
+	var actAs func(q pos, t ident, ok, discard bool) int
 	// act：q.turn 那位玩家打出 t（ok）或拖延之後，推進到下一回合
-	act := func(q pos, t ident, ok bool) int {
+	act := func(q pos, t ident, ok bool) int { return actAs(q, t, ok, false) }
+	actAs = func(q pos, t ident, ok, discard bool) int {
 		before := q.deck
 		if ok {
 			q.stacks[t.color()] = t.rank()
@@ -214,7 +261,7 @@ func (s *state) endgameRollout(mine ident, stall bool, v game.PlayerView) int {
 				q.hints++
 			}
 			q.deck = max(q.deck-1, 0)
-		} else if q.hints > 0 && q.deck > 0 {
+		} else if q.hints > 0 && q.deck > 0 && !discard {
 			q.hints--
 		} else {
 			q.hints = min(q.hints+1, game.MaxHints)
@@ -273,7 +320,7 @@ func (s *state) endgameRollout(mine ident, stall bool, v game.PlayerView) int {
 		return r
 	}
 	start := pos{stacks: s.stacks, hints: v.Hints, deck: v.DeckSize, final: -1}
-	return act(start, mine, !stall) - score(s.stacks)
+	return actAs(start, mine, first == firstPlay, first == firstDiscard) - score(s.stacks)
 }
 
 // unblocksIdle：我打出 slot 的牌後，某位隊友手上（我看得到）接在它後面的牌就能打，而他現在沒有別張能打——他在等我這張。
