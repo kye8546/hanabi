@@ -219,7 +219,14 @@ func (s *state) applyBluff(rec *clueRec, targets idSet, assigns map[ident][]dep)
 	n.willPlay = true
 	truth, see := s.see(s.me, rec.focus)
 	if see && !targets.has(truth) {
-		return // 我看得到的實際牌面不在推得的目標中（給提示者弄錯了）：推測不可靠，不寫進筆記
+		// 我看得到的實際牌面不在推得的目標中（給提示者弄錯了）。Bluff 的讀法只看大家都知道的資訊，接收者一定照它記，
+		// 所以照樣寫進共同筆記，Fix Clue 才看得出他記錯、會打錯（使用者回報 20261106-151527：t16 使用者紅色點 AI-2 的 R4，
+		// AI-1 盲打出 G3，大家讀成 Bluff、R3；AI-1 看得到是 R4 就不寫，一直不知道 AI-2 以為是 R3，t29 還提示使用者的 R2，
+		// t33 AI-2 打錯 R4）。中間的牌（assigns）不寫：那是照錯的目標推的
+		if p := n.explicit & targets; p != 0 {
+			n.poss = p
+		}
+		return
 	}
 	t, ok := targets.single()
 	if see {

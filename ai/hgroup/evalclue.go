@@ -259,6 +259,10 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		}
 	}
 	soon := playable && s.resolvesToPlay(R, it.cands, plan, t)
+	if soon && s.unlocksMisplay(t, plan) {
+		ev.misleads, ev.danger = true, true
+		return ev, true
+	}
 
 	switch {
 	case ev.danger:

@@ -445,6 +445,28 @@ func (s *state) brokenCards() map[int]bool {
 	return out
 }
 
+// unlocksMisplay：這個 play clue 讓 t 與連接牌（plan）打出後，有隊友記錯的已提示牌（brokenCards）在他看來變成能打、實際卻不能打
+// ——提示本身沒誤導，卻等於叫他打錯（Misplay Cost Principle）。先修（Fix Clue）或給別的提示。使用者回報 20261106-151527 t29：
+// AI-2 被 Bluff 讀成 R3 的牌實際是 R4，AI-1 用最後一個提示讓使用者打出 R2，t33 AI-2 就打錯 R4。
+func (s *state) unlocksMisplay(t ident, plan []dep) bool {
+	broken := s.brokenCards()
+	if len(broken) == 0 {
+		return false
+	}
+	saved := s.stacks
+	defer func() { s.stacks = saved }()
+	for _, u := range append([]ident{t}, depIDs(plan)...) {
+		s.stacks[u.color()] = max(s.stacks[u.color()], u.rank())
+	}
+	for y, now := range s.brokenCards() {
+		if w, was := broken[y]; !now || was && w {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // twinPlaysFirst：持有者以為 y 只可能是 i（hv），而他照出牌順序會先打的是另一張實際就是 i 的牌——打出後 y 就成了他知道的重複，
 // 不會打錯，不必急著修（使用者回報 20261105-161025 t12：「1」點到使用者的 G1 與已打出的 Y1，使用者看得到 AI-3 的 W1，
 // 兩張都以為是 G1，照 Level 3 的順序先打新抽的 G1，另一張就是已知垃圾；AI-3 以前當成他會打錯，花提示用黃色修）。
@@ -686,4 +708,12 @@ func (s *state) sdCands(q int, t ident) int {
 		}
 	}
 	return n
+}
+
+func depIDs(plan []dep) []ident {
+	out := make([]ident, len(plan))
+	for i, d := range plan {
+		out[i] = d.id
+	}
+	return out
 }
