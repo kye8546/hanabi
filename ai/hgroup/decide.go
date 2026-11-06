@@ -273,6 +273,9 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 			}
 			return ev.act, cmNames[ev.cmKind] + "：保護 chop 上必須保留的牌", true
 		}
+		if ev.bluff {
+			return ev.act, "Bluff：下一位會盲打出別張能打的牌", true
+		}
 		return ev.act, map[clueKind]string{kindPlay: "play clue", kindSave: "save clue"}[k], true
 	}
 	return game.Action{}, "", false

@@ -474,7 +474,7 @@ func (s *state) onClue(e game.Event) {
 	}
 
 	rec := &clueRec{giver: e.Player, target: R, focus: it.focus, cands: it.cands, fallback: it.fallback,
-		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq, saveView: it.saveView, free: it.free}
+		fpAt: fpAt, changed: []int{it.focus}, chop: it.chopFocus, fresh: it.newCards, seq: s.seq, saveView: it.saveView, free: it.free, hint: e.Hint}
 	var u idSet
 	for _, c := range it.cands {
 		u |= 1 << c.id
@@ -540,6 +540,7 @@ func (s *state) onClue(e game.Event) {
 		}
 	}
 	s.recs = append(s.recs, rec)
+	s.lastClue = rec
 }
 
 // refreshFocus 依剩下的解讀更新焦點牌的筆記。

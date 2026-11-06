@@ -3,7 +3,7 @@ package hgroup
 import "hanabi/game"
 
 // MaxLevel 是目前已實作的最高慣例等級。
-const MaxLevel = 10
+const MaxLevel = 11
 
 // Levels 是 H-Group 的 25 個慣例等級名稱（Levels[0] = Level 1）。
 var Levels = [...]string{
@@ -58,6 +58,7 @@ const (
 	lvStall          = 9  // Stalling：Stall Table 的拖延情況與嚴重度、Double Discard Avoidance
 	lvGentleman      = 10 // Gentleman's Discard（含 Layered）與 Baton Discard：棄掉被拿到的牌，傳到另一張所在的 finesse position
 	lvCertain        = 10 // Sarcastic Finesse、Certain Finesse / Certain Discard：finesse 可能和給提示者不確定的已提示牌重複
+	lvBluff          = 11 // Bluff / Self-Bluff（只從 Bluff Seat）、Cathy's Connecting Principle、Guide Principle
 )
 
 // knows：這個 AI 的等級已經學到從 lv 開始的技巧。

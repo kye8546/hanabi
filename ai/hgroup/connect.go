@@ -242,6 +242,9 @@ func (s *state) findFinesse(obs, giver, R int, m ident, used []int) (d dep, took
 		if p == s.me && !s.myPoss(fp).has(m) {
 			continue // 我推得出自己的 finesse position 不是 m（看得到它的人更知道）
 		}
+		if !s.notes[fp].explicit.has(m) {
+			continue // 提示資訊（負向）排除了 m：持有者自己也知道，不會以為是他（自我對局 4 人局 seed 51：手上沒有黃牌的人不會被 finesse 成 y3）
+		}
 		if p == s.me && obs != s.me && s.assumeMine {
 			return dep{player: p, card: fp, id: m, finesse: true}, []int{fp}, true
 		}
@@ -530,8 +533,9 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 	}
-	if s.posResp || played >= 0 && s.gdCard(played) {
-		explained[nil] = true // Level 8：回應 Positional Discard / Misplay 的盲打；Level 10：Gentleman's Discard 的盲打
+	if s.posResp || played >= 0 && (s.gdCard(played) || played == s.bluffCard) {
+		// Level 8：回應 Positional Discard / Misplay 的盲打；Level 10：Gentleman's Discard 的盲打；Level 11：Bluff 的盲打
+		explained[nil] = true
 	}
 	// Level 5：有提示的解讀正好要他盲打出這張牌面時，其他提示不能把這次盲打當成 layer（Layered Finesse）的證據——
 	// 那是比較牽強的解讀（自我對局 seed 491：黃色要 Cathy 盲打 y1，之後的「2」也有「w2，Cathy 的 y1 是 layer」的解讀，
@@ -900,8 +904,8 @@ func depsOf(cs []cand) [][]dep {
 // 若證實不是需要的牌（例如以為可能是 g1 的 1 打出來是 y1），這個解讀就不成立了，從筆記移除。
 func (s *state) recheckDelayed() {
 	for _, rec := range s.recs {
-		if s.holder(rec.focus) < 0 {
-			continue
+		if s.holder(rec.focus) < 0 || rec.bluff {
+			continue // Bluff 的焦點本來就差一張（沒有人會打的那張），不是靠已經會打的牌接上的
 		}
 		kept := slices.DeleteFunc(slices.Clone(rec.cands), func(c cand) bool {
 			if c.save || len(c.deps) > 0 || s.trash(c.id) || s.playableNow(c.id) {

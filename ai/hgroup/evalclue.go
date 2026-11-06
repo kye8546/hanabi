@@ -43,6 +43,7 @@ type clueEval struct {
 	bad         int   // 違反 Good Touch 的新牌（垃圾或重複）
 	fixes       int   // Fix Clue：修正了幾張壞掉的牌
 	fixesNow    int   // 其中有幾張原本會被打錯
+	bluff       bool  // Level 11 Bluff：下一位盲打出別張能打的牌，焦點是差一張就能打的牌
 	cmKind      int   // Chop Move 的種類（cmTrash / cmFive）
 	cm          []int // 被 Chop Move 的牌
 	cmSaves     int   // 其中必須保留的牌（needsSave）
@@ -170,6 +171,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.misleads = true
 		return ev, true
 	}
+	if bev, ok := s.evalBluff(R, h, it, touched, ev, dist); ok {
+		return bev, true // Level 11：Bluff（實際焦點接不上，靠下一位盲打出別張能打的牌）
+	}
 	if it.selfRisk {
 		alt := it
 		alt.cands = it.fallback
@@ -229,6 +233,14 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		plan = it.plan
 		if !s.finesseClear(R, plan) || !it.agreed || !s.selfPromptTimely(R, it.cands) {
 			// 接收者看得懂，但要打連接牌的人會搞錯是誰、打哪張（例如 prompt 到另一張已提示牌），拖延時也不能用
+			ev.misleads = true
+			return ev, true
+		}
+	}
+	if playable && s.knows(lvBluff) {
+		if _, _, _, ok := s.bluffRead(R, h, it, touched, plan); ok {
+			// Level 11：下一位照計畫盲打出的牌接不上提示，大家會讀成 Bluff（例如 Bluff Seat 上的 Layered Finesse、
+			// 用數字提示的 Double Finesse），不是計畫的意思
 			ev.misleads = true
 			return ev, true
 		}

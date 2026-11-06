@@ -66,6 +66,8 @@ type clueRec struct {
 	saveView []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
 	free     freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
 	struck   bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
+	hint     game.Hint  // 提示的內容（Level 11 Cathy's Connecting Principle：盲打出的牌接不接得上提示）
+	bluff    bool       // Level 11：已確定是 Bluff，焦點是差一張就能打的牌（cands 沒有連接牌，也不用再找）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
@@ -119,6 +121,13 @@ type state struct {
 	dda *ddaRec
 	// gds：Level 10 Gentleman's Discard 之後還沒盲打出來的牌（Layered 時往右移）
 	gds []gdRec
+	// lastClue：最近一個行動是提示時，那個提示的紀錄（下一個行動之後清掉）。Level 11：Bluff 只能從 Bluff Seat 給，
+	// 被 Bluff 的人必須在下一手盲打（Lie Principle）
+	lastClue *clueRec
+	// bluffCard：正在處理的盲打是 Bluff 的盲打（checkDeps 不拿它當其他提示的證據；-1 = 無）
+	bluffCard int
+	// acted[p]：p 最近一次行動（不含抽牌）的事件序號（Level 11：他從某個提示之後還沒輪過，盲打可能是在回應那個提示）
+	acted [game.MaxPlayers]int
 }
 
 // sim 是推論時暫時套用的假設情境：解讀一次提示（實際發生或模擬）、替舊提示重新找連接牌、
@@ -170,15 +179,16 @@ func (s *state) saveSim() (restore func()) {
 
 func newState(v game.PlayerView, level int) *state {
 	s := &state{
-		n:       v.NumPlayers,
-		me:      v.Seat,
-		level:   level,
-		colors:  v.Colors(),
-		all:     suitIdents(v.Variant),
-		hints:   game.MaxHints,
-		excused: -1,
-		hands:   make([][]int, v.NumPlayers),
-		cmLast:  map[int][]int{},
+		n:         v.NumPlayers,
+		me:        v.Seat,
+		level:     level,
+		colors:    v.Colors(),
+		all:       suitIdents(v.Variant),
+		hints:     game.MaxHints,
+		excused:   -1,
+		bluffCard: -1,
+		hands:     make([][]int, v.NumPlayers),
+		cmLast:    map[int][]int{},
 	}
 	for p, h := range v.Hands {
 		for _, vc := range h {
@@ -360,7 +370,7 @@ func (s *state) apply(e game.Event) {
 		}()
 	}
 	if e.Type != game.EvDraw {
-		defer func() { s.moved = true }()
+		defer func() { s.moved, s.acted[e.Player] = true, s.seq }()
 	}
 	// Level 9：Double Discard Avoidance 只管上一位棄牌後的下一個行動（抽牌不算）
 	if dd := s.dda; dd != nil && e.Type != game.EvDraw {
@@ -369,6 +379,11 @@ func (s *state) apply(e game.Event) {
 				s.dda = nil
 			}
 		}()
+	}
+	// Level 11：上一個行動是提示時，這是它之後的第一個行動（Bluff 只在這一手兌現）
+	var justClued *clueRec
+	if e.Type != game.EvDraw {
+		justClued, s.lastClue = s.lastClue, nil
 	}
 	// Level 8：Positional Discard / Misplay 之後的行動，記下有沒有回應
 	resp := s.posResponse(e)
@@ -403,6 +418,11 @@ func (s *state) apply(e game.Event) {
 		if wpRec != nil {
 			s.excused = wpCard // 他這次打錯是因為 Wrong Prompt，不算沒盲打那張 finesse 的牌
 		}
+		// Level 11：Bluff Seat 的下一位盲打出接不上提示的牌——Bluff，焦點是差一張就能打的牌（先於其他推論）
+		s.bluffCard = -1
+		if e.Type == game.EvPlay && !resp && s.detectBluff(e, justClued) {
+			s.bluffCard = e.Card.ID
+		}
 		var connRecs, eitherWay []*clueRec
 		if e.Type == game.EvPlay {
 			connRecs = s.recsWanting(e.Card.ID)
@@ -413,7 +433,7 @@ func (s *state) apply(e game.Event) {
 		s.posResp = resp
 		s.checkDeps(e, e.Card.ID)
 		s.stepGD(e)
-		s.excused, s.posResp = -1, false
+		s.excused, s.posResp, s.bluffCard = -1, false, -1
 		if e.Type == game.EvPlay {
 			s.revealGTP(e.Card.ID, identOfCard(e.Card))
 			if sarcDenied >= 0 {

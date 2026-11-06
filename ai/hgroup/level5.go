@@ -30,6 +30,9 @@ func (s *state) stepDeferFinesse(t *turn) (game.Action, string, bool) {
 	if !s.knows(lvUrgency) || !slices.ContainsFunc(s.hands[s.me], func(id int) bool { return s.notes[id].finessed && s.knownPlayable(id) }) {
 		return game.Action{}, "", false
 	}
+	if s.guided() {
+		return game.Action{}, "", false // Level 11 Guide Principle：上一位剛引導我盲打，現在就打
+	}
 	a, why, ok := s.urgentSave(t.clues(s), t.v.Hints, true)
 	if !ok || a.Type != game.ActHint {
 		return game.Action{}, "", false
