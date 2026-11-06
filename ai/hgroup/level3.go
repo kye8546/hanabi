@@ -588,8 +588,13 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 		}
 		// 我那張也可能是鏈上的其他牌（例如 g2 或 g4，焦點是 g5）時，不知道它補的是哪一張
 		if len(mine) == 1 && s.myPoss(mine[0])&chain == setOf(m) {
-			s.notes[mine[0]].poss = setOf(m)
-			rec.changed = append(rec.changed, mine[0])
+			// 本來就確定是 m（例如之前的 Bluff 已讓它確定）時不算這個提示改的，撤銷這個提示的筆記時才不會連之前的推論
+			// 一起抹掉（使用者回報 20261106-144321：t21「4」的 W4 讓 AI-1 把已確定是 W2 的 slot 5 再鎖一次，
+			// t22 認定是 Bluff、撤掉筆記時 W2 也被洗掉，中間的牌再由左而右配成 slot 4 = W2、slot 5 = W3，t32 打錯）
+			if s.notes[mine[0]].poss != setOf(m) {
+				s.notes[mine[0]].poss = setOf(m)
+				rec.changed = append(rec.changed, mine[0])
+			}
 			if s.knows(lvHiddenFinesse) {
 				// 等於這個提示 prompt 了我那張牌：它打出來若是別張能打的牌，給提示者看得到那張不是 m，
 				// 真正的 m 在我提示當下的 finesse position（Level 5 Hidden Finesse，stepDep 會接手）。使用者回報 20261020-162330：

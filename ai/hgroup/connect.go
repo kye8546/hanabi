@@ -331,15 +331,22 @@ func (s *state) depCards(d dep) []int {
 }
 
 // markDep 在被 prompt / finesse 的牌上寫筆記。
+// 筆記本來就和要寫的一樣（例如之前的提示已經讓它確定是 w2、要打出）時不算這個提示改的：撤銷這個提示的筆記
+// （Bluff、連接失敗、打錯後重置）時才不會連之前的推論一起抹掉（使用者回報 20261106-144321：t12 的 Bluff 讓 AI-1 知道
+// slot 5 是 W2，t21 的「4」有解讀要 prompt 它，t22 認定「4」是 Bluff、撤掉它的連接筆記時把 W2 也洗掉，
+// 中間的牌再由左而右配成 slot 4 = W2、slot 5 = W3，t32 打錯）。
 func (s *state) markDep(rec *clueRec, d dep) {
 	n := s.notes[d.card]
+	same := n.poss == setOf(d.id) && n.willPlay && (!d.finesse || n.finessed && n.finRec != nil)
 	n.poss = setOf(d.id)
 	n.willPlay = true
 	if d.finesse {
 		s.got(d.card, rec.giver)
 		n.finessed, n.finRec = true, rec
 	}
-	rec.changed = append(rec.changed, d.card)
+	if !same {
+		rec.changed = append(rec.changed, d.card)
+	}
 }
 
 // selfMark：每種解讀都要 who 自己同一張牌（self-prompt，或 Level 2 的 self-finesse）時，那張牌就是連接牌。
