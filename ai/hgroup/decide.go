@@ -14,6 +14,7 @@ type turn struct {
 	ocm       int // Level 4 Order Chop Move 要打的牌的位置（-1 = 沒有）
 	ocmTarget int // 它保護的是誰的 chop
 	ocmDone   bool
+	heldPlay  bool // 有確定能打的牌，但打出後下一位會把壞掉的牌當成能打（playOrFix 找不到修法），這手先不打
 }
 
 func (t *turn) clues(s *state) []clueEval {
@@ -220,7 +221,9 @@ func (s *state) stepPlay(t *turn) (game.Action, string, bool) {
 		return game.Action{}, "", false
 	}
 	if s.knows(lvFixClue) && len(s.nextMisplaysAfter(slot)) > 0 {
-		return s.playOrFix(t, slot, "打出確定能打的牌")
+		a, why, ok := s.playOrFix(t, slot, "打出確定能打的牌")
+		t.heldPlay = !ok
+		return a, why, ok
 	}
 	if ev, ok := s.clueBeforePlay(t.clues(s), t.v, slot); ok {
 		if s.onlyMyFinesse(ev) {
@@ -352,6 +355,10 @@ func (s *state) stepEndgameBurn(t *turn) (game.Action, string, bool) {
 
 func (s *state) stepDiscard(t *turn) (game.Action, string, bool) {
 	a, why := s.discard(t.v, t.clues(s))
+	if t.heldPlay && a.Type == game.ActDiscard {
+		// 紀錄寫清楚為什麼不打確定能打的牌（使用者回報 20261109-103033 t27：理由只寫「棄牌」）
+		why += "（不打確定能打的牌：打出後下一位會把壞掉的牌當成能打而打錯，又沒有提示可修，先換回提示讓人修）"
+	}
 	return a, why, true
 }
 
