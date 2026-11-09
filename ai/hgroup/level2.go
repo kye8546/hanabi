@@ -247,12 +247,19 @@ func (s *state) applyWrongPrompt(fp int, ids idSet, rec *clueRec) {
 // 我就該等他盲打，不是直接提示他那張。
 // 只看我是接收者、看不到焦點牌的提示（看得到時，計畫裡的 finesse 牌已經記成被 finesse，不會是新牌）。
 // Level 5：Layered / Hidden Finesse 真正要盲打的牌在 layer 後面，也不能直接提示它（What's Hidden? 挑戰題）。
+// 焦點是這個牌面時同時可能是 save clue 的解讀不算：可能是 save clue 的提示不會讓人盲打（看得到焦點的人
+// 也分不出是救還是要 finesse），沒有 finesse 可以踩（使用者回報 20261109-121725 t11：「2」救 AI-1 chop 上的 W2，
+// AI-1 看不到，以為可能是 Y2、要 Reverse Finesse AI-2 的 Y1，就不肯用「1」直接提示 Y1）。
+// 只在 Lv5 起（和 Stomping 算誤導同一級）：Lv2–4 套用時 3 人局 3000 局 -0.02–0.07、閃電略增（原因還沒查），Lv5 起持平。
 func (s *state) stomps(touched []int) bool {
 	for _, rec := range s.recs {
 		if rec.target != s.me {
 			continue
 		}
 		for _, c := range rec.cands {
+			if s.knows(lvLayeredFinesse) && !c.save && slices.ContainsFunc(rec.cands, func(o cand) bool { return o.save && o.id == c.id }) {
+				continue
+			}
 			for _, d := range c.deps {
 				if (d.finesse || d.layers > 0) && d.player != s.me && slices.ContainsFunc(s.depCards(d), func(id int) bool {
 					return !s.notes[id].clued && slices.Contains(touched, id)
