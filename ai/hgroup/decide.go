@@ -285,9 +285,14 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 }
 
 // stepFixGoodTouch（Level 3）：違反 Good Touch 的牌要儘早修正，不論會不會馬上被打錯。
+// 但這個 Fix Clue 一起點到新的垃圾或重複牌時不給：接收者照 Good Touch 把它記成有用的牌（原文 Fix Clue 範例：
+// 一起點到的藍牌記成 b2–b5），只是把一張壞掉的牌換成另一張，之後同樣可能被打錯。阻止眼前打錯的
+// Fix Clue（stepFixMisplay、playOrFix）照給（Misplay Cost Principle）。使用者回報 20261109-103033：
+// t17 AI-1 用紅色修使用者被記成 G2 / W2 的 R2（不會馬上打錯），一起點到 R1，大家記成 R3–R5；
+// t27 AI-2 要打 R4 時，那張就會被當成 R5 打出，只好棄牌換提示。
 func (s *state) stepFixGoodTouch(t *turn) (game.Action, string, bool) {
 	if s.knows(lvFixClue) {
-		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindFix && e.fixes > 0 && !e.misleads }); ok {
+		if ev, ok := best(t.clues(s), func(e clueEval) bool { return e.kind == kindFix && e.fixes > 0 && !e.misleads && e.bad == 0 }); ok {
 			return ev.act, "Fix Clue：修正違反 Good Touch 的牌", true
 		}
 	}
