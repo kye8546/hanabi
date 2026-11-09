@@ -152,10 +152,27 @@ const ocmWhy = "Order Chop Move：不照順序打 1，保護後面玩家 chop �
 
 func (s *state) stepOrderChopMoveNext(t *turn) (game.Action, string, bool) {
 	t.clues(s)
-	if ocm, target := t.orderChopMove(s); ocm >= 0 && target == (s.me+1)%s.n {
+	if ocm, target := t.orderChopMove(s); ocm >= 0 && target == (s.me+1)%s.n && !s.ocmExposes(t, target) {
 		return s.playOrFix(t, ocm, ocmWhy)
 	}
 	return game.Action{}, "", false
+}
+
+// ocmExposes：Order Chop Move 保護了下一位的 chop 後，他的新 chop 也是必須保留的牌（他下一手沒牌可打就會棄它），
+// 而有一個提示能把兩張一起保住：交給 stepUrgentSave 給那個提示（策略，和 urgentSave 的 exposes 同一個道理）。
+// 使用者回報 20261109-114254 t3：AI-2 用 Order Chop Move 保護使用者 chop 上的 Y5，新 chop 是 W5，
+// 使用者接著就得棄掉一張 5；「5」點到 slot 4、5 可以兩張一起救。
+func (s *state) ocmExposes(t *turn, p int) bool {
+	chop := s.chop(p)
+	nc := s.chopAfter(p, []int{chop})
+	if chop < 0 || nc < 0 || !s.needsSave(p, nc) || s.willPlay(p) {
+		return false
+	}
+	_, ok := best(t.clues(s), func(e clueEval) bool {
+		return !e.misleads && (e.kind == kindPlay || e.kind == kindSave || e.kind == kindChopMove) &&
+			e.covers(p, chop) && e.covers(p, nc)
+	})
+	return ok
 }
 
 func (s *state) stepOrderChopMove(t *turn) (game.Action, string, bool) {
