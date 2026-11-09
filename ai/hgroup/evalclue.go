@@ -198,6 +198,11 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 			ev.gets = 1 + len(it.plan)
 			// 他本來就會打的牌（已知能打、是之前的提示要打的牌，例如只剩 self-prompt 的解讀）不算這個提示讓他打的
 			anyway := s.alreadyResolved(R, it.focus, t) || s.holderKnowsPlayable(it.focus) || s.notes[it.focus].willPlay || s.plannedPlay(it.focus)
+			// 他本來就確定這張是 t（還不能打，等前一張打出就會打）：這個提示也沒讓他多打牌（使用者回報 20261109-122807 t38：
+			// AI-2 的 W3 早就確定、W2 也確定能打，白色只剩 Chop Move，直接用「5」救 chop 上的 R5 有正向資訊、比較好）
+			if u, ok := s.possOf(it.focus).single(); ok && u == t {
+				anyway = true
+			}
 			if !anyway {
 				// 焦點本來就會打出時不加分：這個提示只剩 Chop Move，直接救 chop 有正向資訊、比較好（使用者回報 20261105-113110 t5：
 				// 「4」已要 prompt AI-2 的 R2、R3，AI-1 用「3」點 R3 做 TCCM 保護 chop 上的 Y2，被算成勝過直接的 2 Save）
