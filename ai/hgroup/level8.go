@@ -719,7 +719,7 @@ func (s *state) positionalMove(v game.PlayerView) (a game.Action, why string, ok
 		return len(ts) > 0 && s.posSafeTarget(s.hands[ts[len(ts)-1]][slot])
 	}
 	for slot, id := range s.hands[s.me] {
-		if !s.posDiscardLike(s.me, id) || !aimed(slot) {
+		if !s.posDiscardLike(s.me, id) || !aimed(slot) || !s.posWorth(v, slot, false) {
 			continue
 		}
 		if v.CanDiscard() {
@@ -728,10 +728,155 @@ func (s *state) positionalMove(v game.PlayerView) (a game.Action, why string, ok
 	}
 	slot := slices.Index(s.hands[s.me], exp)
 	if !positionalMisplay || !s.posMisplayLike(s.me, exp) || !aimed(slot) ||
-		slices.ContainsFunc(s.myPoss(exp).list(), s.playableNow) {
+		slices.ContainsFunc(s.myPoss(exp).list(), s.playableNow) || !s.posWorth(v, slot, true) {
 		return game.Action{}, "", false
 	}
 	return game.Play(slot), "Positional Misplay：棄 chop 不會被當成 Positional Discard，故意打錯它叫人盲打同一個位置的牌", true
+}
+
+// posWorth：Positional Discard / Misplay（我棄掉或打錯 slot，misplay 表示打錯）推演起來不比普通棄牌（棄該棄的牌）差。
+// 被叫的人要在他之後的第一回合盲打那張（我們的約定，大家才推得一致），可能逼他先打它、晚打別張而來不及；
+// 普通棄牌換回一個提示，之後有人可以用提示讓持有者知道那張（`posRollout` 的揭露）。使用者回報 20261109-143312 t54：
+// 只差 Y4、Y5、W5，牌堆 1 張、提示 0 個，AI-2 知道自己的 Y4、不知道 slot 1 的 W5，使用者知道 Y5。AI-1 的
+// Positional Discard 叫 AI-2 先打 W5、抽走最後一張，Y4 要到最後一輪才打、Y5 來不及；普通棄牌的話 AI-2 先打 Y4，
+// AI-3 用換回的提示點 W5，使用者打 Y5、AI-2 最後打 W5，滿分。
+func (s *state) posWorth(v game.PlayerView, slot int, misplay bool) bool {
+	ts := s.positionalTargets(slot)
+	if len(ts) == 0 {
+		return false
+	}
+	target := ts[len(ts)-1]
+	tc, _ := s.see(s.me, s.hands[target][slot])
+	return s.posRollout(v, target, tc, misplay) >= s.posRollout(v, -1, 0, false)
+}
+
+// posRollout：從我這一手棄牌（misplay 時打錯）推演到遊戲結束，回傳最多打得出幾張。還需要的牌都看得到（seesEvery）：
+// 持有者知道的（共同筆記再扣掉他看得到的牌後確定（`holderView`）、或被 finesse 會盲打）直接能打，不知道的要有人花一個提示揭露（不抽牌）才能打。
+// target >= 0 時是 Positional：他手上的 tc 一開始就算揭露，但他的第一回合一定打它。每一回合可以打能打的牌、
+// 揭露別人的牌、拖延提示（牌堆還有牌）或棄牌，取打出最多的一條。比 endgameRollout 樂觀（之後的提示怎麼給都看得懂）。
+func (s *state) posRollout(v game.PlayerView, target int, tc ident, misplay bool) int {
+	type card struct {
+		p      int
+		t      ident
+		hidden int // 揭露用的位元，-1 = 持有者本來就知道
+	}
+	var cards []card
+	var start uint32
+	forced := -1
+	mine := s.certainMine()
+	for p, h := range s.hands {
+		for _, id := range h {
+			var t ident
+			var ok bool
+			if p == s.me {
+				t, ok = s.myPoss(id).single()
+			} else {
+				t, ok = s.see(s.me, id)
+			}
+			if !ok || s.trash(t) || s.notes[id].bad || p == s.me && !s.gotten(id) {
+				continue
+			}
+			c := card{p: p, t: t, hidden: -1}
+			if u, one := s.holderView(id, mine).single(); p != s.me && !s.notes[id].finessed && !(one && u == t) {
+				c.hidden = len(cards)
+				if p == target && t == tc && forced < 0 {
+					forced = len(cards)
+					start |= 1 << c.hidden
+				}
+			}
+			cards = append(cards, c)
+		}
+	}
+	if len(cards) > 30 {
+		return 0
+	}
+	type pos struct {
+		stacks                   [game.NumColors]game.Rank
+		hints, deck, final, turn int
+		shown                    uint32
+		forced                   bool
+	}
+	score := func(st [game.NumColors]game.Rank) int {
+		n := 0
+		for _, c := range s.colors {
+			n += int(st[c])
+		}
+		return n
+	}
+	memo := map[pos]int{}
+	var best func(q pos) int
+	// next：q.turn 那位行動後推進到下一回合（draw：抽牌）
+	next := func(q pos, draw bool) int {
+		before := q.deck
+		if draw {
+			q.deck = max(q.deck-1, 0)
+		}
+		switch {
+		case q.final > 0:
+			q.final--
+		case before > 0 && q.deck == 0:
+			q.final = s.n
+		}
+		q.turn = (q.turn + 1) % s.n
+		return best(q)
+	}
+	best = func(q pos) int {
+		if q.final == 0 {
+			return score(q.stacks)
+		}
+		if r, ok := memo[q]; ok {
+			return r
+		}
+		p := (s.me + q.turn) % s.n
+		play := func(t ident) int {
+			r := q
+			r.stacks[t.color()] = t.rank()
+			if t.rank() == game.MaxRank && r.hints < game.MaxHints {
+				r.hints++
+			}
+			return next(r, true)
+		}
+		r := -1
+		if q.forced && p == target {
+			q.forced = false
+			r = play(tc)
+		} else {
+			for _, c := range cards {
+				if c.t.rank() != q.stacks[c.t.color()]+1 {
+					continue
+				}
+				if c.p == p && (c.hidden < 0 || q.shown&(1<<c.hidden) != 0) {
+					r = max(r, play(c.t))
+				}
+				if c.p != p && c.hidden >= 0 && q.shown&(1<<c.hidden) == 0 && q.hints > 0 {
+					u := q
+					u.hints--
+					u.shown |= 1 << c.hidden
+					r = max(r, next(u, false))
+				}
+			}
+			if q.hints > 0 && q.deck > 0 {
+				u := q
+				u.hints--
+				r = max(r, next(u, false))
+			}
+			if q.hints < game.MaxHints || r < 0 {
+				u := q
+				u.hints = min(u.hints+1, game.MaxHints)
+				r = max(r, next(u, true))
+			}
+		}
+		memo[q] = r
+		return r
+	}
+	q := pos{stacks: s.stacks, hints: v.Hints, deck: v.DeckSize, final: v.FinalTurnsLeft, shown: start, forced: target >= 0}
+	if !misplay {
+		q.hints = min(q.hints+1, game.MaxHints)
+	}
+	if q.deck == 0 && q.final < 0 {
+		q.final = s.n // 測試直接清空牌堆時沒有設定最後一輪
+	}
+	return next(q, true) - score(s.stacks)
 }
 
 // positionalMisplay：給 Positional Misplay（要花一個閃電）。
