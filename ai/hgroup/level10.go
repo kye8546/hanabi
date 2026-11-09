@@ -209,7 +209,11 @@ func (s *state) certainDiscard(e game.Event) bool {
 			continue
 		}
 		// 提示資訊上可能是 t 的（共同筆記多半已依 Good Touch 排除了 t：要盲打的那張被記成被 finesse 的 t）
-		y := slices.IndexFunc(s.hands[rec.giver], func(id int) bool { return s.live(id) && s.notes[id].explicit.has(t) })
+		// 要在他給這個提示時就已經被拿到（certainSlot）
+		y := slices.IndexFunc(s.hands[rec.giver], func(id int) bool {
+			n := s.notes[id]
+			return s.live(id) && n.explicit.has(t) && !(n.clued && n.cluedAt >= rec.seq)
+		})
 		if y < 0 {
 			continue
 		}
@@ -257,15 +261,19 @@ func (s *state) certainSlot(v game.PlayerView) int {
 		return -1
 	}
 	for slot, id := range s.hands[s.me] {
-		n := s.notes[id]
+		n0 := s.notes[id]
 		t, ok := s.myPoss(id).single()
-		if !n.finessed || n.clued || n.finRec == nil || n.finRec.giver == s.me || !ok || s.trash(t) {
+		if !n0.finessed || n0.clued || n0.finRec == nil || n0.finRec.giver == s.me || !ok || s.trash(t) {
 			continue
 		}
-		for _, y := range s.hands[n.finRec.giver] {
+		for _, y := range s.hands[n0.finRec.giver] {
 			c, seen := s.card(y)
 			// 他的筆記多半已依 Good Touch 排除了 t（我這張被記成被 finesse 的 t），看提示資訊
-			if n := s.notes[y]; seen && s.live(y) && identOfCard(c) == t && n.explicit.has(t) && n.poss != setOf(t) {
+			// 他給 finesse 時就已經被拿到的牌才算（原文：Alice 給 finesse 時手上已有可能是那張的已提示牌，明知可能重複仍 finesse，
+			// 才是 Certain Finesse）；之後才被別人點到的，是那個提示違反了 Good Touch，我照常盲打。使用者回報 20261109-181350 t22：
+			// AI-2 的藍色 Double Finesse AI-1 的 B2、B3，使用者之後用藍色點 AI-2 的 B3，AI-1 把自己的 B3 Certain Discard 掉
+			if n := s.notes[y]; seen && s.live(y) && identOfCard(c) == t && n.explicit.has(t) && n.poss != setOf(t) &&
+				!(n.clued && n.cluedAt >= n0.finRec.seq) {
 				return slot
 			}
 		}
