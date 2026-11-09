@@ -115,6 +115,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	t := it.truth
 
 	var seen idSet
+	var side []int
 	// 計畫要打出的連接牌（prompt / finesse）也算已被拿到：點到和它們一樣的牌違反 Good Touch
 	// （使用者回報 20261021-174911 t2：紅色點到 AI-2 的 r2、r1，要 finesse 使用者的 r1，AI-2 的 r1 就重複了；以前算成有用的新牌）
 	var planned idSet
@@ -142,6 +143,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		case s.trash(c) || seen.has(c) || id != it.focus && planned.has(c) || s.gottenAs(s.me, s.me, c, id) || s.awaited(c, id) || s.pendingLayer(c, id) ||
 			s.maybeMine(c) && !(id == it.focus && sarcastic && s.dupFinesseOK(c)):
 			ev.bad++
+			if id != it.focus && (s.trash(c) || seen.has(c)) {
+				side = append(side, id) // 一起點到的垃圾（或焦點的重複）：終局可以容忍（goodTouchWaived）
+			}
 		case id != it.focus:
 			ev.newGood++
 		}
@@ -155,6 +159,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		}
 	}
 	ev.misleads, ev.danger, ev.costly = s.misleads(R, it, touched)
+	waived := s.goodTouchWaived(R, it, touched, side, ev.bad, &ev)
 	if it.stray {
 		ev.misleads, ev.danger = true, true // 計畫外的玩家會盲打（或打已提示的牌），多半打錯
 	}
@@ -267,9 +272,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	switch {
 	case ev.danger:
 		return ev, true
-	case soon && ev.bad == 0 && s.timelyPlays(R, t, plan, touched)+it.tempoExtra == 0:
+	case soon && (ev.bad == 0 || waived) && s.timelyPlays(R, t, plan, touched)+it.tempoExtra == 0:
 		return ev, true // 遊戲結束前一張都打不到：不是 play clue，只能當拖延
-	case soon && ev.bad == 0:
+	case soon && (ev.bad == 0 || waived):
 		ev.kind = kindPlay
 		ev.gets = s.timelyPlays(R, t, plan, touched) + it.tempoExtra
 		ev.plan = plan
@@ -282,7 +287,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		for _, d := range plan {
 			ev.nextPlays = ev.nextPlays || d.player == next && s.playableNow(d.id)
 		}
-		ev.score = scorePerPlay*ev.gets + scoreNewGood*ev.newGood + scoreTrashMarked*ev.trashMarked
+		ev.score = scorePerPlay*ev.gets + scoreNewGood*ev.newGood + scoreTrashMarked*ev.trashMarked - scoreBadTouch*ev.bad
 		// 接收者自己就知道能接著打的非焦點新牌：比只是「有用」的新牌值錢（例如「1」一次讓兩張 1 能打，勝過藍色點到 b1 與 b4）
 		ev.score += scoreExtraPlay * s.knownExtraPlays(it, t, plan)
 		if it.chopFocus && s.needsSave(R, it.focus) {
@@ -451,6 +456,56 @@ const (
 	scoreTempoCMPlay    = 30  // Level 6 Tempo Clue Chop Move：除了 Chop Move，焦點也會打出
 	scoreFinesseClarity = 1   // Level 6 Clarity Principle：每個要盲打的 finesse（同分時選比較單純的提示）
 )
+
+// goodTouchWaived：Level 8 的終局（pace < 人數，或牌堆已空）中，play clue 一起點到的非焦點新牌只是垃圾（或焦點的重複）時，
+// 照 play clue 給，每張扣 scoreBadTouch（策略）。只在 Lv8 起：Lv1 3000 局閃電明顯變多（5 色 5 人局 0.10 → 0.15，
+// Rainbow 3 / 5 人局 -0.06）——沒有 Fix Clue，被記錯的垃圾之後常被打錯。原文 Save Principle「Violating Good Touch Principle」：
+// 為了不失去滿分的機會，違反 Good Touch 是兩害相權取其輕；終局能打的牌比塞住手牌的垃圾重要。
+// 使用者回報 20261106-181639 t53：使用者 slot 1 的 R4 是最後一張，能點到它的只有紅色（一起點到已打出的 R2、R1），
+// AI-1 不給而棄牌，牌堆抽完後 R4、R5 都打不出來；給紅色可以拿到 25 分。
+// 那幾張被記錯（例如記成 R5）不算誤導；但焦點與連接牌打出後它們可能被當成能打（接收者打錯）時，
+// 只在閃電少於 2 個時容忍。成立時把 ev 的誤導判斷改成不看那幾張。
+func (s *state) goodTouchWaived(R int, it interp, touched, side []int, bad int, ev *clueEval) bool {
+	if len(side) == 0 || len(side) != bad || !s.endGame() {
+		return false
+	}
+	rest := slices.DeleteFunc(slices.Clone(touched), func(id int) bool { return slices.Contains(side, id) })
+	m, d, c := s.misleads(R, it, rest)
+	if d || s.strikes >= 2 && s.sideMayPlay(R, it, side) {
+		return false
+	}
+	ev.misleads, ev.danger, ev.costly = m, d, c
+	return true
+}
+
+// sideMayPlay：一起點到的垃圾 side，接收者照 Good Touch 記下的可能，在焦點與連接牌打出後全都能打（他可能打錯）。
+func (s *state) sideMayPlay(R int, it interp, side []int) bool {
+	var ps []idSet
+	for _, id := range side {
+		p := s.notes[id].poss & it.explicit[id]
+		if p == 0 {
+			p = it.explicit[id]
+		}
+		ps = append(ps, nonFocusPoss(p, s.freshUseful(R, s.me, id), s.focusSingle(it)))
+	}
+	saved := s.stacks
+	defer func() { s.stacks = saved }()
+	if it.hasTruth {
+		for _, u := range append([]ident{it.truth}, depIDs(it.plan)...) {
+			s.stacks[u.color()] = max(s.stacks[u.color()], u.rank())
+		}
+	}
+	for _, p := range ps {
+		all := p != 0
+		for _, i := range p.list() {
+			all = all && s.playableNow(i)
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
 
 // misleads：提示後接收者會不會對某張牌寫下錯誤的筆記（實際牌面被排除），之後可能因此打錯；
 // danger 表示錯誤的筆記全是現在就能打的牌（他下一回合就會打錯）；costly 表示那張牌還有用。
