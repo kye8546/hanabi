@@ -236,6 +236,9 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 // playsAnyway：id 是某個 play clue 的焦點，它的直接解讀（不需要連接牌的）全都是現在就能打、又不是 t 的牌——
 // 它本來就會被打出去，不會擋住 t 的 prompt（使用者的例子：紅色點到 slot 1、2，slot 1 被記成 r1；再一次紅色時
 // r2 的 prompt 會落在 slot 2，是 Tempo Clue Chop Move）。只看直接解讀：「也許有人被 finesse」的解讀各家不同（同 publicPoss）。
+// 需要連接牌的解讀就算是 t 也不算（使用者回報 20261110-094805 t15：紅色點使用者的 R2、R3，slot 1 還留著「R3，finesse 某人的 R2」，
+// AI-2 再用「3」點 slot 2，以前因此算成有價值、不 Chop Move）；直接解讀可能是 t 時照樣擋住——真的有人 prompt t 會落在它身上
+// （例如綠色焦點可能是 G1 或彩虹的 M3，「1」再點另一張綠牌是有價值的）。
 func (s *state) playsAnyway(id int, t ident) bool {
 	for i := len(s.recs) - 1; i >= 0; i-- {
 		rec := s.recs[i]
@@ -244,15 +247,16 @@ func (s *state) playsAnyway(id int, t ident) bool {
 		}
 		direct := 0
 		for _, c := range rec.cands {
-			if c.save || c.id == t {
+			if c.save {
 				return false
 			}
-			if len(c.deps) == 0 {
-				if !s.playableNow(c.id) {
-					return false
-				}
-				direct++
+			if len(c.deps) > 0 {
+				continue
 			}
+			if c.id == t || !s.playableNow(c.id) {
+				return false
+			}
+			direct++
 		}
 		return direct > 0
 	}

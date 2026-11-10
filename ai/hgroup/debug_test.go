@@ -249,6 +249,9 @@ func dumpHand(b *Bot, p int) string {
 		if n.bad {
 			extra += " BAD"
 		}
+		if n.cm {
+			extra += " CM"
+		}
 		parts = append(parts, fmt.Sprintf("#%d{clued=%v fin=%v will=%v poss=%v%s}", id, n.clued, n.finessed, n.willPlay, n.poss.list(), extra))
 	}
 	return strings.Join(parts, " ")
