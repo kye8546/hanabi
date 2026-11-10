@@ -117,6 +117,12 @@ func (s *state) bluffTargets(rec *clueRec, ex idSet, played int, x ident) (idSet
 		if s.playableNow(t) || s.gottenAs(R, giver, t, rec.focus) || s.remainingFor(R, t) <= 0 {
 			continue
 		}
+		// 和盲打出的牌同色：它缺的下一張就是 x 本身，x 經由中間已提示的牌接上了它，是 finesse（照盲打之前的煙火，
+		// 它差兩張以上），不是 Bluff 的目標（使用者回報 20261110-101232：「4」點 AI-3 的 G4，AI-1 盲打出 G2、
+		// AI-3 被綠色點過的 G3 被 prompt，以前讀成 Bluff）
+		if t.color() == x.color() {
+			continue
+		}
 		c := t.color()
 		used := append([]int{rec.focus, played}, rec.fresh...)
 		var deps []dep

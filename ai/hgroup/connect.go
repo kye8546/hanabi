@@ -628,6 +628,13 @@ func (s *state) checkDeps(e game.Event, played int) {
 		if fdone >= 0 {
 			fb = onlyWith(fb, fdone, fpeeled)
 		}
+		if rec == proved {
+			var ffreed []dep
+			fb, ffreed = provedBy(fb, identOfCard(e.Card))
+			freed = append(freed, ffreed...)
+			// 被拿掉的 prompt 那張牌可能是後面某張的連接牌（Prompts > Finesses），煙火更新後重找（afterPlay）
+			rec.reconnect = true
+		}
 		rec.cands, rec.fallback = kept, fb
 		for _, d := range freed {
 			// 這個提示寫在那張已提示牌上的推論（「y2 或 m2」）全部作廢
@@ -636,7 +643,8 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 		promoted := false
-		if len(rec.cands) == 0 && len(rec.fallback) > 0 {
+		// 被盲打證明的提示等煙火更新後重找連接時再升格（reconnectCands），免得照舊的連接寫筆記
+		if len(rec.cands) == 0 && len(rec.fallback) > 0 && rec != proved {
 			// 其他解讀都不成立了：輪到 self-prompt / self-finesse（Level 2 The Self-Finesse）
 			rec.cands, rec.fallback = rec.fallback, nil
 			changed, promoted = true, true
@@ -691,10 +699,11 @@ func (s *state) checkDeps(e game.Event, played int) {
 // 那張已提示牌不是 t，所以改用 finesse（使用者回報 20261016-181213：AI-2 以為「3」是 self-prompt 自己黃色的牌當 y2 / m2，
 // AI-1 盲打出 m2 就證明是 m3，那張黃色的牌和這個提示無關；以前仍記成「y2 或 m2」，之後被縮成 m2 當垃圾棄掉）。
 func (s *state) blindProves(e game.Event, played int, explained map[*clueRec]bool) *clueRec {
-	if e.Type != game.EvPlay || played < 0 || len(explained) > 0 {
+	if e.Type != game.EvPlay || played < 0 {
 		return nil
 	}
-	if n := s.notes[played]; n.clued || n.finessed {
+	n := s.notes[played]
+	if n.clued {
 		return nil
 	}
 	t := identOfCard(e.Card)
@@ -703,7 +712,10 @@ func (s *state) blindProves(e game.Event, played int, explained map[*clueRec]boo
 		if rec.seq <= s.notes[played].drawn {
 			continue
 		}
-		for _, c := range rec.cands {
+		// 接收者自己的 self-prompt 解讀在還有其他解讀時放在 fallback，也算（例如給提示者看不到自己的牌，以為接收者
+		// 可能讀成 finesse 自己；使用者回報 20261110-101232：AI-2 以為 AI-3 可能把「4」讀成「W4，finesse AI-2 的 W2、W3」，
+		// G4 那條在 fallback）
+		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
 			if slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == played }) {
 				return nil // 這個提示本來就要他盲打這張，照一般流程處理
 			}
@@ -713,6 +725,17 @@ func (s *state) blindProves(e game.Event, played int, explained map[*clueRec]boo
 				}
 				found = rec
 			}
+		}
+	}
+	// 我記成被別的提示 finesse 的牌不算（我自己替同一個提示算的計畫寫的 finesse 不擋）
+	if n.finessed && n.finRec != found {
+		return nil
+	}
+	// 別的提示（或 Positional / Gentleman's Discard、Bluff）能解釋這次盲打時不算；我自己替同一個提示算的計畫正好要它
+	// （我看得到焦點），照樣證明接收者角度的解讀
+	for r := range explained {
+		if r != found {
+			return nil
 		}
 	}
 	return found
@@ -932,6 +955,44 @@ func (s *state) recheckDelayed() {
 // 之後被黃色點到）——那個連接不成立，照提示當下的手牌重新找（connectRec；Prompts > Finesses 的下一個選擇，多半是 finesse），
 // 找不到就丟掉那個解讀；我的計畫也重算（使用者回報 20261104-145826：使用者「3」點 AI-1 的 W3，AI-2 以為是 prompt 自己被救下的 2
 // 當 W2，t8 AI-1 的黃色揭露那張是 Y2 後仍照舊，不知道 AI-1 的 finesse position 已被 finesse，t9 又給了一個要 finesse 它的提示）。
+// reconnectCands：照現在的煙火重找接收者角度每個解讀還缺的連接（提示當下的手牌，connectRec），找不到就丟掉那個解讀。
+// 用在盲打證明了某個提示之後（blindProves）：被拿掉的 prompt 那張已提示牌可能就是下一張的連接牌——例如「4」的解讀原本是
+// 「self-prompt 綠牌當 G2、self-finesse G3」，別人盲打出 G2 後，綠牌照 Prompts > Finesses 是 G3 的 prompt，不是 self-finesse
+// （使用者回報 20261110-101232）。
+func (s *state) reconnectCands(rec *clueRec) {
+	if s.holder(rec.focus) < 0 {
+		return
+	}
+	redo := func(cs []cand) []cand {
+		var out []cand
+		for _, c := range cs {
+			if c.save || len(c.deps) == 0 {
+				out = append(out, c)
+				continue
+			}
+			if deps, ok := s.connectRec(rec, rec.target, c.id); ok {
+				c.deps = deps
+				out = append(out, c)
+			}
+		}
+		return out
+	}
+	rec.cands, rec.fallback = redo(rec.cands), redo(rec.fallback)
+	promoted := false
+	if len(rec.cands) == 0 && len(rec.fallback) > 0 {
+		rec.cands, rec.fallback = rec.fallback, nil
+		promoted = true
+	}
+	s.refreshFocus(rec)
+	if promoted {
+		s.promoteFocus(rec)
+		s.selfMark(rec, rec.target)
+	}
+	if rec.target == s.me {
+		s.markCommon(rec)
+	}
+}
+
 func (s *state) refutePrompts(R int) {
 	refuted := func(d dep) bool {
 		return !d.finesse && s.holder(d.card) == R && !s.notes[d.card].explicit.has(d.id)
@@ -981,6 +1042,10 @@ func (s *state) refutePrompts(R int) {
 // afterPlay 重新檢查還在追蹤的提示，並丟掉已經沒有東西要追蹤的紀錄。
 func (s *state) afterPlay() {
 	for _, rec := range s.recs {
+		if rec.reconnect {
+			rec.reconnect = false
+			s.reconnectCands(rec)
+		}
 		if rec.stale {
 			rec.stale = false
 			s.replan(rec)
