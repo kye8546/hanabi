@@ -416,6 +416,23 @@ func (s *state) exposesNextChop(e clueEval, hints int) bool {
 	return !s.nextHasRealClue((s.me+1)%s.n, hints-1, used)
 }
 
+// exposesLaterChop：play clue e 用掉最後一個提示，讓接收者（不是下一位）的新 chop 落在必須保留的牌上、他又不能立刻打牌
+// （clueEval.exposesLate）；在他之前的玩家拿不到提示救他（和 doomsLaterChop 一樣：中間的人都會打牌、不會棄牌換回提示），
+// 他下一手就會棄掉那張牌。使用者回報 20261110-151502 t22：AI-1 用最後一個提示讓 AI-3 的 W4 等著打，
+// AI-3 的 chop 移到 R5，AI-2 沒提示可救，t24 AI-3 棄掉 R5。
+func (s *state) exposesLaterChop(e clueEval, hints int) bool {
+	if !e.exposesLate || hints > 1 {
+		return false
+	}
+	k := (e.target - s.me + s.n) % s.n
+	for j := 1; j < k-1; j++ {
+		if !s.willPlay((s.me + j) % s.n) {
+			return false // 他可能棄牌換回提示，讓後面的人去救
+		}
+	}
+	return true
+}
+
 // nextHasRealClue：next 有確實能給的提示（剩 hints 個提示時）：我看得到的其他玩家（不含我——他會不會提示我，
 // 要看我看不到的牌，All 4's Test——也不含 next）有沒被提示、現在就能打、不違反 Good Touch 的牌，或 chop 上有必須保留的牌；
 // next 自己手上已提示、可能是同一張的牌除外（Level 12 Duplication Responsibility：他不會冒重複的風險）。used 是已經被提示掉的牌。

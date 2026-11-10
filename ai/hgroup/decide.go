@@ -257,7 +257,7 @@ func (s *state) stepPlayOrSaveClue(t *turn) (game.Action, string, bool) {
 	for _, k := range []clueKind{kindPlay, kindSave} {
 		ev, ok := best(evs, func(e clueEval) bool {
 			if k == kindPlay && (e.kind == kindPlay || s.tempoCMNextPlays(e)) {
-				return !s.starvesLockedNext(e, hints) && !s.exposesNextChop(e, hints)
+				return !s.starvesLockedNext(e, hints) && !s.exposesNextChop(e, hints) && !s.exposesLaterChop(e, hints)
 			}
 			return (e.kind == k || k == kindSave && s.cmSave(evs, e)) && !s.starvesLockedNext(e, hints)
 		})
