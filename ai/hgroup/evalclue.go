@@ -130,7 +130,11 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	// Level 8 Distribution Clue：值得給時，焦點和別處已被拿到的牌重複是刻意的，不算違反 Good Touch
 	distWorth := s.distributionWorth(R, it, t)
 	// Level 10 The Sarcastic Finesse：finesse 別人時，焦點可能和我手上不確定的已提示牌重複也可以（dupFinesseOK）
-	sarcastic := slices.ContainsFunc(it.plan, func(d dep) bool { return d.finesse && d.player != s.me })
+	// 接收者要把實際牌面讀成 play clue 才是 finesse：只可能是 save 時（例如鎖手時點 chop 的 Locked Hand Save）沒有人會盲打
+	// （使用者回報 20261110-122845 t22：AI-1 鎖手、綠色那張是「G2 或 G3」，正等 AI-3 盲打 G2（Reverse Finesse），卻用「3」
+	// 點 AI-3 chop 上的 G3，AI-3 照 Good Touch 推定 AI-1 那張是 G2，不盲打了）
+	sarcastic := slices.ContainsFunc(it.plan, func(d dep) bool { return d.finesse && d.player != s.me }) &&
+		slices.ContainsFunc(it.cands, func(c cand) bool { return c.id == t && !c.save })
 	for _, id := range order {
 		c := identOfCard(s.cards[id])
 		switch {

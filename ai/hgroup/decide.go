@@ -491,7 +491,9 @@ func (s *state) stallTier(evs []clueEval) (game.Action, int) {
 	var b clueEval
 	bt := -1
 	for _, e := range evs {
-		if t := tier(e); t > bt || (t == bt && e.bad < b.bad) {
+		// 同一級時：違反 Good Touch 少的優先，再來是 5 Stall（Level 9 Stall Table 最先列的拖延；使用者回報 20261110-122845 t22：
+		// 鎖手的 AI-1 用「3」點 AI-3 chop 上的 G3，而不是 5 Stall 他的 R5。改成一律比分數時 2 人局 -0.05–0.11）
+		if t := tier(e); t > bt || (t == bt && (e.bad < b.bad || e.bad == b.bad && e.kind == kindStall && b.kind != kindStall)) {
 			b, bt = e, t
 		}
 	}
