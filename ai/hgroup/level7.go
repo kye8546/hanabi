@@ -23,7 +23,7 @@ type screamRec struct {
 // screamTrash：大家都知道這張已提示的牌沒用（提示本身只剩已打出 / 打不出去的牌面，或已標成沒用）。
 func (s *state) screamTrash(id int) bool {
 	n := s.notes[id]
-	return n.clued && (n.bad || n.explicit&s.useful() == 0)
+	return n.clued && (n.bad || s.screamIdents(id) == 0)
 }
 
 // screamPlayable：大家都知道這張已提示的牌現在能打（提示本身扣掉沒用的牌面後全都能打；Good Touch：已提示的牌不是垃圾）。
@@ -34,8 +34,75 @@ func (s *state) screamPlayable(id int) bool {
 	if !n.clued || n.bad {
 		return false
 	}
-	ex := n.explicit & s.useful()
+	ex := s.screamIdents(id)
 	return ex != 0 && !slices.ContainsFunc(ex.list(), func(i ident) bool { return !s.playableNow(i) })
+}
+
+// screamPublic：screamIdents 也用大家都推得出的 Good Touch 推論（關掉時只看提示本身扣掉沒用的牌面）。
+var screamPublic = true
+
+// screamIdents：大家都推得出的已提示牌 id 的牌面，只用公開資訊（各家算法一致）：
+//   - 提示本身扣掉沒用的牌面；
+//   - 別的已提示牌依提示本身（反覆套用這條規則後）確定是 i 時扣掉 i（Good Touch）；
+//   - 同一個提示點到的幾張都只剩同一個牌面、剩下的張數（扣掉棄牌堆）又不夠時，焦點是它，其他是重複（垃圾）。
+//
+// 以前只看提示本身（試過用共同筆記或 publicPoss 時各家判斷常常不同）。使用者回報 20261110-154627 t31：紅色點到 AI-2 的
+// R1、R4 與「5」點過的 R5（R4 已棄一張），大家都推得出 slot 2 是能打的 R4、slot 1 是垃圾，AI-2 應該 Shout Discard
+// 棄掉 slot 1，讓 AI-3 Chop Move chop 上的 W5。
+func (s *state) screamIdents(id int) idSet {
+	n := s.notes[id]
+	if !screamPublic {
+		return n.explicit & s.useful()
+	}
+	if !n.clued || n.bad {
+		return 0
+	}
+	var ids []int
+	P := map[int]idSet{}
+	for _, h := range s.hands {
+		for _, o := range h {
+			if s.notes[o].clued && s.live(o) {
+				ids = append(ids, o)
+				P[o] = s.notes[o].explicit & s.useful()
+			}
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, o := range ids {
+			i, ok := P[o].single()
+			if !ok {
+				continue
+			}
+			for _, q := range ids {
+				if q != o && P[q].has(i) && P[q].count() > 1 {
+					P[q] &^= setOf(i)
+					changed = true
+				}
+			}
+		}
+		// 同一個提示點到的牌都只剩同一個牌面、只剩一張：焦點以外的是重複
+		for _, r := range s.recs {
+			f, ok := P[r.focus].single()
+			if !ok {
+				continue
+			}
+			var same []int
+			for _, q := range r.fresh {
+				if q != r.focus && P[q] == setOf(f) {
+					same = append(same, q)
+				}
+			}
+			// 剩下不只一張時，其中一張可能就是另一張 f，不知道是哪張，不判定
+			if len(same) > 0 && f.copies()-s.discarded[f] == 1 {
+				for _, q := range same {
+					P[q] = 0
+				}
+				changed = true
+			}
+		}
+	}
+	return P[id]
 }
 
 // publicPlayable：p 手上（不含 except）有大家都知道能打的已提示牌。
