@@ -400,6 +400,7 @@ func (s *state) onClue(e game.Event) {
 		touched = append(touched, s.hands[R][sl])
 	}
 	it := s.interpret(e.Player, R, e.Hint, touched)
+	gottenBefore := s.notes[it.focus].clued || s.notes[it.focus].finessed // 提示前就已被拿到（interpret 不改筆記）
 	if !s.midGame && e.Hint.Kind == game.HintRank && e.Hint.Rank == game.MaxRank && len(it.newCards) > 0 && !it.chopFocus && it.cmKind == 0 {
 		s.stalled5 = true
 	}
@@ -504,8 +505,13 @@ func (s *state) onClue(e game.Event) {
 		}
 	}
 
-	// 我看得到焦點牌：照實際牌面判斷誰被 prompt / finesse（save clue 不含 finesse）
-	if it.hasTruth && it.planOK && !it.saveOK {
+	// 我看得到焦點牌：照實際牌面判斷誰被 prompt / finesse（save clue 不含 finesse）。
+	// 焦點在提示前就已被拿到、接收者有解讀但都不是實際牌面時不照它：接收者的筆記早把它排除了，他會照自己的解讀行動，
+	// 這多半是給提示者在修正（Fix Clue），不是要我們接成實際牌面（使用者回報 20261110-110740 t22：AI-3 被 Self-Finesse 的牌
+	// 被記成 W1，AI-1 用藍色點它阻止打錯；AI-2 看不到自己的手牌、記成「B1 或 W1」，藍色在他看來是 B1，卻照實際的 B3
+	// 盲打自己的 B1、B2 而打錯）
+	if it.hasTruth && it.planOK && !it.saveOK && (!gottenBefore || len(it.cands)+len(it.fallback) == 0 ||
+		slices.ContainsFunc(append(slices.Clone(it.cands), it.fallback...), func(c cand) bool { return c.id == it.truth })) {
 		rec.plan = it.plan
 		if !slices.ContainsFunc(it.cands, func(c cand) bool { return c.id == it.truth }) {
 			// 實際解讀要接收者 self-prompt / self-finesse，但他還有其他解讀：等那些不成立、
