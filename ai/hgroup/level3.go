@@ -338,6 +338,37 @@ func (s *state) certainMine() [numIdents]int {
 	return out
 }
 
+// myCluedCertain：我手上已提示的牌一定有的牌面（別人看得到）。k 張已提示的牌合起來只可能是 k 種牌面時，這 k 種都在我手上
+// （已提示的牌依 Good Touch 不會重複；使用者回報 20261110-121508 t7：AI-2 被「1」點到的兩張都是「G1 或 B1」，合起來就是
+// G1、B1，AI-3 看得到，依 Good Touch 知道自己被「1」點到的牌不是它們；以前只看單張確定的，AI-2 以為 AI-3 會把 Y1 當 G1 / B1
+// 打出而白給 Fix Clue）。
+func (s *state) myCluedCertain() idSet {
+	var cards []int
+	for _, id := range s.hands[s.me] {
+		if s.notes[id].clued && s.live(id) {
+			cards = append(cards, id)
+		}
+	}
+	if len(cards) > 8 {
+		cards = cards[:8]
+	}
+	var out idSet
+	for mask := 1; mask < 1<<len(cards); mask++ {
+		var u idSet
+		k := 0
+		for i, id := range cards {
+			if mask&(1<<i) != 0 {
+				u |= s.myPoss(id)
+				k++
+			}
+		}
+		if len(u.list()) == k {
+			out |= u
+		}
+	}
+	return out
+}
+
 // holderView：y 的持有者自己推得出的可能——共同筆記再扣掉他看得到所有剩下張數的牌面
 // （別人手上我看得到的牌，加上我手上一定有的牌面，他都看得到），被拿到的牌再依 Good Touch 扣掉別人手上已提示牌的牌面。
 func (s *state) holderView(y int, mine [numIdents]int) idSet {
@@ -373,14 +404,16 @@ func (s *state) holderView(y int, mine [numIdents]int) idSet {
 			if r == q {
 				continue
 			}
+			if r == s.me {
+				gt &^= s.myCluedCertain()
+				continue
+			}
 			for _, z := range h {
 				if !s.notes[z].clued || !s.live(z) {
 					continue
 				}
-				if c, ok := s.card(z); ok && r != s.me {
+				if c, ok := s.card(z); ok {
 					gt &^= setOf(identOfCard(c))
-				} else if t, ok := s.myPoss(z).single(); ok && r == s.me {
-					gt &^= setOf(t)
 				}
 			}
 		}
