@@ -567,5 +567,25 @@ func (s *state) focusSingle(it interp) idSet {
 // seenAsTrash：提示後接收者推得出這張非焦點新牌不可能有用（只會是垃圾或焦點的重複）。
 func (s *state) seenAsTrash(it interp, id int) bool {
 	p := s.notes[id].poss & it.explicit[id]
-	return p&s.freshUseful(it.receiver, s.me, id)&^s.focusSingle(it) == 0
+	return p&s.freshUseful(it.receiver, s.me, id)&^s.focusSingle(it)&^s.clueSettled(it, id) == 0
+}
+
+// clueSettled：這個提示讓接收者手上其他已被拿到（或這次被點到）的牌確定是哪張（例如紅色點到已被「5」點過的牌 → R5），
+// 依 Good Touch，id 就不是那些牌面。給提示者模擬時筆記還沒套上這次的提示資訊，freshUseful 看不到它們
+// （使用者回報 20261110-154627 t30：紅色點到 AI-2 的 R1、R4 與「5」的 R5，AI-1 以為 slot 1 的紅牌會被記成 R5 而誤導，改給「4」）。
+func (s *state) clueSettled(it interp, id int) idSet {
+	var u idSet
+	for o, ex := range it.explicit {
+		if o == id || s.notes[o].bad || !s.notes[o].clued && !slices.Contains(it.newCards, o) {
+			continue
+		}
+		p := s.notes[o].poss & ex
+		if p == 0 {
+			p = ex
+		}
+		if i, ok := p.single(); ok {
+			u |= setOf(i)
+		}
+	}
+	return u
 }

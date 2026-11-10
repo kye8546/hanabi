@@ -200,6 +200,13 @@ func (s *state) leavesLockedAnxious(a game.Action, hints int) bool {
 		if pc := s.publicChop(next, nil); pc >= 0 {
 			it := s.interpret(s.me, next, h, touched) // Chop Move 的牌也算保護住了
 			saved := append(touched, it.cm...)
+			if s.n > 2 && s.knowsPlayNow(it) {
+				// 這個提示讓他確定有牌可打：他下一手打牌、抽到新牌就不再鎖手，不會 Anxiety Play
+				// （使用者回報 20261110-154627 t30：紅色讓 AI-2 確定 R4 能打、slot 1 是垃圾，以前被當成讓他鎖手而改給別的）。
+				// 2 人局不套用：他打完輪到我，提示仍是 0，常換成我鎖手（3000 局 Black / Rainbow Lv11 2 人局 -0.05 / -0.03、
+				// Black 三閃電 10 → 19 局；3–5 人局 +0.01–0.02）
+				return false
+			}
 			if s.n == 2 && slices.Contains(saved, pc) && s.critical(identOfCard(s.cards[pc])) && !s.keepsChop(next) {
 				// 2 人局，這個提示救下他 chop 上的 critical：改棄牌換提示的話，他沒牌可打、只能提示我，多半沒事可做，
 				// 下一手就棄掉它（確定少分），寧可讓他鎖手、之後 Anxiety Play 可能打錯（閃電，打掉的牌也許還有另一張）。

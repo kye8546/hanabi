@@ -556,7 +556,7 @@ func (s *state) misleads(R int, it interp, touched []int) (wrong, danger, costly
 		case id == it.focus:
 			p = s.touchedUseful(R, s.me, id, p)
 		case slices.Contains(it.newCards, id) && id != it.focus:
-			p = nonFocusPoss(p, s.freshUseful(R, s.me, id), s.focusSingle(it))
+			p = nonFocusPoss(p, s.freshUseful(R, s.me, id)&^s.clueSettled(it, id), s.focusSingle(it))
 		}
 		check(id, p)
 	}
