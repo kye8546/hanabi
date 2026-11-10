@@ -483,6 +483,9 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 					st = depPeel
 				}
 				d.card, d.finesse = nc, true
+				if !slices.Contains(rec.layered, d.player) {
+					rec.layered = append(rec.layered, d.player)
+				}
 				return d, st
 			}
 		}
@@ -512,6 +515,15 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 	// 但他自己的筆記還不確定那張現在能打（例如 self-finesse 可能是 b2 或 w2，b1 還沒打出）時，等是對的
 	if s.playableNow(d.id) && !(played >= 0 && s.blindForOther(e, played)) {
 		if n := s.notes[d.card]; n.finessed && !s.holderKnowsPlayable(d.card) {
+			return d, depPending
+		}
+		if slices.Contains(rec.layered, d.player) && len(rec.cands) > 0 && !slices.ContainsFunc(rec.cands, func(c cand) bool {
+			return !slices.ContainsFunc(c.deps, func(o dep) bool { return o.player == d.player && o.finesse })
+		}) {
+			// 他已經為這個提示盲打出 layer，而每種解讀都還要他接著盲打：大家都知道被 finesse 的是他，這次沒接著盲打
+			// 只是延後（他該繼續盲打），不是在讓給別人（使用者回報 20261110-165310 t9：使用者盲打出 layer R1 後改給提示，
+			// AI-1 以為「4」改成 self-finesse 自己而盲打錯 W5，AI-2 跟著盲打錯 B1）。有解讀已經被那次盲打完成時照舊——
+			// 他不再盲打就證明是那個解讀（Level 5 Clandestine Finesse）
 			return d, depPending
 		}
 		return d, depFail

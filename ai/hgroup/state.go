@@ -64,6 +64,7 @@ type clueRec struct {
 	seq       int        // 提示時的事件序號
 	stale     bool       // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
 	reconnect bool       // 被盲打證明（blindProves）後，煙火更新後要照新的煙火重找接收者角度解讀的連接
+	layered   []int      // Level 5：已為這個提示盲打出 layer 的玩家（大家都知道他被 finesse，之後沒接著盲打只是延後）
 	saveView  []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
 	free      freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
 	struck    bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
