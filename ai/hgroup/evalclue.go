@@ -173,7 +173,8 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		return ev, true
 	}
 	if s.knows(lvFixClue) && len(it.newCards) == 0 && !s.lockedRetouch &&
-		!slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) {
+		!slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) &&
+		!s.finessingTempo(it, touched, ev) {
 		// 不給任何新資訊的提示：接收者若已經（私下推得）知道其中某張是他下一手要打的牌，就會當成 Stop Clue
 		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險。
 		// 我鎖手、又只能棄很可能是 critical 的已提示牌時例外（discard 的 lockedRetouch）：鎖手的人重新點已提示的牌
@@ -346,6 +347,34 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	ev.score -= dist
 	return ev, true
+}
+
+// finessingTempo（Level 6）：不給新資訊的 Tempo Clue 也可以給——它會 finesse / prompt 出別人的牌（The Valuable Tempo Clue、
+// Minimum Clue Value Principle），而接收者推不出被點到的牌現在就能打（他不會以為那是他下一手要打的牌而讀成 Stop Clue；
+// 照他看得到的牌推，holderView）。使用者回報 20261110-173602 t12：AI-2 被白色點過的 W4，重新點白色就 finesse AI-1 的 W3，
+// 一個提示打出兩張，以前因為不給新資訊而不給。
+func (s *state) finessingTempo(it interp, touched []int, ev clueEval) bool {
+	if !s.knows(lvTempo) || !ev.understood || !it.planOK || it.saveOK || len(it.plan) == 0 ||
+		!slices.ContainsFunc(it.plan, func(d dep) bool { return d.player != it.receiver }) {
+		return false
+	}
+	// 只限一般的 finesse：要盲打的人都在我和接收者之間（他們看得到焦點，下一手就盲打）。放行 Reverse Finesse 或 prompt 時
+	// 3000 局 Lv11 4–5 人局 -0.04–0.07、Black 3 人局 -0.07
+	k := (it.receiver - s.me + s.n) % s.n
+	if slices.ContainsFunc(it.plan, func(d dep) bool {
+		j := (d.player - s.me + s.n) % s.n
+		return !d.finesse || j == 0 || j >= k
+	}) {
+		return false
+	}
+	mine := s.certainMine()
+	for _, id := range touched {
+		v := s.holderView(id, mine) & s.useful()
+		if v != 0 && !slices.ContainsFunc(v.list(), func(i ident) bool { return !s.playableNow(i) }) {
+			return false // 他可能以為這張就是他下一手要打的牌：讀成 Stop Clue
+		}
+	}
+	return true
 }
 
 // layerMisread（Level 5 Layered Finesse）：layer 打出後，接收者會以為焦點是接在 layer 後面的那張
