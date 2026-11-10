@@ -168,6 +168,12 @@ func (s *state) tempoOverTrash(R int, touched, fresh []int, it *interp) bool {
 // 已提示牌（它還不確定是那張）或 finesse 時，這個提示會讓兩張以上的牌打出，是有價值的 Tempo Clue（原文第 1 種），不 Chop Move。
 // 回傳焦點可能的牌面。
 func (s *state) tempoTarget(it *interp) (idSet, bool) {
+	// 焦點本來就是 play clue 的焦點、大家都知道是 t、等著打（中間缺的牌之前的提示已經安排好）：這個提示沒有讓任何牌多打出
+	// （使用者回報 20261110-101232 t15：「4」點 AI-3 的 G4、finesse AI-1 的 G2、prompt 他綠色的 G3，AI-1 盲打 G2 後大家都知道，
+	// AI-2 再用綠色點 G4、G3，以前因為 G3 那張的共同筆記還是「G3 或 G5」而不算 TCCM）
+	if u, ok := s.publicPoss(it.focus).single(); ok && s.notes[it.focus].willPlay && slices.ContainsFunc(it.cands, func(c cand) bool { return c.id == u }) {
+		return setOf(u), true
+	}
 	var ts idSet
 	truth, seen := s.see(s.me, it.focus)
 	for _, c := range it.cands {
