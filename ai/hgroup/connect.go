@@ -132,6 +132,9 @@ func (s *state) findPrompt(obs, giver int, m ident, used []int) (d dep, took []i
 					if d, took, ok := s.hiddenFinesse(obs, p, id, t, m, used); ok {
 						return d, took, true
 					}
+					if d, took, ok := s.layeredPrompt(obs, p, id, t, m, used); ok {
+						return d, took, true
+					}
 				}
 				continue
 			}
@@ -175,6 +178,39 @@ func (s *state) hiddenFinesse(obs, p, id int, t, m ident, used []int) (dep, []in
 		return dep{}, nil, false
 	}
 	return dep{player: p, card: id, id: m, layers: 1}, []int{id, fp}, true
+}
+
+// layeredPrompt（Level 5，Hidden Finesse 的道理用在 prompt 上）：p 會把已提示的牌 id 當成 m 打出，它其實是現在就能打的 t；
+// 打出後他知道不是 m，承諾移到他下一張可能是 m 的已提示牌（stepDep），obs 看得到那張確實是 m——給提示者要的是那張，
+// id 只是 layer。連接記在他第一張會打的 id 上（和 Layered Finesse 一樣），打出 t 時這個解讀照樣成立
+// （Clandestine Finesse 的道理：接收者要給他機會接著打下一張；使用者回報 20261111-110655：「5」點 AI-1 的 G5，
+// AI-2 被「4」點到的是 R4、G4，以前 AI-1 把 G5 的 prompt 直接記在 G4 上，AI-2 先打出 R4 就以為證明是 R5，t42 打錯 G5）。
+func (s *state) layeredPrompt(obs, p, id int, t, m ident, used []int) (dep, []int, bool) {
+	if !s.playableNow(t) {
+		return dep{}, nil, false
+	}
+	next := -1
+	for _, ok := range []func(n *note) bool{
+		func(n *note) bool { return n.poss.has(m) },
+		func(n *note) bool { return !n.bad && n.explicit.has(m) },
+	} {
+		for _, o := range s.hands[p] {
+			if n := s.notes[o]; o != id && n.clued && ok(n) {
+				next = o
+				break
+			}
+		}
+		if next >= 0 {
+			break
+		}
+	}
+	if next < 0 || slices.Contains(used, next) || s.notes[next].willPlay || s.holderKnowsPlayable(next) {
+		return dep{}, nil, false
+	}
+	if u, ok := s.see(obs, next); !ok || u != m {
+		return dep{}, nil, false
+	}
+	return dep{player: p, card: id, id: m, layers: 1}, []int{id, next}, true
 }
 
 // finesseSlot 是 p 的 finesse position，跳過這條連接已用到的牌（Double Finesse 時同一人的下一張）。
@@ -460,6 +496,10 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 				for _, id := range s.hands[d.player] {
 					if n := s.notes[id]; id != played && n.clued && ok(n) {
 						d.card = id
+						if d.layers > 0 {
+							d.layers-- // 照預期打出 layer（layeredPrompt）
+							return d, depPeel
+						}
 						return d, depPending
 					}
 				}
