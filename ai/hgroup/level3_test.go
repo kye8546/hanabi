@@ -521,3 +521,20 @@ func TestL3NoFixWhenTwinPlaysFirst(t *testing.T) {
 		t.Fatalf("AI-3 不必修，應打出 W1，卻做了 %+v（%s）", a, bots[3].Why())
 	}
 }
+
+func TestSarcasticDiscardFixesMisnotedCardFromLockedHand(t *testing.T) {
+	// 使用者回報 20261111-163529 t24：AI-2 被「4」點到的 B4 被大家記成 Y4，AI-3 鎖手、藍色剛讓他確定 slot 1 是能打的 B4。
+	// 以前直接打出，AI-2 那張就成了他不知道的重複牌（之後會當 Y4 打錯）；應該 Sarcastic Discard（大家都知道那張能打，
+	// 鎖手的人有牌可打就不是被迫棄牌），AI-2 改記成 B4
+	g, bots := replayCodes(t, 4, 1794386129042466000, 11, "h3Y p1 h0R p2 h3B p1 h3G p4 h24 p1 h33 p3 p1 h3W p1 p1 h15 d3 d3 p3 h35 d3 h3B")
+	b4 := g.Hands[2][3].Card.ID
+	if a := step(t, g, bots); a != game.Discard(0) {
+		t.Fatalf("AI-3 應 Sarcastic Discard slot 1 的 B4，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	for p := 1; p <= 2; p++ {
+		bots[p].Act(g.View(p))
+		if got := bots[p].s.notes[b4].poss; got != idents(t, "b4") {
+			t.Errorf("AI-%d 應把 AI-2 的 4 記成 B4，卻是 %v", p, got.list())
+		}
+	}
+}

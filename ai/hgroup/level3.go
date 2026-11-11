@@ -667,7 +667,7 @@ func (s *state) lockMine(rec *clueRec, it interp) {
 // certain = 這是 Certain Discard，已由 certainDiscard 處理）。
 func (s *state) sarcastic(e game.Event, certain bool) bool {
 	t := identOfCard(e.Card)
-	if !s.knows(lvSarcastic) || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 {
+	if !s.knows(lvSarcastic) || !s.live(e.Card.ID) || s.trash(t) || s.chop(e.Player) < 0 && !s.deliberateLocked(e.Card.ID) {
 		return false
 	}
 	holder := -1
@@ -690,12 +690,7 @@ func (s *state) sarcastic(e game.Event, certain bool) bool {
 		}
 		return true
 	}
-	var cands []int
-	for _, id := range s.hands[holder] {
-		if s.live(id) && s.knownPoss(holder, id).has(t) {
-			cands = append(cands, id)
-		}
-	}
+	cands := s.sdTargets(holder, t, s.deliberateLocked(e.Card.ID))
 	if len(cands) == 0 && !certain {
 		s.gentleman(e) // Sarcastic Discard 優先；我也沒有可能是 t 的已提示牌，就是 Gentleman's / Baton Discard
 	}
@@ -708,12 +703,12 @@ func (s *state) sarcastic(e game.Event, certain bool) bool {
 // sarcasticSlot（Level 3 The Sarcastic Discard）：我手上被拿到、確定是 t 的牌，而別人手上已被拿到的牌實際就是 t：
 // 我是先發現重複的人，棄掉它（他會知道自己有 t）。提示滿 8 不能棄牌；鎖手時棄牌會被當成被迫的，不用。
 func (s *state) sarcasticSlot(v game.PlayerView) int {
-	if v.Hints >= game.MaxHints || s.chop(s.me) < 0 {
+	if v.Hints >= game.MaxHints {
 		return -1
 	}
 	for slot, x := range s.hands[s.me] {
 		t, ok := s.myPoss(x).single()
-		if !s.live(x) || !ok || s.trash(t) {
+		if !s.live(x) || !ok || s.trash(t) || s.chop(s.me) < 0 && !s.deliberateLocked(x) {
 			continue
 		}
 		for q, h := range s.hands {
@@ -722,14 +717,48 @@ func (s *state) sarcasticSlot(v game.PlayerView) int {
 			}
 			for _, y := range h {
 				// 他已經知道就不必（他會自己打出，我這張之後就是已知沒用的牌）；他的筆記沒有 t 時，棄牌也告訴不了他
-				if p := s.notes[y].poss; s.live(y) && identOfCard(s.cards[y]) == t && p.has(t) && p != setOf(t) &&
-					(!s.playableNow(t) || s.sdCands(q, t) == 1) {
+				// 他的筆記被推論錯成別張（沒有 t，提示資訊卻容許 t）也算：他手上只有那一張可能是 t 時，棄牌讓他改過來
+				// （使用者回報 20261111-163529 t24：AI-2 被「4」點到的 B4 被大家記成 Y4，AI-3 確定自己的是 B4，
+				// 以前直接打出，AI-2 那張就成了他不知道的重複牌，之後會當 Y4 打錯）
+				if p := s.notes[y].poss; s.live(y) && identOfCard(s.cards[y]) == t && p != setOf(t) &&
+					(p.has(t) && (!s.playableNow(t) || s.sdCands(q, t) == 1) || !p.has(t) && s.deliberateLocked(x) && len(s.sdTargets(q, t, true)) == 1) {
 					return slot
 				}
 			}
 		}
 	}
 	return -1
+}
+
+// deliberateLocked：鎖手的人棄掉這張不是被迫的——大家都知道它是現在就能打的牌（共同筆記確定）。
+// 鎖手被迫棄牌時會棄最不重要的牌，有牌可打就不會被迫棄牌，所以棄它就是 Sarcastic Discard。
+// 提示 0 個時不算：那時棄能打的牌可能是為了換提示（Level 9 The Anxiety Play：下一位鎖手，不能讓他停在 0 個提示；
+// 自我對局 Rainbow 4 人局 seed 145：鎖手的 AI 棄掉確定的 R2 換提示，被讀成 Sarcastic Discard，下一位把 G2 當 R2 打錯）。
+func (s *state) deliberateLocked(id int) bool {
+	t, ok := s.possOf(id).single()
+	return ok && s.playableNow(t) && s.hints > 0
+}
+
+// sdTargets：有人 Sarcastic Discard 掉 t 時，holder 手上可能是 t 的被拿到的牌：先看筆記；筆記都排除了 t 時，
+// 改看提示資訊容許 t 的（他的筆記推論錯了——棄牌的人看得到那張就是 t，這就是在告訴他）。好幾張都容許時不保證是哪一張。
+// 後者只在 strong（棄掉的是大家都知道現在就能打的牌，一定是刻意的）時才看：一般的棄牌可能只是失誤或以為是重複，
+// 一律這樣讀時 3000 局 Lv11 4–5 人局 -0.05–0.12、閃電變多。
+func (s *state) sdTargets(holder int, t ident, strong bool) []int {
+	var cands []int
+	for _, id := range s.hands[holder] {
+		if s.live(id) && s.knownPoss(holder, id).has(t) {
+			cands = append(cands, id)
+		}
+	}
+	if len(cands) > 0 || !strong {
+		return cands
+	}
+	for _, id := range s.hands[holder] {
+		if s.live(id) && s.notes[id].explicit.has(t) {
+			cands = append(cands, id)
+		}
+	}
+	return cands
 }
 
 // sdCands：Sarcastic Discard t 之後，q 手上有幾張可能是 t 的被拿到的牌（共同筆記）。
