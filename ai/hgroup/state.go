@@ -56,20 +56,21 @@ type clueRec struct {
 	changed       []int  // 這次提示寫下隱含筆記的牌，失誤時要重置
 	// fallback：需要接收者自己 self-prompt / self-finesse 的解讀。只在其他解讀都不成立後才考慮
 	// （Level 2 The Self-Finesse：「only consider ... if there are no other possibilities」）
-	fallback  []cand
-	fpAt      []int      // 提示當下每位玩家的 finesse position（Wrong Prompt 用）
-	chop      bool       // 焦點在 chop 上（Level 3 Chop-Focus 例外：這張 1 最先打）
-	fresh     []int      // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
-	passed    []int      // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
-	seq       int        // 提示時的事件序號
-	stale     bool       // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
-	reconnect bool       // 被盲打證明（blindProves）後，煙火更新後要照新的煙火重找接收者角度解讀的連接
-	layered   []int      // Level 5：已為這個提示盲打出 layer 的玩家（大家都知道他被 finesse，之後沒接著盲打只是延後）
-	saveView  []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
-	free      freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
-	struck    bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
-	hint      game.Hint  // 提示的內容（Level 11 Cathy's Connecting Principle：盲打出的牌接不接得上提示）
-	bluff     bool       // Level 11：已確定是 Bluff，焦點是差一張就能打的牌（cands 沒有連接牌，也不用再找）
+	fallback   []cand
+	fpAt       []int      // 提示當下每位玩家的 finesse position（Wrong Prompt 用）
+	chop       bool       // 焦點在 chop 上（Level 3 Chop-Focus 例外：這張 1 最先打）
+	fresh      []int      // 這次提示點到的新牌（之後重新找連接牌時，它們不能當成焦點的連接牌）
+	passed     []int      // 被認為是 finesse 對象、輪到時卻沒有盲打的人（他看到別人也有那張牌）
+	seq        int        // 提示時的事件序號
+	stale      bool       // 別人打出了 plan 要的牌面，煙火更新後要重算 plan（replan）
+	reconnect  bool       // 被盲打證明（blindProves）後，煙火更新後要照新的煙火重找接收者角度解讀的連接
+	layered    []int      // Level 5：已為這個提示盲打出 layer 的玩家（大家都知道他被 finesse，之後沒接著盲打只是延後）
+	promptWait int        // 我的計畫要 prompt 我看不到的已提示牌，先等這位（finesse position 上看得到就是那張）行動（deferMyPrompt）。存的是座位 +1，0 表示不必等
+	saveView   []bool     // 我看得到焦點時：每位旁觀者是否可能把它讀成 save clue（interp.saveView）
+	free       freeChoice // Rainbow 變體的 Free Choice（提示當下算好，重新找連接牌時沿用）
+	struck     bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
+	hint       game.Hint  // 提示的內容（Level 11 Cathy's Connecting Principle：盲打出的牌接不接得上提示）
+	bluff      bool       // Level 11：已確定是 Bluff，焦點是差一張就能打的牌（cands 沒有連接牌，也不用再找）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。

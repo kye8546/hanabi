@@ -742,6 +742,18 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 		rec.plan = plan
+		if rec.promptWait > 0 && rec.promptWait-1 == e.Player && e.Type != game.EvDraw {
+			// 我之後那位看得到我的已提示牌：他沒盲打出那張，就是看到我這張正是它，prompt 的是我（deferMyPrompt）；
+			// 他盲打出了，計畫照新的煙火重算（stale）
+			rec.promptWait = 0
+			if !stale {
+				for _, d := range rec.plan {
+					if d.player == s.me && !d.finesse {
+						s.markDep(rec, d)
+					}
+				}
+			}
+		}
 		rec.stale = rec.stale || stale // 煙火更新後（afterPlay）才重算
 	}
 }
@@ -891,8 +903,31 @@ func (s *state) promptPassed(rec *clueRec, c cand, e game.Event, played, waitFor
 	}
 	return slices.ContainsFunc(c.deps, func(d dep) bool {
 		return !d.finesse && d.player == e.Player && d.player != rec.target && d.player != waitFor &&
-			s.playableNow(d.id) && slices.Contains(s.hands[d.player], d.card)
+			s.playableNow(d.id) && slices.Contains(s.hands[d.player], d.card) && !s.mayDeferPrompt(rec, d)
 	})
+}
+
+// mayDeferPrompt：被 prompt 的 d.player 之後（給提示者再輪到之前）有另一位（不是接收者）的 finesse position 可能正好是 d.id——
+// 我看得到就是它，或那是我自己而我的筆記容許。他看不到自己的已提示牌，照 deferMyPrompt 會先等那人盲打，這次沒打不算沒接 prompt
+// （否則只有他一個人知道還在等，其他人照 promptPassed 刪掉這個解讀，筆記就不一致）。
+func (s *state) mayDeferPrompt(rec *clueRec, d dep) bool {
+	if !s.knows(lvReverseFinesse) || d.player == rec.giver {
+		return false
+	}
+	pos := func(p int) int { return (p - rec.giver + s.n) % s.n }
+	for q := range s.n {
+		if q == d.player || q == rec.target || q == rec.giver || pos(q) <= pos(d.player) {
+			continue
+		}
+		fp := s.finesseSlot(q, nil)
+		if fp < 0 {
+			continue
+		}
+		if u, ok := s.see(s.me, fp); ok && u == d.id || !ok && s.notes[fp].poss.has(d.id) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *state) stepCands(rec *clueRec, cs []cand, e game.Event, played, waitFor int) (kept []cand, changed bool, done int, peeled idSet) {

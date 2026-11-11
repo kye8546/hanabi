@@ -271,3 +271,42 @@ func (s *state) stomps(touched []int) bool {
 	}
 	return false
 }
+
+// deferMyPrompt：我看得到焦點、我不是接收者也不是給提示者，照 Prompts > Finesses 計畫要 prompt 我自己看不到的已提示牌，
+// 但我之後才輪到的另一位（不是接收者）finesse position 上看得到正好就是那張。Prompts > Finesses 是第一人稱的規則
+// （原文 Beginner's Guide：在「打自己已提示的牌」與「盲打自己的 finesse position」之間選前者）：給提示者和那位都看得到我的牌，
+// 我的牌不是那張時，給提示者要的就是 finesse 他，他也會照 finesse 找到自己而盲打。所以我先不打、等他行動——他盲打出那張，
+// 就不是 prompt 我（計畫照新的煙火重算）；他沒打（他看到我的牌就是那張），才把我那張記成被 prompt（checkDeps）。
+// 回傳要等的玩家，不必等時 -1。等的期間不寫「他被 finesse」的筆記：那只是猜測，寫了會依 Good Touch 把我那張的那個牌面排除。
+// 和接收者的 reverseInsteadOfSelfPrompt 同一個道理（使用者回報 20261111-151842 t47：使用者用綠色點 AI-1 的 G2，
+// AI-2 被救下的「G1 或 G4」實際是 G4，AI-3 的 finesse position 是 G1；AI-2 以前照 prompt 打出而打錯）。
+// 其他人照 mayDeferPrompt 不把我這段等待當成沒接 prompt。
+func (s *state) deferMyPrompt(giver, R, focus int, t ident, plan []dep) int {
+	if !s.knows(lvReverseFinesse) || giver == s.me || R == s.me {
+		return -1
+	}
+	var mine []int
+	for _, d := range plan {
+		if d.player == s.me && !d.finesse {
+			mine = append(mine, d.card)
+		}
+	}
+	if len(mine) == 0 {
+		return -1
+	}
+	defer s.saveSim()()
+	s.notPrompt = append(slices.Clone(s.notPrompt), mine...)
+	alt, ok := s.connect(s.me, giver, R, focus, t)
+	if !ok || slices.ContainsFunc(alt, func(d dep) bool { return d.player == s.me }) {
+		return -1
+	}
+	pos := func(p int) int { return (p - giver + s.n) % s.n }
+	for _, d := range alt {
+		if d.finesse && d.player != R && pos(d.player) > pos(s.me) && d.layers == 0 {
+			if u, ok := s.see(s.me, d.card); ok && u == d.id {
+				return d.player
+			}
+		}
+	}
+	return -1
+}

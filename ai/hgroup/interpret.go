@@ -518,7 +518,13 @@ func (s *state) onClue(e game.Event) {
 			// 他也這麼想之後（selfMark）才寫他那張牌的筆記
 			rec.plan = slices.DeleteFunc(slices.Clone(rec.plan), func(d dep) bool { return d.player == R })
 		}
+		if !it.ownMaybe { // 可能把我同一張算兩次時本來就不寫我那張的 prompt 筆記（下面），不必等
+			rec.promptWait = s.deferMyPrompt(e.Player, R, it.focus, it.truth, rec.plan) + 1
+		}
 		for _, d := range rec.plan {
+			if d.player == s.me && !d.finesse && rec.promptWait > 0 {
+				continue // 先等他行動，再寫我這張的筆記（checkDeps）
+			}
 			if d.player == s.me && !d.finesse && it.ownMaybe {
 				// 我自己的牌我看不到，計畫可能把同一張算了兩次（自我對局 seed 1667：焦點「r1 或 r2」既算 r1 又算 r2，
 				// 剩下的 r3 就落在我另一張紅牌上，它實際是 r1，被寫成 r3 後一路變成 r5 而打錯）
