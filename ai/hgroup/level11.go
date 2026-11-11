@@ -58,6 +58,12 @@ func (s *state) bluffBlocked(rec *clueRec, B, played int, x ident) bool {
 		if r == rec || r.seq <= s.acted[B] || s.holder(r.focus) < 0 {
 			continue
 		}
+		if all := append(slices.Clone(r.cands), r.fallback...); len(all) > 0 && !slices.ContainsFunc(all, func(c cand) bool { return !c.save }) {
+			// 那個提示只可能是 save clue：save clue 不會讓人盲打，他不是在接它（使用者回報 20261111-150307：AI-2 的「2」救下
+			// AI-1 chop 上的 2，使用者接著用綠色 Bluff AI-1，AI-1 盲打出 Y1，以前以為可能是在接自己被救下的 Y2 而不當成 Bluff，
+			// 又盲打下一張當 G1 而打錯）
+			continue
+		}
 		ids := s.notes[r.focus].poss
 		if t, ok := s.see(s.me, r.focus); ok && rec != nil {
 			ids = setOf(t) // 給提示前模擬時保守一點：看不到焦點的人（例如它的持有者）只知道共同筆記
