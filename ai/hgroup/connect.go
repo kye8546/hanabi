@@ -96,6 +96,9 @@ func (s *state) alreadyGotten(obs, giver int, m ident, exclude []int) int {
 				}
 				continue
 			}
+			if t, ok := s.see(obs, id); ok && t != m {
+				continue // obs 和給提示者都看得到它不是 m（筆記可能被推論錯），不會拿它當連接牌
+			}
 			if t, ok := p.single(); ok && t == m {
 				return id
 			}

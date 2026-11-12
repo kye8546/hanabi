@@ -153,6 +153,10 @@ func (s *state) gottenAs(obs, giver int, i ident, exclude int) bool {
 			}
 			if t, ok := s.see(obs, id); ok && t == i && (p != giver || s.giverMayKnow(obs, id, i)) {
 				return true
+			} else if ok && t != i && p != giver {
+				// obs 和給提示者都看得到它不是 i：筆記（可能是持有者被推論錯的）不算數
+				// （使用者回報 20261112-142830 t14：AI-3 的「3」被大家記成 R3，實際是 Y3，看得到的使用者不會因此排除 R3）
+				continue
 			}
 			if t, ok := s.possOf(id).single(); ok && t == i {
 				return true
