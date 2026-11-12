@@ -218,3 +218,19 @@ func TestL9DDAFillInWithoutConnection(t *testing.T) {
 		t.Fatalf("AI-1 不應把 Fill-In Clue 當成 finesse 而盲打，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestFeedDiscardDefersFinesse(t *testing.T) {
+	// 使用者回報 20261112-093345：t30 綠色點 AI-2 的 G5、Reverse Finesse AI-3 的 G4；t32 提示 0 個、使用者鎖手，
+	// AI-3 必須棄牌換提示給他（Level 9），這不算沒接 finesse。以前大家（包括 AI-3 自己）都把 finesse 作廢，AI-3 一直沒盲打
+	g, bots := replayCodes(t, 4, 1794447225808113000, 11, "h2R h3G p1 p1 h1R h3R p3 h0R h3B p3 h35 p4 p1 h25 h0W p3 p1 d4 h13 d2 h2B p1 p3 p4 d4 p4 h0Y d3 d1 h2G h0B d3 h15 p3 d2")
+	g4 := g.Hands[3][1].Card.ID
+	for p := 0; p < 4; p++ {
+		bots[p].Act(g.View(p))
+		if n := bots[p].s.notes[g4]; !n.finessed || n.poss != idents(t, "g4") {
+			t.Errorf("AI-%d 應仍把 AI-3 slot 2 記成被 finesse 的 G4，卻是 finessed=%v %v", p, n.finessed, n.poss.list())
+		}
+	}
+	if a := step(t, g, bots); a != game.Play(1) {
+		t.Fatalf("AI-3 應盲打 slot 2 的 G4，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}

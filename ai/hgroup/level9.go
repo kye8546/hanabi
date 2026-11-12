@@ -170,6 +170,19 @@ func (s *state) anxietySlot(p int) int {
 // 打出最可能能打的牌（anxietySlot）；我看得到那張其實不能打（或他沒有可打的候選）時回傳 true。a 是提示他、讓他從此鎖手的
 // 提示時，他要打哪張不好預測，一律算會打錯。原文：「If the team is out of clues and someone's hand is fully clued, then you
 // have to discard to generate a clue for them. Similarly, if there is only 1 clue left, you cannot steal it from them.」
+// feedDeferrable：提示 0 個時棄牌、他的下一位鎖手（只看被提示、被 Chop Move 的牌，大家看法一致）——Level 9 規定必須棄牌
+// 換一個提示給他（原文：「you have to discard to generate a clue for them」），這是比盲打更急的事：手上有該盲打的 finesse 的人
+// 這樣棄牌，不算沒接 finesse，下一手再盲打（和 Level 5 Urgency Principle 的例外同一個道理）。
+// 使用者回報 20261112-093345：t30 綠色點 AI-2 的 G5、finesse AI-3 的 G4，t32 提示 0 個、使用者鎖手，AI-3 棄牌換提示給他，
+// 大家都當成 AI-3 沒接 finesse，AI-3 自己也忘了那張是 G4，之後一直沒盲打。
+func (s *state) feedDeferrable(e game.Event) bool {
+	if !s.knows(lvStall) || e.Type != game.EvDiscard || s.hints > 0 {
+		return false
+	}
+	next := (e.Player + 1) % s.n
+	return next != e.Player && s.publicChop(next, nil) < 0
+}
+
 func (s *state) leavesLockedAnxious(a game.Action, hints int) bool {
 	if !s.knows(lvStall) || a.Type == game.ActDiscard {
 		return false

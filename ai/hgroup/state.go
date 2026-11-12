@@ -434,7 +434,9 @@ func (s *state) apply(e game.Event) {
 		certain := s.certainDiscard(e)
 		sarcDenied := s.sarcasticDenied(e)
 		s.posResp = resp
+		s.deferred = s.feedDeferrable(e)
 		s.checkDeps(e, e.Card.ID)
+		s.deferred = false
 		s.stepGD(e)
 		s.excused, s.posResp, s.bluffCard = -1, false, -1
 		if e.Type == game.EvPlay {
