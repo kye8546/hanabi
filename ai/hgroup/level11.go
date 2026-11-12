@@ -49,7 +49,17 @@ func (s *state) bluffBlocked(rec *clueRec, B, played int, x ident) bool {
 		usesAll := func(cs []cand) bool {
 			return len(cs) > 0 && !slices.ContainsFunc(cs, func(c cand) bool { return !slices.ContainsFunc(c.deps, uses) })
 		}
-		// 計畫要他盲打這張，或那個提示的每種解讀都要他盲打這張（只有部分解讀要時，看得到焦點的他多半知道不是）
+		// 計畫要他盲打這張，或那個提示的每種解讀都要他盲打這張（只有部分解讀要時，看得到焦點的他多半知道不是）。
+		// 我、他和這次的給提示者都看得到那個提示的焦點時，那些解讀只是看不到焦點的接收者的猜測，照實際牌面的計畫判斷就好
+		// （使用者回報 20261112-142830：「3」點 AI-3 的 Y3，AI-3 以為可能是 R3、要 AI-1 盲打 R2；使用者接著用藍色 Bluff AI-1，
+		// AI-1 盲打出 R2，以前因為 AI-3 的解讀都要那張 R2 而不當成 Bluff，以為是 Layered Finesse、再把下一張當 B2 盲打錯）。
+		// 給提示前的模擬（rec 是 nil）照舊保守：看不到焦點的接收者會讀錯
+		if _, seen := s.see(s.me, r.focus); seen && rec != nil && rec.giver != r.target && B != r.target {
+			if slices.ContainsFunc(r.plan, uses) {
+				return true
+			}
+			continue
+		}
 		if slices.ContainsFunc(r.plan, uses) || usesAll(r.cands) || len(r.cands) == 0 && usesAll(r.fallback) {
 			return true
 		}

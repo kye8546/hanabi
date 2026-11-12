@@ -250,3 +250,18 @@ func TestL11GiveSelfBluff(t *testing.T) {
 		}
 	}
 }
+
+func TestBluffNotBlockedByReceiversWrongReading(t *testing.T) {
+	// 使用者回報 20261112-142830：「3」點 AI-3 的 Y3，AI-3 以為可能是 R3、要 AI-1 盲打 R2；t9 使用者用藍色 Bluff AI-1
+	// （AI-2 的 B3），t10 AI-1 盲打出 R2。AI-1、AI-2 和使用者都看得到 AI-3 那張是 Y3，那些解讀只是 AI-3 的猜測，
+	// 這次盲打就是 Bluff。以前 AI-1 當成 Layered Finesse，t14 再把 slot 2 的 R2 當 B2 盲打錯；
+	// 使用者的紅色也不能給（AI-3 那張被記成 R3，看得到 Y3 的使用者會把焦點當 R3 打出 R4）
+	g, bots := replayCodes(t, 4, 1794464910083634000, 11, "h21 h3B p4 p3 h33 h35 p4 h1Y h2B p1 p4 p1 h14")
+	a := step(t, g, bots)
+	if a.Type == game.ActPlay {
+		t.Fatalf("AI-1 不該再盲打（藍色是 Bluff），卻打了 slot %d（%s）", a.Slot+1, bots[1].Why())
+	}
+	if a.Type == game.ActHint && a.Target == 0 && a.Hint == (game.Hint{Kind: game.HintColor, Color: game.Red}) {
+		t.Fatalf("AI-1 不該用紅色點使用者的 R4、R3（焦點 R4 會被當成 R3 打出）")
+	}
+}
