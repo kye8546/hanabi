@@ -265,3 +265,12 @@ func TestBluffNotBlockedByReceiversWrongReading(t *testing.T) {
 		t.Fatalf("AI-1 不該用紅色點使用者的 R4、R3（焦點 R4 會被當成 R3 打出）")
 	}
 }
+
+func TestBlindPlayDuplicatingCluedCardIsNotALayer(t *testing.T) {
+	// 同一局：AI-3 以為藍色是 Reverse Finesse 自己的 B2，t12 盲打出 Y2；AI-1 的 Y2 在藍色之前就被提示了，
+	// 給提示者不會拿它當 layer，所以不是 Layered Finesse，AI-3 不該再把 slot 3 的 G4 當 B2 盲打
+	g, bots := replayCodes(t, 4, 1794464910083634000, 11, "h21 h3B p4 p3 h33 h35 p4 h1Y h2B p1 p4 p1 h14 p2 h1W")
+	if a := step(t, g, bots); a == game.Play(2) {
+		t.Fatalf("AI-3 不該把 slot 3 當 B2 盲打（%s）", bots[3].Why())
+	}
+}

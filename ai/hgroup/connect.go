@@ -518,7 +518,8 @@ func (s *state) stepDep(rec *clueRec, d dep, e game.Event, played int, wait bool
 		// 接收者自己的 Self-Finesse 沒有 layer：盲打出什麼，焦點就要對上它（原文 Bob is Lazy：「she knows that her previously unknown 2
 		// that was the Finesse target must match」），其他要它是別張的解讀不成立
 		selfFin := d.finesse && d.player == rec.target
-		if e.Type == game.EvPlay && !selfFin && (d.finesse && s.knows(lvLayeredFinesse) || !d.finesse && s.knows(lvHiddenFinesse)) {
+		if e.Type == game.EvPlay && !selfFin && (d.finesse && s.knows(lvLayeredFinesse) && !s.dupLayer(rec, d.player, identOfCard(e.Card)) ||
+			!d.finesse && s.knows(lvHiddenFinesse)) {
 			if nc := s.layerSlot(rec, d.player, played, nil); nc >= 0 {
 				st := depPending
 				if d.layers > 0 {
@@ -1153,4 +1154,26 @@ func (s *state) afterPlay() {
 		}
 		return true
 	})
+}
+
+// dupLayer：盲打出的 x 不可能是 Layered Finesse 的 layer——提示當時別人（不是盲打的人、也不是給提示者）手上已經有被提示、
+// 就是 x 的牌：給提示者看得到它，layer 先打出那張就成了重複，他不會這樣給（原文 Level 5 給 Layered Finesse 的前提；
+// AI 自己給時也避開，gottenElsewhere）。使用者回報 20261112-142830：AI-3 以為藍色是 Reverse Finesse 自己的 B2，盲打出 Y2，
+// AI-1 被黃色點到的 Y2 早在藍色之前就被提示了，AI-3 卻當成 layer、接著把下一張 G4 當 B2 盲打錯。
+func (s *state) dupLayer(rec *clueRec, blind int, x ident) bool {
+	for q := range s.n {
+		if q == blind || q == rec.giver {
+			continue
+		}
+		for _, id := range s.hands[q] {
+			n := s.notes[id]
+			if !n.clued || n.cluedAt >= rec.seq || n.bad {
+				continue
+			}
+			if t, ok := s.see(s.me, id); ok && t == x || !ok && n.poss == setOf(x) {
+				return true
+			}
+		}
+	}
+	return false
 }
