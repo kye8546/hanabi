@@ -37,6 +37,7 @@ type clueEval struct {
 	nextPlays   bool  // 下一位玩家會因此在他下一手打牌（被直接提示、被 prompt 或被 finesse）
 	exposesNext bool  // 給下一位的提示讓他的新 chop 落在必須保留的牌上、他又不能立刻打牌（scoreNextChopNeeds）
 	exposesLate bool  // 給更後面玩家的提示讓他的新 chop 落在必須保留的牌上、他又不能立刻打牌（exposesLaterChop）
+	targetPlays bool  // play clue：接收者輪到時就會打牌（自己就知道能打，或連接牌都在他之前打出），那一手不會棄 chop
 	touched     []int
 	newGood     int   // 非焦點、有用的新牌
 	plays       int   // 照計畫進行後會依序打出的牌數（焦點、連接牌、接得上的非焦點新牌）
@@ -332,6 +333,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	if h.Kind == game.HintColor {
 		ev.score += scoreColor
 	}
+	ev.targetPlays = ev.kind == kindPlay && (s.knowsPlayNow(it) || s.playsByTurn(it, R))
 	// 給下一位的提示：提示後他的 chop 往左移到必須保留的牌上，而他又沒有能立刻打的牌，
 	// 他下一手就會棄掉那張牌（Check Team Chops 要看提示之後的 chop）
 	if !s.keepsChop(R) && !s.knowsPlayNow(it) {

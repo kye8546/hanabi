@@ -318,6 +318,11 @@ func (s *state) doomsLaterChop(ev clueEval, hints int) (int, bool) {
 		if chop < 0 || !s.needsSave(p, chop) || s.keepsChop(p) || ev.covers(p, chop) {
 			continue
 		}
+		if ev.target == p && ev.targetPlays {
+			// 這個提示讓他輪到時就打牌，那一手不會棄 chop（使用者回報 20261112-123423 t46：「3」讓 AI-3 打出 R3，
+			// 以前以為用掉最後一個提示後他會棄掉 chop 上的 R5，改給只點到垃圾 B2 的 Trash Chop Move，R3 晚了好幾回合）
+			continue
+		}
 		regen := false
 		for j := 1; j < k-1; j++ {
 			if !s.willPlay((s.me + j) % s.n) {

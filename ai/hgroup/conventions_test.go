@@ -940,3 +940,13 @@ func TestFinessedCardLeavesClueMates(t *testing.T) {
 		t.Errorf("AI-1 應打出 slot 2 的 Y4，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestLastClueToLaterPlayerWhoWillPlayDoesNotDoomHisChop(t *testing.T) {
+	// 使用者回報 20261112-123423 t46：只差 R3、R4、R5，提示剩 1 個，AI-3 的 slot 3 是 R3、chop 是 R5。
+	// 「3」讓 AI-3 輪到時打出 R3、那一手不會棄 chop，以前卻以為用掉最後一個提示後 R5 沒人能救，
+	// 改給只點到垃圾 B2 的 Trash Chop Move
+	g, bots := replayCodes(t, 4, 1794458063686228000, 11, "h1W h21 p4 p1 h1G p3 p2 h1B h33 p3 h3G p2 h24 p3 h05 p4 d2 p4 p4 h2B d2 h32 p2 p1 d2 d4 h1B h0G p3 p1 h0W h0Y p1 p1 d2 h2R p2 d4 p1 p4 p4 h3Y h0Y p4 p3")
+	if a := step(t, g, bots); a.Type != game.ActHint || a.Target != 3 || a.Hint != (game.Hint{Kind: game.HintRank, Rank: 3}) {
+		t.Fatalf("AI-1 應用「3」點 AI-3 的 R3，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
