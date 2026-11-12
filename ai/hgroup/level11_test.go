@@ -274,3 +274,16 @@ func TestBlindPlayDuplicatingCluedCardIsNotALayer(t *testing.T) {
 		t.Fatalf("AI-3 不該把 slot 3 當 B2 盲打（%s）", bots[3].Why())
 	}
 }
+
+func TestFiveStallFallbackDoesNotBlockBluff(t *testing.T) {
+	// 使用者回報 20261112-165325：t6 AI-2 的「5」是給 AI-1 的 5 Stall（fallback 留著「R5，self-finesse R1–R4」），
+	// t7 使用者白色點 AI-2 的 W3、Bluff AI-1，t8 AI-1 盲打出 R1。以前 AI-1 因為那個 fallback 不當成 Bluff，
+	// 一直把 AI-2 的 W3 記成「W2 或 W3」，t41 誤以為要 Double Finesse 自己而 Certain Discard
+	g, bots := replayCodes(t, 3, 1794473605627249000, 11, "h2G p1 h0W p4 h25 h15 h2W p1")
+	w3 := g.Hands[2][3].Card.ID
+	step(t, g, bots)
+	bots[1].Act(g.View(1))
+	if got := bots[1].s.notes[w3].poss; got != idents(t, "w3") {
+		t.Errorf("AI-1 應把 AI-2 被白色點到的牌記成 W3（Bluff），卻是 %v", got.list())
+	}
+}

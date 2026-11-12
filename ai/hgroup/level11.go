@@ -68,7 +68,11 @@ func (s *state) bluffBlocked(rec *clueRec, B, played int, x ident) bool {
 		if r == rec || r.seq <= s.acted[B] || s.holder(r.focus) < 0 {
 			continue
 		}
-		if all := append(slices.Clone(r.cands), r.fallback...); len(all) > 0 && !slices.ContainsFunc(all, func(c cand) bool { return !c.save }) {
+		// fallback（接收者自己的 self-finesse 等）只在所有 cands 都失敗後才升格，save 解讀不會失敗，所以只看 cands
+		// （使用者回報 20261112-165325 t8：AI-2 的「5」是給 AI-1 的 5 Stall，fallback 留著「R5，self-finesse R1–R4」，
+		// 使用者接著用白色 Bluff AI-1，AI-1 盲打出 R1，以前因此不當成 Bluff，一直把 AI-2 的 W3 記成「W2 或 W3」，
+		// t41 誤以為要 Double Finesse 自己而 Certain Discard）
+		if len(r.cands) > 0 && !slices.ContainsFunc(r.cands, func(c cand) bool { return !c.save }) {
 			// 那個提示只可能是 save clue：save clue 不會讓人盲打，他不是在接它（使用者回報 20261111-150307：AI-2 的「2」救下
 			// AI-1 chop 上的 2，使用者接著用綠色 Bluff AI-1，AI-1 盲打出 Y1，以前以為可能是在接自己被救下的 Y2 而不當成 Bluff，
 			// 又盲打下一張當 G1 而打錯）
