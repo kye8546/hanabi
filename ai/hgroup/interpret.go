@@ -315,21 +315,24 @@ func (s *state) reverseInsteadOfSelfPrompt(obs, giver, R, focus int, t ident, de
 	if obs != R || !s.knows(lvReverseFinesse) {
 		return nil, false
 	}
-	var mine []int
+	var mine []dep
 	for _, d := range deps {
 		if d.player == R && !d.finesse {
 			if _, ok := s.see(obs, d.card); !ok {
-				mine = append(mine, d.card)
+				mine = append(mine, d)
 			}
 		}
 	}
 	if len(mine) == 0 {
 		return nil, false
 	}
+	// 只擋「那張當成那個牌面」：換成 finesse 後面的人之後，我那張可能是下一張的連接牌（例如 self-prompt 我當 Y3、
+	// self-finesse 我當 Y4，實際是 Reverse Finesse 後面那人的 Y3、prompt 我當 Y4；20261112-100206 是旁觀者的同一種形狀）。
+	// 換成的解讀還要我 self-finesse 的不算（比原本的解讀更差）
 	defer s.saveSim()()
-	s.notPrompt = append(slices.Clone(s.notPrompt), mine...)
+	s.notPromptAs = append(slices.Clone(s.notPromptAs), mine...)
 	alt, ok := s.connect(obs, giver, R, focus, t)
-	if !ok || slices.ContainsFunc(alt, func(d dep) bool { return d.player == R }) {
+	if !ok || slices.ContainsFunc(alt, func(d dep) bool { return d.player == R && d.finesse }) {
 		return nil, false
 	}
 	// 只限要接收者之後的人盲打的（他要等的 Reverse Finesse）。給提示者與接收者之間的人在接收者之前就輪到了，
@@ -523,7 +526,7 @@ func (s *state) onClue(e game.Event) {
 		}
 		for _, d := range rec.plan {
 			if d.player == s.me && rec.promptWait > 0 {
-				continue // 先等他行動，再寫我這張的筆記（checkDeps）
+				continue // 先等他行動，再寫我的牌的筆記（checkDeps；排在 prompt 後面的 self-finesse 也一樣）
 			}
 			if d.player == s.me && !d.finesse && it.ownMaybe {
 				// 我自己的牌我看不到，計畫可能把同一張算了兩次（自我對局 seed 1667：焦點「r1 或 r2」既算 r1 又算 r2，

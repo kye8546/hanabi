@@ -152,9 +152,10 @@ type sim struct {
 	skipCards   []int // 重新找連接牌時：他沒盲打的那些牌（不算已經有人會打）
 	// unclaimed：重新找連接牌時，這些牌被 finesse 的筆記只是我私下的推論（我自己沒盲打後替接收者重算時，我的計畫記下的牌），
 	// 從接收者的角度它們還在 finesse position 上
-	unclaimed []int
-	sameClue  []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
-	notPrompt []int // 找連接牌時不當 prompt 候選的已提示牌（接收者假設自己看不到的那張不是連接牌）
+	unclaimed   []int
+	sameClue    []int // 重新找連接牌時：和焦點同一個提示點到的新牌（不能當連接牌）
+	notPrompt   []int // 找連接牌時不當 prompt 候選的已提示牌（接收者假設自己看不到的那張不是連接牌）
+	notPromptAs []dep // 找連接牌時，card 不當成 id 的 prompt 候選（當成別的牌面仍可以；reverseInsteadOfSelfPrompt）
 	// assumeMine：推測別人的角度時，把我自己 finesse position 上看不到的牌當成「就是要的那張」（他看得到；
 	// Level 5 Ambiguous Finesse：他沒盲打，是不是因為看到我有那張）
 	assumeMine bool
