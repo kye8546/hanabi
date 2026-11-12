@@ -522,7 +522,7 @@ func (s *state) onClue(e game.Event) {
 			rec.promptWait = s.deferMyPrompt(e.Player, R, it.focus, it.truth, rec.plan) + 1
 		}
 		for _, d := range rec.plan {
-			if d.player == s.me && !d.finesse && rec.promptWait > 0 {
+			if d.player == s.me && rec.promptWait > 0 {
 				continue // 先等他行動，再寫我這張的筆記（checkDeps）
 			}
 			if d.player == s.me && !d.finesse && it.ownMaybe {

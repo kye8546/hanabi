@@ -726,3 +726,23 @@ func TestL2PromptRefutedByLaterClue(t *testing.T) {
 		t.Fatalf("AI-2 應打出 slot 2 的 W1，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestPromptedBystanderWaitsWhenPromptIsFollowedBySelfFinesse(t *testing.T) {
+	// 使用者回報 20261112-100206 t23：使用者黃色點 AI-1 的 Y5（黃色堆到 Y2），AI-2 被黃色點過的牌實際是 Y4，
+	// AI-3 的 finesse position 是 Y3。AI-2 以前照 Prompts > Finesses 讀成「prompt 我的黃牌當 Y3、再 self-finesse 我當 Y4」，
+	// 把黃牌當 Y3 打出而打錯——他看得到 AI-3 的 finesse position 就是 Y3，應該先等 AI-3 盲打
+	g, bots := replayCodes(t, 4, 1794448926021049000, 11, "h2Y h3B p4 p4 h1B p4 h0B p1 h2G p1 h0G h13 p3 h01 p1 d4 p1 p4 d4 h2R h1Y d4")
+	y4 := g.Hands[2][3].Card.ID
+	if a := step(t, g, bots); a == game.Play(3) || a == game.Play(1) {
+		t.Fatalf("AI-2 應先等 AI-3 盲打 Y3，卻打了 %+v（%s）", a, bots[2].Why())
+	}
+	if a := step(t, g, bots); a != game.Play(0) {
+		t.Fatalf("AI-3 應盲打 finesse position 的 Y3，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	for range 3 { // 使用者、AI-1、AI-2
+		step(t, g, bots)
+	}
+	if got := bots[2].s.notes[y4].poss; got != idents(t, "y4") {
+		t.Errorf("AI-2 應把自己的黃牌記成 Y4，卻是 %v", got.list())
+	}
+}

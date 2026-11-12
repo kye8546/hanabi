@@ -285,26 +285,25 @@ func (s *state) deferMyPrompt(giver, R, focus int, t ident, plan []dep) int {
 	if !s.knows(lvReverseFinesse) || giver == s.me || R == s.me {
 		return -1
 	}
-	var mine []int
+	var mine []ident
 	for _, d := range plan {
 		if d.player == s.me && !d.finesse {
-			mine = append(mine, d.card)
+			mine = append(mine, d.id)
 		}
 	}
 	if len(mine) == 0 {
 		return -1
 	}
-	defer s.saveSim()()
-	s.notPrompt = append(slices.Clone(s.notPrompt), mine...)
-	alt, ok := s.connect(s.me, giver, R, focus, t)
-	if !ok || slices.ContainsFunc(alt, func(d dep) bool { return d.player == s.me }) {
-		return -1
-	}
+	// 不必另外找出「換成他之後」的完整計畫：我那張可能就變成下一張（例如 prompt 我當 Y3、再 self-finesse 我當 Y4，
+	// 實際是 finesse 他的 Y3、prompt 我當 Y4），等他行動後照新的煙火重算即可（使用者回報 20261112-100206 t23）
 	pos := func(p int) int { return (p - giver + s.n) % s.n }
-	for _, d := range alt {
-		if d.finesse && d.player != R && pos(d.player) > pos(s.me) && d.layers == 0 {
-			if u, ok := s.see(s.me, d.card); ok && u == d.id {
-				return d.player
+	for q := range s.n {
+		if q == s.me || q == R || q == giver || pos(q) <= pos(s.me) {
+			continue
+		}
+		if fp := s.finesseSlot(q, nil); fp >= 0 {
+			if u, ok := s.see(s.me, fp); ok && slices.Contains(mine, u) {
+				return q
 			}
 		}
 	}

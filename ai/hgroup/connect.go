@@ -748,7 +748,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 			rec.promptWait = 0
 			if !stale {
 				for _, d := range rec.plan {
-					if d.player == s.me && !d.finesse {
+					if d.player == s.me {
 						s.markDep(rec, d)
 					}
 				}
