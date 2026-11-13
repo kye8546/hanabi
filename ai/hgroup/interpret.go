@@ -257,7 +257,8 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 			}
 			// 他看不到自己的牌：例如他手上有可能是連接牌的已提示牌時，他會以為是 prompt 而不盲打
 			theirs, ok := s.connect(d.player, giver, R, it.focus, t)
-			if !ok || !sameDeps(theirs, it.plan) {
+			// Ambiguous Finesse：他看得到另一位的 finesse position 也是那張，會讓給那位——打出的牌一樣（ambiguousSwap）
+			if !ok || !sameDeps(theirs, it.plan) && !s.ambiguousSwap(giver, R, it.focus, t, it.plan, theirs) {
 				it.agreed = false
 			}
 		}

@@ -600,11 +600,15 @@ func TestDebugLayered(t *testing.T) {
 	fmt.Sscan(os.Getenv("HLAYER"), &n, &games)
 	names := func(p int) string { return fmt.Sprintf("P%d", p) }
 	given, bad, shown := 0, 0, 0
+	lv := 5
+	if os.Getenv("HLEVEL") != "" {
+		lv = debugLevel()
+	}
 	for seed := range uint64(games) {
 		g, _ := game.NewVariant(n, game.NoVariant, seed)
 		bots := make([]*Bot, n)
 		for i := range bots {
-			bots[i] = New(fmt.Sprint(i), 5)
+			bots[i] = New(fmt.Sprint(i), lv)
 		}
 		var lines []string
 		layeredAt := -1
@@ -617,8 +621,18 @@ func TestDebugLayered(t *testing.T) {
 			if a.Type == game.ActHint {
 				for _, ev := range bots[p].s.allClues() {
 					if ev.act == a && slices.ContainsFunc(ev.plan, func(d dep) bool {
-						if os.Getenv("HKIND") == "queued" {
+						switch os.Getenv("HKIND") {
+						case "queued":
 							return d.finesse && bots[p].s.queuedBehind(d)
+						case "ambiguous":
+							// Ambiguous Finesse：另一位（不是接收者）的 finesse position 也是那張
+							st := bots[p].s
+							for q := range st.n {
+								if fp := st.finessePos(q); d.finesse && q != p && q != ev.target && q != d.player && fp >= 0 && identOfCard(st.cards[fp]) == d.id {
+									return true
+								}
+							}
+							return false
 						}
 						return d.layers > 0 && d.finesse
 					}) {

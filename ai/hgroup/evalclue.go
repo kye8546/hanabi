@@ -248,7 +248,7 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	if playable {
 		plan = it.plan
-		if !s.finesseClear(R, plan) || !it.agreed || !s.selfPromptTimely(R, it.cands) {
+		if !s.finesseClear(R, it.focus, t, plan) || !it.agreed || !s.selfPromptTimely(R, it.cands) {
 			// 接收者看得懂，但要打連接牌的人會搞錯是誰、打哪張（例如 prompt 到另一張已提示牌），拖延時也不能用
 			ev.misleads = true
 			return ev, true
@@ -610,11 +610,13 @@ func (s *state) misleads(R int, it interp, touched []int) (wrong, danger, costly
 
 // finesseClear：finesse 對象以外，給提示者與接收者之間（Level 2 起是接收者以外的所有人）
 // 沒有別人的 finesse position 也是同一張牌，否則大家會搞不清楚是誰被 finesse。
-func (s *state) finesseClear(R int, plan []dep) bool {
+// 例外是能照座位順序解開的 Ambiguous Finesse（ambiguousOK）。
+func (s *state) finesseClear(R, focus int, t ident, plan []dep) bool {
 	for _, d := range plan {
 		if !d.finesse {
 			continue
 		}
+		var others []int
 		for k := 1; k < s.n; k++ {
 			p := (s.me + k) % s.n
 			if p == R {
@@ -624,11 +626,89 @@ func (s *state) finesseClear(R int, plan []dep) bool {
 				continue
 			}
 			if fp := s.finessePos(p); p != d.player && fp >= 0 && identOfCard(s.cards[fp]) == d.id {
-				return false
+				others = append(others, p)
 			}
+		}
+		if len(others) > 0 && !s.ambiguousOK(s.me, R, focus, t, plan, d, others) {
+			return false
 		}
 	}
 	return true
+}
+
+// ambiguousOK：Ambiguous Finesse——計畫要 d.player 盲打的牌 m，正好也在之後另一位 q 的 finesse position 上（都沒有 layer）。
+// d.player 看得到 q 的 m，會讓給他（Level 2：看得到的 finesse position 優先）；q 看到他沒打，就知道是自己
+// （passMeansMe：d.player 在接收者之前、q 在接收者之後是 Level 2 的 Reverse Finesse 就解得開，兩人在接收者同一側要 Level 5）。
+// 實際盲打的是 q，牌面一樣，打出的牌和計畫相同，只是晚一些。使用者的判斷：這是正常的操作，不能禁止
+// （使用者回報 20261113-143339 t14：AI-2 和使用者的 finesse position 都是 B1，藍色點 AI-3 chop 上的 B2 一次打出兩張、
+// 也救下 B2，AI-1 以前因此不給，改給只打一張的藍色）。
+func (s *state) ambiguousOK(giver, R, focus int, t ident, plan []dep, d dep, others []int) bool {
+	if len(others) != 1 || d.layers != 0 {
+		return false
+	}
+	q := others[0]
+	// q 的 finesse position 本身就是 m（不是藏在 layer 後面；自我對局 Rainbow 5 人局 seed 50：d.player 以為 q 的 M5 後面
+	// 藏著 W2、讓給他，q 盲打出 layer 後一路打錯）
+	if fp := s.finessePos(q); fp < 0 || identOfCard(s.cards[fp]) != d.id {
+		return false
+	}
+	// 接收者自己的 finesse position 也是 m 時是三方都可能（自我對局 Rainbow 5 人局 seed 1633：P3、P4 和接收者都有 Y1，
+	// 一直沒人盲打），不是原文的情況
+	if fp := s.finessePos(R); fp >= 0 && identOfCard(s.cards[fp]) == d.id {
+		return false
+	}
+	pos := func(p int) int { return (p - s.me + s.n) % s.n }
+	if pos(q) < pos(d.player) {
+		return false // 比他早行動的人看得到他的 m，會讓給他，不是計畫的人；不處理
+	}
+	// 兩人中間只能隔著接收者：中間的旁觀者看不到自己的 finesse position，d.player 不打時他分不出 d.player 是看到他的
+	// 還是 q 的 m（自我對局 Rainbow 5 人局 seed 225：P0、P2 都有 Y3，中間的 P1 以為可能是自己，又用「3」點到 P0 的 Y3，
+	// P2 盲打出 Y3 後 P0 那張成了重複牌而被打錯）。原文的例子兩人相鄰
+	for p := (d.player + 1) % s.n; p != q; p = (p + 1) % s.n {
+		if p != R {
+			return false
+		}
+	}
+	// 計畫裡只有這一張要盲打，q 也不在計畫裡（否則誰讓給誰會牽動其他連接）
+	for _, e := range plan {
+		if e.player == q || e.finesse && e != d {
+			return false
+		}
+	}
+	if sameSide := (pos(d.player) < pos(R)) == (pos(q) < pos(R)); sameSide && !s.knows(lvUrgency) {
+		return false
+	}
+	// q 從自己的角度也要認為是 finesse d.player：否則 d.player 不打時，他不會想到是自己（自我對局 5 人局 seed 1464：
+	// q 手上被「1」點到的牌可能是 W1，他以為 W2 接在那張上，W1 一直沒人盲打，接收者打錯 W2）
+	theirs, ok := s.connect(q, giver, R, focus, t)
+	return ok && sameDeps(theirs, plan)
+}
+
+// ambiguousSwap：theirs 和 plan 只差在一張 finesse 換成另一位 q 的 finesse position 上同一張牌，而且照座位順序
+// 解得開（ambiguousOK）——要盲打的人看得到 q 的那張，會讓給他，打出的牌和計畫一樣。
+func (s *state) ambiguousSwap(giver, R, focus int, t ident, plan, theirs []dep) bool {
+	if len(plan) != len(theirs) {
+		return false
+	}
+	swapped := false
+	for i, d := range plan {
+		e := theirs[i]
+		layered := e.layers != 0
+		e.layers, d.layers = 0, 0
+		if e == d {
+			continue
+		}
+		if layered {
+			return false
+		}
+		// 換成接收者自己（他看到接收者的 finesse position 也是那張，以為是 Self-Finesse）不算：那是另一種解法，原文的例子沒有
+		if swapped || !d.finesse || !e.finesse || e.id != d.id || e.player == d.player || e.player == R || e.card != s.finessePos(e.player) ||
+			!s.ambiguousOK(giver, R, focus, t, plan, plan[i], []int{e.player}) {
+			return false
+		}
+		swapped = true
+	}
+	return swapped
 }
 
 // selfPromptTimely：要接收者 self-prompt 時，他只知道被 prompt 的牌是「某幾種之一」；

@@ -559,3 +559,26 @@ func TestL5LayerThroughGiversUnknownDuplicate(t *testing.T) {
 		t.Fatalf("AI-2 應盲打出 W1：閃電 %d、白色 %d", g.Strikes, g.Fireworks[game.White])
 	}
 }
+
+func TestL5GivesResolvableAmbiguousFinesse(t *testing.T) {
+	// 使用者回報 20261113-143339 t14：AI-2 和使用者的 finesse position 都是 B1，藍色點 AI-3 chop 上的 B2。
+	// AI-2 看得到使用者的 B1 會讓給他，使用者看到 AI-2 沒打就知道是自己（The Ambiguous Finesse）——
+	// 一個提示打出兩張、也救下 B2，是正常的操作；AI-1 以前因為「搞不清楚是誰被 finesse」而不給
+	codes := "h22 p1 p2 h1R p1 p3 h1W h0G p1 p3 h3W p3 p4"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1794551619281268000, 11, codes)
+	a := step(t, g, bots)
+	if a.Type != game.ActHint || a.Target != 3 || a.Hint.Kind != game.HintColor || a.Hint.Color != game.Blue {
+		t.Fatalf("AI-1 該用藍色點 AI-3 的 B2（Ambiguous Finesse），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	// 之後全由 AI 行動：AI-2 讓給座位 0，座位 0 盲打 B1，AI-3 接著打出 B2，沒有人打錯
+	for range 12 {
+		step(t, g, bots)
+		if g.Strikes > 0 {
+			t.Fatalf("第 %d 回合有人打錯", g.Turn-1)
+		}
+		if g.Fireworks[game.Blue] >= 2 {
+			return
+		}
+	}
+	t.Fatalf("B1、B2 沒有打出，藍色煙火 %d", g.Fireworks[game.Blue])
+}
