@@ -222,13 +222,20 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	// Level 6 The Valuable Tempo Clue：有價值的 Tempo Clue 和一般 play clue 一樣（可以隨時給）
 	valuable := s.knows(lvTempo) && it.valuable && ev.understood && it.planOK && !s.alreadyResolved(R, it.focus, t)
 	if it.tempo && !valuable && !(ev.understood && it.planOK && len(it.plan) > 0 && !s.alreadyResolved(R, it.focus, t)) {
-		ev.kind = kindTempo
-		ev.knowsPlay = ev.understood && s.playableNow(t)
+		knowsPlay := ev.understood && s.playableNow(t)
 		for _, c := range it.cands {
-			ev.knowsPlay = ev.knowsPlay && s.playableNow(c.id)
+			knowsPlay = knowsPlay && s.playableNow(c.id)
 		}
-		ev.score = -dist
-		return ev, true
+		// 接收者鎖手（沒有 chop 可 Chop Move，不會讀成 Tempo Clue Chop Move）、這個提示讓他確定焦點現在就能打、
+		// 他本來不知道：就是一般的 play clue，照打出一張算（使用者回報 20261113-165056：AI-3 鎖手，被「1」點到的 K1
+		// 記成「R1 或 K1」，用黑色補資訊就能打出，以前只在拖延時才給這種提示）
+		anyway := s.alreadyResolved(R, it.focus, t) || s.holderKnowsPlayable(it.focus) || s.notes[it.focus].willPlay || s.plannedPlay(it.focus)
+		if !(knowsPlay && !anyway && s.publicChop(R, nil) < 0) {
+			ev.kind = kindTempo
+			ev.knowsPlay = knowsPlay
+			ev.score = -dist
+			return ev, true
+		}
 	}
 	if !ev.understood {
 		return ev, true

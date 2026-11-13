@@ -950,3 +950,14 @@ func TestLastClueToLaterPlayerWhoWillPlayDoesNotDoomHisChop(t *testing.T) {
 		t.Fatalf("AI-1 應用「3」點 AI-3 的 R3，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestTempoClueToLockedHandIsPlayClue(t *testing.T) {
+	// 使用者的判斷：給鎖手的人的 Tempo Clue 是有價值的（沒有 chop 可 Chop Move，就是讓那張牌打出的 play clue）。
+	// 紀錄 20261007-113334 t30：使用者鎖手，B4 只知道是「B4 或 W4」，藍色就讓他確定能打；以前只在拖延時給這種提示，AI-2 棄牌
+	codes := "h21 h0G p1 h11 p5 p3 p5 h25 d4 d5 d5 h13 h24 p1 h12 d5 h0R d3 p1 d1 d3 h1B h04 p1 d1 p4 h05 h1W p1"
+	g, bots := replayCodes(t, 3, 1791344014939616000, 2, codes)
+	a := step(t, g, bots)
+	if a.Type != game.ActHint || a.Target != 0 || a.Hint.Kind != game.HintColor || a.Hint.Color != game.Blue {
+		t.Fatalf("AI-2 該用藍色點使用者的 B4，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
