@@ -231,7 +231,28 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 	if n := s.notes[played]; !n.clued {
 		n.finessed, n.finRec, n.giver = false, nil, -1
 	}
+	s.bluffDenies(rec.giver, played, x)
 	return true
+}
+
+// bluffDenies：Bluff 的盲打出 x 之後，給提示者看得到的已被拿到的牌都不是 x——他要負責盲打出的牌不和看得到的已提示牌重複
+// （Good Touch；AI 自己給 Bluff 時也要求 x 沒被別處拿到，evalBluff）。這只用大家都知道的事（這是 Bluff、盲打出的是 x、
+// 誰看得到哪張），各家照同一個規則排除，不像 revealGTP 要看誰把盲打的牌記成被 finesse。給提示者自己手上的他看不到，不算。
+// 使用者回報 20261113-165056：t2 AI-1 用「1」點到 AI-3 的 K1，t5 使用者藍色 Bluff、AI-1 盲打出 R1；使用者看得到 AI-3 的 1，
+// 是 R1 的話不會這樣 Bluff，所以那張是 K1。AI-3 以前一直記成「R1 或 K1」而不打。
+func (s *state) bluffDenies(giver, played int, x ident) {
+	for p, h := range s.hands {
+		if p == giver {
+			continue
+		}
+		for _, id := range h {
+			n := s.notes[id]
+			if id == played || n.giver < 0 || n.bad || !n.poss.has(x) || n.poss.count() == 1 {
+				continue
+			}
+			n.poss &^= setOf(x)
+		}
+	}
 }
 
 // applyBluff：rec 確定是 Bluff（連接筆記已撤掉）。焦點記成 Bluff 的目標；中間被 prompt 到的已提示牌，

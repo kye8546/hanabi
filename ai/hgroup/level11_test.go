@@ -287,3 +287,14 @@ func TestFiveStallFallbackDoesNotBlockBluff(t *testing.T) {
 		t.Errorf("AI-1 應把 AI-2 被白色點到的牌記成 W3（Bluff），卻是 %v", got.list())
 	}
 }
+
+func TestBluffDeniesDuplicateOfVisibleCluedCard(t *testing.T) {
+	// 使用者回報 20261113-165056：t2 AI-1 用「1」點到 AI-3 的 K1、W1，t5 使用者用藍色 Bluff、AI-1 盲打出 R1。
+	// 使用者看得到 AI-3 的 1，是 R1 的話不會讓 AI-1 盲打出重複的 R1，所以那張是 K1，AI-3 該打出它
+	codes := "h21 h31 p2 p3 h3B p1 h0R"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1794559856632818000, 11, codes)
+	a := step(t, g, bots)
+	if a.Type != game.ActPlay || g.Fireworks[game.Black] != 1 {
+		t.Fatalf("AI-3 該打出 K1，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}
