@@ -961,3 +961,15 @@ func TestTempoClueToLockedHandIsPlayClue(t *testing.T) {
 		t.Fatalf("AI-2 該用藍色點使用者的 B4，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestNoteRefutedByCardCountFallsBackToClue(t *testing.T) {
+	// 使用者回報 20261116-120334（Rainbow、Lv11）：t53 使用者用「3」點到 AI-3 的 B3、G3（綠色已完成）與 W3，
+	// 大家把 G3 那張記成 M3。另一張 M3 早在 t21 被棄，t58 AI-1 抽到最後一張 M3，AI-3 看得到它，
+	// 自己那張就不可能是 M3；以前筆記的可能被張數排除光後照舊留著 M3，t60 打錯。
+	// 改從提示本身的資訊重新推，那張只剩垃圾，AI-3 打出 W3
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1794801814762894000, 11,
+		"h3W p1 h11 h2R h2G p2 p1 h11 h25 p1 p3 h05 h3Y p2 d2 p4 h22 d4 p1 h1R d3 p1 h15 d1 h31 d3 h1R p1 d3 p1 h0W d1 d2 d2 h12 d1 h15 p1 h34 p1 d2 p1 p3 h05 h11 p1 h33 p4 p3 p3 p4 p3 h33 d3 h0Y p1 h2B d3 h1G")
+	if a := step(t, g, bots); a != game.Play(3) {
+		t.Fatalf("AI-3 應打出 slot 4 的 W3，卻 %+v（%s）", a, bots[3].s.why)
+	}
+}

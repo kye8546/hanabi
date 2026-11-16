@@ -297,9 +297,38 @@ func (s *state) deduce(h, id int) idSet {
 		}
 	}
 	if p == 0 {
+		// 筆記的每種可能張數都已用完（例如推論成 M3，最後一張 M3 卻在別人手上）：筆記錯了，
+		// 改從提示本身的資訊重新推（張數、Good Touch），多半只剩垃圾。
+		if n.poss&^s.countLeft(h, n.poss) == n.poss {
+			if q := s.countLeft(h, n.explicit); q != 0 {
+				r := q
+				if s.gotten(id) {
+					for _, i := range q.list() {
+						if s.gtpExcluded(h, id, i) {
+							r &^= 1 << i
+						}
+					}
+				}
+				if r != 0 {
+					return r
+				}
+				return q
+			}
+		}
 		return n.poss
 	}
 	return p
+}
+
+// countLeft 回傳 set 中從 h 的角度張數還沒用完的牌面。
+func (s *state) countLeft(h int, set idSet) idSet {
+	var r idSet
+	for _, i := range set.list() {
+		if s.remainingFor(h, i) > 0 {
+			r |= 1 << i
+		}
+	}
+	return r
 }
 
 // myPoss 是我對自己手牌推得出的可能（筆記已即時更新，這裡再算一次以涵蓋解讀提示當下的推論）。
