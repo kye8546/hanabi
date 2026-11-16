@@ -207,6 +207,9 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 	if s.tempoExtraPlays(it, touched) > 0 {
 		return true
 	}
+	if s.resolvesViaOwn(R, it.focus) {
+		return false
+	}
 	for _, t := range ts.list() {
 		if t.rank() == game.MaxRank {
 			return false
@@ -237,6 +240,41 @@ func (s *state) tempoValuable(R int, it *interp, touched []int, ts idSet) bool {
 		}
 	}
 	return true
+}
+
+// resolvesViaOwn：焦點早就是 R 收到的某個 play clue 的焦點，那個提示的直接解讀（不需要連接牌的，同 publicPoss）每一種
+// 都是現在就能打、或中間缺的牌都可能是 R 自己手上大家都知道現在能打的已提示牌——R 打完那些牌後焦點一定變成能打，
+// 這個 Tempo Clue 只是換了打的順序，沒有讓任何牌多打出，不是有價值的 Tempo Clue（是 TCCM）。
+// 和 20261020-120718 的差別：那裡的 slot 5 只被「3」點過、不是 play clue 的焦點，不補白色就不會打。
+// 使用者回報 20261116-172707 t6：黃色點到 AI-3 新抽的 Y1 和「1」點過的 M1，焦點可能是 Y1 / M1，或接在 M1 / Y1 後面的
+// Y2 / M2；AI-1 再用「1」點它被當成有價值的 play clue，沒去救 AI-2 chop 上的 M5。
+func (s *state) resolvesViaOwn(R, focus int) bool {
+	for i := len(s.recs) - 1; i >= 0; i-- {
+		rec := s.recs[i]
+		if rec.focus != focus || rec.target != R {
+			continue
+		}
+		direct := 0
+		for _, c := range rec.cands {
+			if c.save {
+				return false
+			}
+			if len(c.deps) > 0 {
+				continue
+			}
+			for r := s.stacks[c.id.color()] + 1; r < c.id.rank(); r++ {
+				m := identOf(c.id.color(), r)
+				if !slices.ContainsFunc(s.hands[R], func(y int) bool {
+					return y != focus && s.notes[y].clued && s.publicKnown(y) && s.publicPoss(y).has(m)
+				}) {
+					return false
+				}
+			}
+			direct++
+		}
+		return direct > 0
+	}
+	return false
 }
 
 // playsAnyway：id 是某個 play clue 的焦點，它的直接解讀（不需要連接牌的）全都是現在就能打、又不是 t 的牌——

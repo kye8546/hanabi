@@ -295,3 +295,23 @@ func TestL6DirectSaveOverTCCMWhenFocusPlaysAnyway(t *testing.T) {
 		t.Fatalf("AI-1 應用「2」救 AI-2 chop 上的 Y2，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL6ReclueOfFocusThatPlaysAfterOwnCardsIsTCCM(t *testing.T) {
+	// 使用者回報 20261116-172707 t6（Rainbow，4 人局）：使用者黃色點到 AI-3 新抽的 Y1 和「1」點過的 M1，
+	// 焦點可能是 Y1 / M1，或接在自己那張 1 後面的 Y2 / M2——AI-3 打完確定的 1 後一定會打它。
+	// 再用「1」點它只是換順序，不是有價值的 Tempo Clue：是 TCCM（AI-3 chop 上的 R4 被 Chop Move），
+	// AI-1 不該給，改用「5」救 AI-2 chop 上的 M5
+	const codes = "h31 h0R h15 p4 h3Y"
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1794821227767716000, 11, codes)
+	if a := step(t, g, bots); a != game.HintRankTo(2, 5) {
+		t.Fatalf("AI-1 應用「5」救 AI-2 chop 上的 M5，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	g, bots = replayCodesVariant(t, 4, game.RainbowSix, 1794821227767716000, 11, codes+" h31")
+	chop := g.Hands[3][3].Card.ID
+	for p := 1; p < 4; p++ {
+		bots[p].Act(g.View(p))
+		if !bots[p].s.notes[chop].cm {
+			t.Errorf("AI-%d 應把 AI-3 chop 上的 R4 記成被 Chop Move（「1」是 Tempo Clue Chop Move）", p)
+		}
+	}
+}
