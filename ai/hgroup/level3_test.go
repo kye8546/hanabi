@@ -538,3 +538,24 @@ func TestSarcasticDiscardFixesMisnotedCardFromLockedHand(t *testing.T) {
 		}
 	}
 }
+
+func TestFixWithNegativeInformation(t *testing.T) {
+	// 使用者回報 20261116-120334（Rainbow、Lv11）：t53 使用者用「3」點到 AI-3 的 B3、G3（綠色已完成）與已知的 W3，
+	// 大家把 B3、G3 兩張都記成「B3 或 M3」，AI-3 會把 G3 當成 M3 打出。任何顏色點到 G3 都分不出 G / M（彩虹被每種顏色點到），
+	// 要用不點到它的顏色揭露它不是彩虹：t55 AI-2 用白色只點 AI-3 的 W3，兩張都只剩 B3，AI-3 先打的那張照留、另一張是壞的
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1794801814762894000, 11,
+		"h3W p1 h11 h2R h2G p2 p1 h11 h25 p1 p3 h05 h3Y p2 d2 p4 h22 d4 p1 h1R d3 p1 h15 d1 h31 d3 h1R p1 d3 p1 h0W d1 d2 d2 h12 d1 h15 p1 h34 p1 d2 p1 p3 h05 h11 p1 h33 p4 p3 p3 p4 p3 h33 d3")
+	if a := step(t, g, bots); a != game.HintColorTo(3, game.White) {
+		t.Fatalf("AI-2 應用白色修 AI-3 的 G3，卻 %+v（%s）", a, bots[2].s.why)
+	}
+	g3 := g.Hands[3][1].Card.ID
+	for p, b := range bots {
+		b.Act(g.View(p))
+		if !b.s.notes[g3].bad {
+			t.Errorf("P%d 應把 AI-3 的 G3 記成壞牌（poss=%v）", p, b.s.notes[g3].poss.list())
+		}
+	}
+	if a := step(t, g, bots); a != game.Play(0) {
+		t.Errorf("AI-3 應打出 B3，卻 %+v（%s）", a, bots[3].s.why)
+	}
+}

@@ -114,6 +114,36 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 			mark(y, true, after)
 		}
 	}
+	// 用負向資訊修：提示沒點到新牌，卻讓 R 沒被點到、原本被當成有用的已被拿到的牌被推翻（筆記和提示矛盾），或只剩沒用的牌。
+	// 例如 Rainbow 裡被記成 M3、實際是 G3 的牌，任何顏色提示點到它都分不出 G / M，要用不點到它的顏色（點到別張）揭露它不是彩虹色
+	// （使用者回報 20261116-120334：t53「3」點到 AI-3 的 G3（綠色已完成）大家記成 M3，t55 AI-2 有提示卻沒修，t60 打錯）。
+	// 有新牌時照一般的 play / save clue 讀（負向資訊照樣寫進筆記，只是不當成 Fix Clue）。
+	// 只剩同一個牌面的幾張（例如兩張「B3 或 M3」都被排除 M3）交給下面的重複判斷，不在這裡互相當成重複。
+	cands := touched
+	if len(it.newCards) == 0 {
+		for _, y := range s.hands[R] {
+			if slices.Contains(touched, y) || !s.live(y) || !s.gotten(y) {
+				continue
+			}
+			before := s.notes[y].poss
+			ex := it.explicit[y]
+			after := before & ex
+			if good(before, y) == 0 || after == before {
+				continue
+			}
+			cands = append(cands, y)
+			switch {
+			case after == 0:
+				if g := goodAfter(ex, y); g != 0 {
+					mark(y, false, g)
+				} else {
+					mark(y, true, ex)
+				}
+			case good(after, y) == 0:
+				mark(y, true, after)
+			}
+		}
+	}
 	// 補資訊後 R 手上兩張以上已被拿到的牌確定是同一張：揭露了重複（例如三張被提示的 1 被紅色補成全是 r1），
 	// 只留一張，其餘是壞的
 	// 筆記和提示矛盾的牌（例如接收者原本推得是「垃圾或焦點的重複」）照提示本身確定的牌面算：給提示者看不到接收者的私下推論，
@@ -121,7 +151,7 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 	// 也點到新的 w4；AI-1 早就知道其中一張沒用，就把「4」讀成 w4 的 play clue、Self-Finesse 自己的 w2 而盲打錯）。
 	// 保留原本被當成有用的那張，其餘標成壞的
 	same := map[ident][]int{}
-	for _, y := range touched {
+	for _, y := range cands {
 		if _, done := it.fixPoss[y]; done || !s.live(y) {
 			continue
 		}
@@ -134,7 +164,10 @@ func (s *state) findFix(giver, R int, h game.Hint, touched []int, it *interp) {
 		}
 	}
 	for t, ys := range same {
-		if len(ys) < 2 {
+		// 提示前就已經都是 t（例如兩張都被記成 G5）不是這個提示揭露的：再點一次也只標出其中一張，另一張照樣會被當成 t 打錯
+		if len(ys) < 2 || !slices.ContainsFunc(ys, func(y int) bool {
+			return s.notes[y].poss != setOf(t) || it.explicit[y] != s.notes[y].explicit
+		}) {
 			continue
 		}
 		keep := ys[0]
@@ -225,8 +258,8 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 		switch {
 		case slices.Contains(it.fixed, y) && !s.badCard(y):
 			ev.misleads, ev.costly = true, true // 好牌被當成沒用的牌，會被棄掉
-		case p != 0 && !p.has(t):
-			ev.misleads = true
+		case p != 0 && !p.has(t) && !slices.Contains(it.fixed, y):
+			ev.misleads = true // 被標成壞牌的牌記成什麼都會被棄掉，不算誤導
 		case isBroken:
 			ev.fixes++
 			if now {
@@ -253,6 +286,19 @@ func (s *state) evalFix(it interp, ev clueEval, h game.Hint, dist int) clueEval 
 	}
 	if s.fixMisreadByBystander(it, h, ev.target, ev.touched) {
 		ev.misleads, ev.danger = true, true
+	}
+	// 修完後接收者手上還有會打錯的壞牌：這個提示擋不住眼前的閃電（例如兩張都被記成 G5，Stop Clue 只標出先打的那張，
+	// 另一張就確定是 G5 而打錯；使用者回報 20261116-120334 的修正後，重播 20261112-155241 t24 找到的情況）
+	if ev.fixesNow > 0 {
+		for y, now := range broken {
+			if _, ok := it.fixPoss[y]; !now || ok || s.holder(y) != it.receiver || s.playableNow(identOfCard(s.cards[y])) {
+				continue // 重複的兩張留下的那張實際能打，不會打錯
+			}
+			if p := s.notes[y].poss & it.explicit[y]; p != 0 && !slices.ContainsFunc(p.list(), func(i ident) bool { return !s.playableNow(i) }) {
+				ev.fixesNow = 0
+				break
+			}
+		}
 	}
 	ev.understood = !ev.misleads
 	ev.score = scoreFixNow*ev.fixesNow + scoreFix*ev.fixes + scoreNewGood*ev.newGood - scoreBadTouch*ev.bad - dist
