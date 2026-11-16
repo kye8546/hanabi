@@ -582,3 +582,24 @@ func TestL5GivesResolvableAmbiguousFinesse(t *testing.T) {
 	}
 	t.Fatalf("B1、B2 沒有打出，藍色煙火 %d", g.Fireworks[game.Blue])
 }
+
+func TestL5NoDirectClueOnCardBehindLayer(t *testing.T) {
+	// 使用者回報 20261113-172152：t11 AI-2 用綠色點使用者的 G3，Layered Finesse AI-1 的 R3（layer）→ G2。
+	// t12 AI-3 看得到整個計畫，卻又用綠色直接點 AI-1 的 G2——AI-1 打出 layer 後會跳過被提示的 G2、盲打下一張而打錯
+	codes := "h21 h0Y p1 h1R p4 p4 p3 h1Y h25 p3 h0G"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1794561712130706000, 11, codes)
+	a := step(t, g, bots)
+	if a.Type == game.ActHint && a.Target == 1 && a.Hint.Kind == game.HintColor && a.Hint.Color == game.Green {
+		t.Fatalf("AI-3 不該用綠色直接點 AI-1 的 G2：%+v（%s）", a, bots[3].Why())
+	}
+	// 之後全由 AI 行動：AI-1 盲打出 R3、G2，沒有人打錯
+	for range 8 {
+		step(t, g, bots)
+		if g.Strikes > 0 {
+			t.Fatalf("第 %d 回合有人打錯", g.Turn-1)
+		}
+	}
+	if g.Fireworks[game.Green] < 2 || g.Fireworks[game.Red] < 3 {
+		t.Fatalf("R3、G2 沒有打出：%v", g.Fireworks)
+	}
+}

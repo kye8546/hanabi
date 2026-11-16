@@ -253,6 +253,21 @@ func (s *state) applyWrongPrompt(fp int, ids idSet, rec *clueRec) {
 // 只在 Lv5 起（和 Stomping 算誤導同一級）：Lv2–4 套用時 3 人局 3000 局 -0.02–0.07、閃電略增（原因還沒查），Lv5 起持平。
 func (s *state) stomps(touched []int) bool {
 	for _, rec := range s.recs {
+		// Level 5：我看得到焦點、照實際牌面的計畫是 Layered Finesse 時，layer 後面那張真正的牌也已經有人會打——只有第一張
+		// （layer）被記成被 finesse，那張沒被拿到，直接提示它就踩到這個 finesse：盲打的人打出 layer 後會跳過它、盲打下一張
+		// （使用者回報 20261113-172152：t11 AI-2 用綠色點使用者的 G3、Layered Finesse AI-1 的 R3 → G2，t12 AI-3 又用綠色直接點
+		// AI-1 的 G2）。只看我自己的計畫：接收者角度的解讀只是猜測，擴大到它們會擋掉正常的提示
+		if !rec.bluff {
+			for _, d := range rec.plan {
+				if !d.finesse || d.layers == 0 || d.player == s.me {
+					continue
+				}
+				cards := s.depCards(d)
+				if last := cards[len(cards)-1]; !s.notes[last].clued && slices.Contains(touched, last) {
+					return true
+				}
+			}
+		}
 		if rec.target != s.me {
 			continue
 		}
