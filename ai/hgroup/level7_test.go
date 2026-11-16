@@ -194,3 +194,25 @@ func TestL7NoGenerationDiscardWhenMyPlayUnlocksP3(t *testing.T) {
 		t.Errorf("AI-1 應打出 slot 4 的 R2，卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestScreamWithPlayableRevealedBySarcasticDiscard(t *testing.T) {
+	// 使用者回報 20261116-101342 t36：提示 0 個，使用者 chop 上是 critical 的 K2。t34 AI-1 Sarcastic Discard 了 G4，
+	// 大家都知道 AI-3 被綠色點到的牌是 G4（能打）；AI-3 該 Scream Discard，以前只看提示本身「G4 或 G5」而照常打出 G4
+	codes := "h31 h0G h15 p4 p4 d4 h1W p2 h2W p1 p1 d4 d4 h0W d4 h2G p4 h3G p4 p4 h2Y d3 p1 h1Y h24 p2 p1 h1R d4 p1 h0W h14 p1 d1 h04"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1794795222378592000, 11, codes)
+	k2 := g.Hands[0][2].Card.ID
+	a := step(t, g, bots)
+	if a.Type != game.ActDiscard {
+		t.Fatalf("AI-3 該 Scream Discard，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	// 使用者被叫到，這一手不棄牌、給提示；他行動後 K2 被 Chop Move
+	if a := step(t, g, bots); a.Type != game.ActHint {
+		t.Fatalf("被 Scream 叫到的座位 0 該給提示，卻做了 %+v（%s）", a, bots[0].Why())
+	}
+	for p, b := range bots {
+		b.Act(g.View(p)) // 讓每個 AI 處理到這一手
+		if n, ok := b.s.note(k2); !ok || !n.cm {
+			t.Errorf("P%d 沒把使用者的 K2 記成被 Chop Move", p)
+		}
+	}
+}

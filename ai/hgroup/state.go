@@ -19,11 +19,14 @@ type note struct {
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
 	dist     bool     // Level 8 Distribution Clue 的焦點：刻意和別處已被拿到的牌重複，Good Touch 的排除不套用在它和那張牌之間
-	touches  int      // 被正向提示點到的次數（Level 4 Order Chop Move：點到次數不同的 1 不算同一組）
-	hinted   uint16   // 點到它的提示值（位元 0–7 顏色、8–12 數字）；正向資訊的多寡（Level 5 Prompts in Multi-Color Variants）
-	drawn    int      // 抽到這張牌時的事件序號（起手牌是 0；Level 5 Layered Finesse：提示之後才抽的牌不在 layer 裡）
-	explicit idSet    // 只由提示本身（正向與負向）得到的可能
-	poss     idSet    // 依慣例推論後的可能（隱含資訊）
+	// sdAs：Level 3 Sarcastic Discard 公開揭露的牌面（有人棄掉同一張傳給它，大家都推得出；0 = 沒有）。Level 7 判斷
+	// 「大家都知道能打 / 沒用」（screamIdents）也用它
+	sdAs     idSet
+	touches  int    // 被正向提示點到的次數（Level 4 Order Chop Move：點到次數不同的 1 不算同一組）
+	hinted   uint16 // 點到它的提示值（位元 0–7 顏色、8–12 數字）；正向資訊的多寡（Level 5 Prompts in Multi-Color Variants）
+	drawn    int    // 抽到這張牌時的事件序號（起手牌是 0；Level 5 Layered Finesse：提示之後才抽的牌不在 layer 裡）
+	explicit idSet  // 只由提示本身（正向與負向）得到的可能
+	poss     idSet  // 依慣例推論後的可能（隱含資訊）
 	// giverOwn：這張牌第一次被提示時，給提示者自己手上被提示的牌當時的解讀（牌 ID → 解讀），
 	// 用來判斷他當時知不知道自己那張是什麼（giverKnew）
 	giverOwn map[int][]cand

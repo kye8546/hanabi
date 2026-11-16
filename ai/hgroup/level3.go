@@ -696,6 +696,7 @@ func (s *state) sarcastic(e game.Event, certain bool) bool {
 	}
 	if len(cands) == 1 {
 		s.notes[cands[0]].poss = setOf(t)
+		s.notes[cands[0]].sdAs = setOf(t)
 	}
 	return true
 }

@@ -64,6 +64,11 @@ func (s *state) screamIdents(id int) idSet {
 			if s.notes[o].clued && s.live(o) {
 				ids = append(ids, o)
 				P[o] = s.notes[o].explicit & s.useful()
+				// Sarcastic Discard 公開揭露的牌面（使用者回報 20261116-101342 t36：AI-1 Sarcastic Discard G4 之後，大家都知道
+				// AI-3 被綠色點到的是 G4，AI-3 該 Scream Discard 救使用者 chop 上的 K2，以前只看提示本身「G4 或 G5」）
+				if sd := s.notes[o].sdAs; sd != 0 && P[o]&sd != 0 {
+					P[o] &= sd
+				}
 			}
 		}
 	}
