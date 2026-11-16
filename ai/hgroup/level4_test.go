@@ -404,3 +404,24 @@ func TestFiveCMWhenSaveExposesCritical(t *testing.T) {
 		t.Errorf("AI-1 應該給「5」（5's Chop Move），卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestL4OCMNotBlockedByRuledOutFallback(t *testing.T) {
+	// 使用者回報 20261116-094516 t14：使用者的「1」點到 AI-1 的 K1、R1，AI-2 chop 上是 critical 的 K3。
+	// t9 綠色的焦點早已確定是 G3，fallback 裡「self-finesse AI-1 的牌當 G3、G4」還留著，AI-1 就以為 K1 可能是被 finesse 的牌，
+	// 照順序打出 R1、不做 Order Chop Move
+	codes := "h2Y h21 p1 p1 h3Y h2Y p2 p3 h1G h25 p2 p1 h11"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1794793516012337000, 11, codes)
+	k3 := g.Hands[2][2].Card.ID
+	a := step(t, g, bots)
+	if a.Type != game.ActPlay || a.Slot != 2 {
+		t.Fatalf("AI-1 該打位置 3 的 1（Order Chop Move），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	for range 4 {
+		step(t, g, bots)
+	}
+	for p, b := range bots {
+		if n, ok := b.s.note(k3); !ok || !n.cm {
+			t.Errorf("P%d 沒把 AI-2 的 K3 記成被 Chop Move", p)
+		}
+	}
+}

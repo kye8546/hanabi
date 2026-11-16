@@ -288,6 +288,12 @@ func (s *state) mayBeFinessed(x int) bool {
 			return true
 		}
 		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
+			// 焦點的筆記已經排除的解讀不算（大家的筆記都推得出；使用者回報 20261116-094516 t14：綠色的焦點早已確定是 G3，
+			// fallback 裡「G5，self-finesse 我的牌當 G3、G4」還留著，AI-1 就以為被「1」點到的 K1 可能是被 finesse 的牌，
+			// 不做 Order Chop Move 保護 AI-2 chop 上的 K3）
+			if fn, ok := s.note(rec.focus); ok && s.holder(rec.focus) >= 0 && !fn.poss.has(c.id) {
+				continue
+			}
 			if slices.ContainsFunc(c.deps, isX) {
 				return true
 			}
