@@ -915,7 +915,7 @@ func (s *state) promptPassed(rec *clueRec, c cand, e game.Event, played, waitFor
 // 我看得到就是它，或那是我自己而我的筆記容許。他看不到自己的已提示牌，照 deferMyPrompt 會先等那人盲打，這次沒打不算沒接 prompt
 // （否則只有他一個人知道還在等，其他人照 promptPassed 刪掉這個解讀，筆記就不一致）。
 func (s *state) mayDeferPrompt(rec *clueRec, d dep) bool {
-	if !s.knows(lvReverseFinesse) || d.player == rec.giver {
+	if !s.knows(lvReverseFinesse) || d.player == rec.giver || rec.free.prompts(s.notes[d.card]) {
 		return false
 	}
 	pos := func(p int) int { return (p - rec.giver + s.n) % s.n }

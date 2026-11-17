@@ -65,3 +65,11 @@ func (s *state) freeChoiceFinesse(obs, id int, m ident) bool {
 	pos := uint8(s.notes[id].hinted) // 點到它的顏色（hinted 的低 8 位元）
 	return pos&f.colors != 0 && pos&(1<<f.chosen) == 0
 }
+
+// freeChoicePrompt（The Free Choice Prompt）：給提示者有 Free Choice、其中有和已提示牌 id 被點到的顏色相同的顏色，
+// 他也正好選了它——原文規定這時一定要選相同的顏色，選了就是 prompt 這張；要 finesse 別人的話他會選別的顏色
+// （freeChoiceFinesse）。所以後面另一位的 finesse position 正好是那張時也不必等他（deferMyPrompt、mayDeferPrompt）。
+func (f freeChoice) prompts(n *note) bool {
+	pos := uint8(n.hinted)
+	return f.colors != 0 && pos&f.colors != 0 && pos&(1<<f.chosen) != 0
+}

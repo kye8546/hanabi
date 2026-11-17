@@ -523,7 +523,7 @@ func (s *state) onClue(e game.Event) {
 			rec.plan = slices.DeleteFunc(slices.Clone(rec.plan), func(d dep) bool { return d.player == R })
 		}
 		if !it.ownMaybe { // 可能把我同一張算兩次時本來就不寫我那張的 prompt 筆記（下面），不必等
-			rec.promptWait = s.deferMyPrompt(e.Player, R, it.focus, it.truth, rec.plan) + 1
+			rec.promptWait = s.deferMyPrompt(e.Player, R, it.focus, it.truth, rec.plan, it.free) + 1
 		}
 		for _, d := range rec.plan {
 			if d.player == s.me && rec.promptWait > 0 {

@@ -296,13 +296,16 @@ func (s *state) stomps(touched []int) bool {
 // 和接收者的 reverseInsteadOfSelfPrompt 同一個道理（使用者回報 20261111-151842 t47：使用者用綠色點 AI-1 的 G2，
 // AI-2 被救下的「G1 或 G4」實際是 G4，AI-3 的 finesse position 是 G1；AI-2 以前照 prompt 打出而打錯）。
 // 其他人照 mayDeferPrompt 不把我這段等待當成沒接 prompt。
-func (s *state) deferMyPrompt(giver, R, focus int, t ident, plan []dep) int {
+// Rainbow 的 Free Choice Prompt 不等：給提示者有 Free Choice 而選了和我那張相同的顏色，就是 prompt 我（freeChoice.prompts；
+// 使用者回報 20261117-083325 t45：使用者用紅色點 AI-2 的 M4，綠色、白色也只點到它，AI-1 被紅色點過的 M1 卻等
+// finesse position 是 M1 的 AI-3 而棄牌）。
+func (s *state) deferMyPrompt(giver, R, focus int, t ident, plan []dep, free freeChoice) int {
 	if !s.knows(lvReverseFinesse) || giver == s.me || R == s.me {
 		return -1
 	}
 	var mine []ident
 	for _, d := range plan {
-		if d.player == s.me && !d.finesse {
+		if d.player == s.me && !d.finesse && !free.prompts(s.notes[d.card]) {
 			mine = append(mine, d.id)
 		}
 	}

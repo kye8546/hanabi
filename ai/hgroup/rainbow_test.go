@@ -133,3 +133,18 @@ func TestBlindPlayRulesOutMyPromptedCard(t *testing.T) {
 		t.Fatalf("AI-2 的 slot 3 是 m4，不該當成 m2 棄掉（%s）", bots[2].s.why)
 	}
 }
+
+func TestFreeChoicePromptDoesNotWaitForLaterFinesse(t *testing.T) {
+	// 使用者回報 20261117-083325 t45（Rainbow，4 人局）：使用者用紅色點 AI-2 的 M4（綠色、白色也只點到它：Free Choice），
+	// 紅色和 AI-1 被紅色點過的 M1 相同，是 Free Choice Prompt。AI-3 的 finesse position 正好是 M1，AI-1 以前照
+	// deferMyPrompt 先等 AI-3 而棄牌；選了相同的顏色就是 prompt AI-1，要 finesse 別人時會選別的顏色
+	const codes = "h2W h0G h15 p1 h3Y p1 d4 p2 p2 h33 p2 p3 h3B h25 d1 p1 d4 h04 h0Y h1W p4 p4 h0G h2G p1 d3 p4 h1G p2 p1 d2 h12 d3 p1 h03 d2 h13 p4 d2 h1R p1 p1 d2 p3 h2R"
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1794875605306264000, 11, codes)
+	m1 := g.Hands[1][1].Card
+	if m1.Color != game.Rainbow || m1.Rank != 1 {
+		t.Fatalf("布置錯誤：AI-1 slot 2 應是 M1，卻是 %+v", m1)
+	}
+	if a := step(t, g, bots); a != game.Play(1) {
+		t.Fatalf("AI-1 應打出被 Free Choice Prompt 的 M1（slot 2），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
