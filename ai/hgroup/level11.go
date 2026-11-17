@@ -78,6 +78,15 @@ func (s *state) bluffBlocked(rec *clueRec, B, played int, x ident) bool {
 			// 又盲打下一張當 G1 而打錯）
 			continue
 		}
+		if r.target == s.me && B != s.me && rec != nil && !slices.ContainsFunc(append(slices.Clone(r.cands), r.fallback...), func(c cand) bool {
+			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == B })
+		}) {
+			// 我是那個提示的接收者、看不到焦點，但他看得到：他只會照實際的計畫接它。我替那個提示算的解讀（含 fallback）
+			// 都用不到他的牌時，就沒有一種說得通的計畫要他盲打——他不是在接它（使用者回報 20261117-102820 t30：
+			// AI-2 的紅色點 AI-3 的 M1，AI-3 的解讀是 M1 或「R4，Reverse Finesse 使用者的 R2」；使用者接著用藍色
+			// Bluff AI-1，AI-1 盲打出 R2，AI-3 以前以為可能是在接紅色而不當成 Bluff，照「Reverse Finesse 自己的 B3」盲打錯 W5）
+			continue
+		}
 		ids := s.notes[r.focus].poss
 		if t, ok := s.see(s.me, r.focus); ok && rec != nil {
 			ids = setOf(t) // 給提示前模擬時保守一點：看不到焦點的人（例如它的持有者）只知道共同筆記

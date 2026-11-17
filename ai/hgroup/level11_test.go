@@ -298,3 +298,23 @@ func TestBluffDeniesDuplicateOfVisibleCluedCard(t *testing.T) {
 		t.Fatalf("AI-3 該打出 K1，卻做了 %+v（%s）", a, bots[3].Why())
 	}
 }
+
+func TestBluffNotBlockedByClueThatNeverUsesBluffee(t *testing.T) {
+	// 使用者回報 20261117-102820 t30（Rainbow，4 人局）：t27 AI-2 的紅色點 AI-3 的 M1，AI-3 看不到，解讀是 M1 或
+	// 「R4，Reverse Finesse 使用者的 R2」——都用不到 AI-1。t29 使用者用藍色點 AI-2 chop 上的 B4（B3 誰都沒有），
+	// t30 AI-1 盲打出 R2：藍色接不上，是 Bluff。AI-3 以前以為 AI-1 可能在接紅色而不當成 Bluff，
+	// 照「Reverse Finesse 自己的 B3」在 t32 盲打錯 W5
+	const codes = "h3Y p1 h31 p3 h3Y p2 h1B p2 h1R p1 h35 p3 d4 p4 d4 h02 d4 h03 p1 h0G p2 h3G d4 d1 p4 d3 h3R p4 h2B p1 h04"
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1794882500904103000, 11, codes)
+	if a := step(t, g, bots); a.Type == game.ActPlay && a.Slot == 0 {
+		t.Fatalf("t29 的藍色是 Bluff，AI-3 不該盲打 finesse position（%s）", bots[3].Why())
+	}
+	for p := 1; p < 4; p++ {
+		bots[p].Observe(g.View(p))
+		for _, r := range bots[p].s.recs {
+			if r.giver == 0 && r.target == 2 && !r.bluff {
+				t.Errorf("AI-%d 應把 t29 的藍色讀成 Bluff", p)
+			}
+		}
+	}
+}
