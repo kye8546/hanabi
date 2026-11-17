@@ -536,6 +536,21 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 			if a, tier := s.stallTier(allowed); tier > 2 {
 				return a, "Double Discard Avoidance：上一位棄掉的牌只剩一張，可能就在我的 chop 上，給拖延提示"
 			}
+			// Stall Table 嚴重度 2 也允許 Hard Burn（重新點已提示的牌、不給新資訊，通常是 5）：沒有別的拖延提示時用它
+			// （使用者回報 20261117-152811 t20：AI-2 剛棄掉 Y4，AI-3 的 chop 可能是最後的 Y4，唯一的拖延提示是用「5」
+			// 重新點使用者已被救下的 G5，以前一律不給不帶新資訊的提示，AI-3 就棄掉了最後的 Y4）。
+			// 只在 3 人以上（AI 的判斷，原文沒限人數）：2 人局對方剛棄完牌、多半仍沒事可做，燒掉一個提示只是把問題延後，
+			// 3000 局 2 人局 -0.03–0.12（Rainbow 最多）；限制成「還有 3 個以上提示」結果完全相同，問題不在提示少的時候
+			restore := s.saveSim()
+			s.retouch = true
+			var retouch []clueEval
+			if s.n >= 3 {
+				retouch = slices.DeleteFunc(s.allClues(), func(e clueEval) bool { return e.kind != kindStall && e.kind != kindTempo })
+			}
+			restore()
+			if a, tier := s.stallTier(retouch); tier > 2 {
+				return a, "Double Discard Avoidance：上一位棄掉的牌只剩一張，可能就在我的 chop 上，重新點已提示的牌拖延（Hard Burn）"
+			}
 		}
 		return game.Discard(slices.Index(hand, chop)), "棄牌"
 	}
@@ -556,7 +571,7 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 		// 使用者回報 20261029-101614 t29：AI-1 鎖手，重新點 AI-2 的 R2 就是 Tempo Clue，卻棄了 W5
 		if bestRisk >= 0.7 {
 			restore := s.saveSim()
-			s.lockedRetouch = true
+			s.retouch = true
 			retouch := s.allClues()
 			restore()
 			if a, tier := s.stallTier(retouch); tier > 2 {

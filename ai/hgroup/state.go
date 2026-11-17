@@ -177,8 +177,9 @@ type sim struct {
 	// notFix：照一般的 play / save 解讀，不當成 Fix Clue（給提示者推測看不出是 Fix Clue 的旁觀者怎麼讀，evalFix）
 	notFix bool
 
-	// lockedRetouch：我鎖手、要棄的已提示牌很可能是 critical 時，評估「不給新資訊」的提示（重新點已提示的牌拖延）
-	lockedRetouch bool
+	// retouch：評估「不給新資訊」的提示（重新點已提示的牌拖延，Hard Burn）——我鎖手、要棄的已提示牌很可能是 critical 時，
+	// 或我在 Double Discard Situation、沒有別的拖延提示時（discard）
+	retouch bool
 }
 
 // saveSim 存下目前的假設情境，回傳還原它的函式。

@@ -33,6 +33,22 @@ func TestL9DoubleDiscardAvoidance(t *testing.T) {
 	}
 }
 
+func TestL9DDAHardBurn(t *testing.T) {
+	// 同上，但 Cathy 的 r5 早已確定是 r5（被提示過），Bob 沒有其他拖延提示：Stall Table 嚴重度 2 允許 Hard Burn，
+	// Bob 重新點 r5 拖延，不棄可能是最後一張 r4 的 chop（使用者回報 20261117-152811 t20）。Cathy 不會打出 r5
+	g, bots := scenarioAt(t, 9, "", "y3 g3 b3 w3 r4", "b4 y4 g2 w2 r3", "r5 g3 b3 y3 w3")
+	g.Hints = 5
+	preClued(t, g, bots, 2, 0, idents(t, "r5"))
+	force(t, g, game.Discard(4))
+	a := step(t, g, bots)
+	if a.Type != game.ActHint || a.Target != 2 || !a.Hint.Matches(game.Card{Color: game.Red, Rank: 5}) {
+		t.Fatalf("Bob 應重新點 Cathy 的 r5 拖延，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	if got := step(t, g, bots); got == game.Play(0) {
+		t.Errorf("Cathy 不該打出 r5")
+	}
+}
+
 func TestL9NoDDAWhenOtherCopyVisible(t *testing.T) {
 	// 同上，但另一張 r4 就在 Cathy 手上，Bob 看得到：他的 chop 不可能是 r4，照常棄牌
 	g, bots := scenarioAt(t, 9, "", "y3 g3 b3 w3 r4", "b4 y4 g2 w2 r3", "r5 g3 b3 r4 w3")

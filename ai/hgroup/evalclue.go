@@ -177,13 +177,14 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		ev.misleads = true
 		return ev, true
 	}
-	if s.knows(lvFixClue) && len(it.newCards) == 0 && !s.lockedRetouch &&
+	if s.knows(lvFixClue) && len(it.newCards) == 0 && !s.retouch &&
 		!slices.ContainsFunc(touched, func(id int) bool { return it.explicit[id] != s.notes[id].explicit }) &&
 		!s.finessingTempo(it, touched, ev) {
 		// 不給任何新資訊的提示：接收者若已經（私下推得）知道其中某張是他下一手要打的牌，就會當成 Stop Clue
 		// 而棄掉它（Level 3 Fix Clue）。我看不到他的私下推論，不冒這個險。
-		// 我鎖手、又只能棄很可能是 critical 的已提示牌時例外（discard 的 lockedRetouch）：鎖手的人重新點已提示的牌
-		// 是拖延，不是 Stop Clue（findFix），照一般的解讀評估
+		// 例外（discard 的 retouch）：我鎖手、又只能棄很可能是 critical 的已提示牌時，鎖手的人重新點已提示的牌
+		// 是拖延，不是 Stop Clue（findFix）；我在 Double Discard Situation 時 Stall Table 也允許 Hard Burn。照一般的解讀評估
+		// （點到接收者下一手要打的牌時他照樣會讀成 Stop Clue，模擬得出來）
 		ev.misleads = true
 		return ev, true
 	}
