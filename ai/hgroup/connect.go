@@ -376,6 +376,7 @@ func (s *state) depCards(d dep) []int {
 // 中間的牌再由左而右配成 slot 4 = W2、slot 5 = W3，t32 打錯）。
 func (s *state) markDep(rec *clueRec, d dep) {
 	n := s.notes[d.card]
+	n.layerAlt = s.promptLayers(d)
 	same := n.poss == setOf(d.id) && n.willPlay && (!d.finesse || n.finessed && n.finRec != nil)
 	n.poss = setOf(d.id)
 	n.willPlay = true
@@ -386,6 +387,33 @@ func (s *state) markDep(rec *clueRec, d dep) {
 	if !same {
 		rec.changed = append(rec.changed, d.card)
 	}
+}
+
+// promptLayers：prompt 持有者的已提示牌 d.card 當成 d.id 時，持有者分不出是一般的 prompt，還是它其實是現在就能打的別張、
+// 承諾接著移到他下一張可能是 d.id 的已提示牌（Level 5 Layered Prompt，layeredPrompt）——兩種情況給提示者都會這樣給。
+// 他還有那樣的另一張已提示牌時，回傳這張可能是的、現在就能打的牌面（note.layerAlt）：筆記照樣記成 d.id（照它行動），
+// 但 Good Touch 不拿它把 d.id 從另一張排除，否則另一張會被推成那張能打的牌而打出。使用者回報 20261117-181940 t44：
+// AI-3 被「4」點到的是 W4（slot 1）、R4（slot 4），紅色點使用者的 R5 要 prompt R4，AI-3 把 slot 1 記成 R4、slot 4 推成 W4，
+// 打出最後一張 R4 而打錯。直接把 layer 的牌面放進筆記也能修，但之後要 prompt 那個牌面的提示會以為可能是這張，變得不清楚。
+func (s *state) promptLayers(d dep) idSet {
+	if d.finesse || !s.knows(lvHiddenFinesse) {
+		return 0
+	}
+	var layer idSet
+	for _, i := range s.notes[d.card].poss.list() {
+		if i != d.id && s.playableNow(i) {
+			layer |= setOf(i)
+		}
+	}
+	if layer == 0 {
+		return 0
+	}
+	for _, o := range s.hands[d.player] {
+		if n := s.notes[o]; o != d.card && n.clued && !n.willPlay && n.poss.has(d.id) {
+			return layer
+		}
+	}
+	return 0
 }
 
 // selfMark：每種解讀都要 who 自己同一張牌（self-prompt，或 Level 2 的 self-finesse）時，那張牌就是連接牌。

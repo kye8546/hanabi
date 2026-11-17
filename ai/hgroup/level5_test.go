@@ -603,3 +603,22 @@ func TestL5NoDirectClueOnCardBehindLayer(t *testing.T) {
 		t.Fatalf("R3、G2 沒有打出：%v", g.Fireworks)
 	}
 }
+
+func TestL5LayeredPromptKeepsOtherClued(t *testing.T) {
+	// 使用者回報 20261117-181940 t44：Cathy 被「4」點到兩張（slot 1 是 w4、slot 5 是 r4，提示資訊只剩 r4 / w4），
+	// Bob 紅色點 Alice 的 r5（Alice 已知的 r3 接上）要 prompt Cathy 的 r4。Cathy 分不出 slot 1 是 r4，還是能打的 w4
+	// （Layered Prompt：先打出它，承諾再移到 slot 5），不能用 Good Touch 把 slot 5 推成 w4 而現在打出。
+	g, bots := scenario6(t, 5, "r2 w3", "r3 r5 g4 b4 y4", "y3 g3 b2 g2 y2", "w4 g3 b3 y3 r4")
+	g.Hints = 6
+	preClued(t, g, bots, 0, 0, idents(t, "r3"))
+	preClued(t, g, bots, 2, 0, idents(t, "r4 w4"))
+	preClued(t, g, bots, 2, 4, idents(t, "r4 w4"))
+	force(t, g, game.Discard(4))               // Alice
+	force(t, g, game.HintColorTo(0, game.Red)) // Bob：Alice 的 r3、r5
+	if a := step(t, g, bots); a.Type == game.ActPlay && (a.Slot == 0 || a.Slot == 4) {
+		t.Fatalf("Cathy 的兩張 4 都還不確定能打，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+	if got := noteOfCard(t, bots[2], g, 2, "r4"); !got.has(identOfCard(card(t, "r4"))) {
+		t.Errorf("Cathy 的 slot 5 應保留 r4 的可能，筆記卻是 %v", got.list())
+	}
+}

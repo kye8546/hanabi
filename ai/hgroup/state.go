@@ -18,7 +18,10 @@ type note struct {
 	start    bool     // 起手牌（Level 3 Playing Multiple 1's：起手牌的 1 由舊到新打）
 	bad      bool     // 已知是沒用的牌（Level 3 Fix Clue、多出來的 1），不論筆記上還剩哪些牌面
 	cm       bool     // Level 4 Chop Moved：沒被提示，但視同有隱形提示、永遠不棄（chop 跳過它）；被提示點到後就是一般的已提示牌
-	dist     bool     // Level 8 Distribution Clue 的焦點：刻意和別處已被拿到的牌重複，Good Touch 的排除不套用在它和那張牌之間
+	// layerAlt：被 prompt 成某張時，它其實也可能是現在就能打的別張（Level 5 Layered Prompt，promptLayers）；
+	// 這時 Good Touch 不拿它把那個牌面從持有者的其他已提示牌排除（gtpExcluded）
+	layerAlt idSet
+	dist     bool // Level 8 Distribution Clue 的焦點：刻意和別處已被拿到的牌重複，Good Touch 的排除不套用在它和那張牌之間
 	// sdAs：Level 3 Sarcastic Discard 公開揭露的牌面（有人棄掉同一張傳給它，大家都推得出；0 = 沒有）。Level 7 判斷
 	// 「大家都知道能打 / 沒用」（screamIdents）也用它
 	sdAs     idSet

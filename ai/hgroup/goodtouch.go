@@ -390,7 +390,7 @@ func (s *state) gtpExcluded(h, card int, i ident) bool {
 			} else if c, ok := s.card(id); ok {
 				known = identOfCard(c) == i
 			}
-			if !known {
+			if !known || q == h && s.layerPossible(id) {
 				continue
 			}
 			o := *s.notes[id]
@@ -404,6 +404,18 @@ func (s *state) gtpExcluded(h, card int, i ident) bool {
 				o.seq == m.seq {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// layerPossible：被 prompt 的牌 id 還可能是現在就能打的別張（Layered Prompt 的 layer，note.layerAlt；提示資訊還容許、
+// 那個牌面現在仍能打）。
+func (s *state) layerPossible(id int) bool {
+	n := s.notes[id]
+	for _, i := range (n.layerAlt & n.explicit).list() {
+		if s.playableNow(i) {
+			return true
 		}
 	}
 	return false
