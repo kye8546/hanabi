@@ -143,6 +143,10 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		case id == it.focus && distWorth:
 			seen |= 1 << c
 			continue
+		case slices.Contains(it.staleBad, id) && !s.trash(c) && !seen.has(c) && !s.gottenAs(s.me, s.me, c, id):
+			// Level 12 Stale 1's Clue：接收者會把照順序先打的那張 1 當成壞的棄掉，它實際卻是有用的牌
+			ev.bad++
+			ev.misleads = true
 		case id != it.focus && (s.trash(c) || seen.has(c)) && s.seenAsTrash(it, id):
 			// 接收者推得出它不可能有用（垃圾，或只可能是焦點的重複）：不會造成誤解，還多知道一張可以先棄的牌
 			ev.trashMarked++

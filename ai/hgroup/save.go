@@ -75,7 +75,11 @@ func (s *state) saveIsOthersJob(R int, t ident) bool {
 	}
 	mine := matching(s.me)
 	for k := 1; (s.me+k)%s.n != R; k++ {
-		if matching((s.me+k)%s.n) < mine {
+		q := (s.me + k) % s.n
+		m := matching(q)
+		// Level 12：一樣多時，提示資訊比較不明確（每張是 t 的機率比較低）的人負責（原文 Example 5：兩張藍牌各 1/9、
+		// 兩張 2 各 1/8 時由藍牌那位救）；機率也一樣時誰救都可以，我就救
+		if m < mine || m == mine && s.knows(lvDupResponsibility) && s.dupChance(q, t) < s.dupChance(s.me, t) {
 			return true
 		}
 	}
@@ -85,6 +89,32 @@ func (s *state) saveIsOthersJob(R int, t ident) bool {
 		}
 	}
 	return false
+}
+
+// dupChance：從 p 自己的角度，他手上已被拿到、可能是 t 的牌合起來是 t 的機率（每張照還下落不明的張數算，加總）。
+// Level 12 Duplication Responsibility：可能重複的張數一樣多時，比這個值。
+func (s *state) dupChance(p int, t ident) float64 {
+	sum := 0.0
+	for _, id := range s.hands[p] {
+		if !s.gotten(id) {
+			continue
+		}
+		poss := s.notes[id].poss
+		if p == s.me {
+			poss = s.myPoss(id)
+		}
+		if !poss.has(t) {
+			continue
+		}
+		total := 0
+		for _, u := range poss.list() {
+			total += max(s.remainingFor(p, u), 0)
+		}
+		if total > 0 {
+			sum += float64(max(s.remainingFor(p, t), 0)) / float64(total)
+		}
+	}
+	return sum
 }
 
 // saveWeight：必須保留的牌有多重要（critical / 5 > 2 > 其他，例如唯一看得到的可打牌）。

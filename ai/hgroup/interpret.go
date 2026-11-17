@@ -40,6 +40,9 @@ type interp struct {
 	trashNew   []int
 	tempoExtra int // Tempo Clue 點到的其他舊牌因此確定現在能打的張數（tempoExtraPlays）
 
+	// staleBad：Level 12 The Stale 1's Clue 被當成壞的那張 1（也在 trashNew 裡；沒有就是 nil）
+	staleBad []int
+
 	// 我看得到焦點牌時才有
 	hasTruth bool
 	truth    ident
@@ -109,12 +112,19 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 	}
 
 	it.anySave = s.anySaveStall(giver, R, touched, &it)
+	// Level 12 The Stale 1's Clue：照順序會先打的那張 1 是壞的（已知垃圾），焦點是下一張
+	pendingTouched := touched
+	if bad, next, ok := s.stale1s(giver, R, h, &it, fresh); ok {
+		it.trashNew, it.staleBad = append(it.trashNew, bad), []int{bad}
+		it.focus, it.chopFocus = next, false
+		pendingTouched = slices.DeleteFunc(slices.Clone(touched), func(id int) bool { return id == bad })
+	}
 
 	defer s.saveSim()()
 	// 我看得到被點到的牌時：這次提示的 Good Touch 推論立刻生效（給提示者看得到我的已提示牌，
 	// 就不會點到和它們一樣的牌），算解讀時就用得上
 	if R != s.me {
-		s.pending, s.pendingGiver = touched, giver
+		s.pending, s.pendingGiver = pendingTouched, giver
 	}
 
 	// 這次被點到的牌不在 finesse position 上（finesseSlot 會跳過）
@@ -154,6 +164,11 @@ func (s *state) interpret(giver, R int, h game.Hint, touched []int) interp {
 
 	base := s.overlay[it.focus]
 	maySave := it.chopFocus || it.anySave || it.cmKind == cmFive || it.endStall || s.fiveStall(giver, h) && (len(it.newCards) > 0 || s.mustStall(giver))
+	// Level 12 Focus Inversion：chop 依提示資訊不可能是 play / save clue 的焦點，焦點改成最左邊的新牌（一般的 play clue）
+	if s.focusInverted(giver, R, h, &it, fresh) {
+		it.focus, it.chopFocus, maySave = fresh[0], false, false
+		base = s.overlay[it.focus]
+	}
 	candsOf := func() []cand {
 		cs := s.playCands(R, giver, R, it.focus, base)
 		if it.anySave {

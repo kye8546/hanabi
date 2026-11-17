@@ -132,6 +132,9 @@ type state struct {
 	lastClue *clueRec
 	// bluffCard：正在處理的盲打是 Bluff 的盲打（checkDeps 不拿它當其他提示的證據；-1 = 無）
 	bluffCard int
+	// earlyEnd：最近一個行動是結束 Early Game 的棄牌時，誰棄的、棄牌前有幾個提示（下一個行動之後清掉）。
+	// Level 12 The Stale 1's Clue：緊接著的「1」點到的 1 若都是好的，棄牌的人必須先給
+	earlyEnd *earlyEndRec
 	// acted[p]：p 最近一次行動（不含抽牌）的事件序號（Level 11：他從某個提示之後還沒輪過，盲打可能是在回應那個提示）
 	acted [game.MaxPlayers]int
 }
@@ -379,6 +382,13 @@ func (s *state) apply(e game.Event) {
 	if e.Type != game.EvDraw {
 		defer func() { s.moved, s.acted[e.Player] = true, s.seq }()
 	}
+	if ended := s.earlyEnd; e.Type != game.EvDraw {
+		defer func() {
+			if s.earlyEnd == ended {
+				s.earlyEnd = nil
+			}
+		}()
+	}
 	// Level 9：Double Discard Avoidance 只管上一位棄牌後的下一個行動（抽牌不算）
 	if dd := s.dda; dd != nil && e.Type != game.EvDraw {
 		defer func() {
@@ -481,6 +491,9 @@ func (s *state) apply(e game.Event) {
 			// Early Game 是有人棄掉 chop 之前（Level 1）：棄掉已被提示的牌（已知垃圾、Sarcastic Discard、鎖手被迫）不算
 			// （Level 9：「only ended when the first completely unknown card is discarded」）
 			if !s.gotten(e.Card.ID) {
+				if !s.midGame {
+					s.earlyEnd = &earlyEndRec{player: e.Player, hints: s.hints}
+				}
 				s.midGame = true
 			}
 			s.hints = min(s.hints+1, game.MaxHints)

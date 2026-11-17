@@ -3,7 +3,7 @@ package hgroup
 import "hanabi/game"
 
 // MaxLevel 是目前已實作的最高慣例等級。
-const MaxLevel = 11
+const MaxLevel = 12
 
 // Levels 是 H-Group 的 25 個慣例等級名稱（Levels[0] = Level 1）。
 var Levels = [...]string{
@@ -36,29 +36,32 @@ var Levels = [...]string{
 
 // 各技巧從哪個 H-Group 等級開始。低於該等級的 AI 不給、也不那樣解讀（s.knows）。
 const (
-	lvMultiConnect   = 2  // 一個提示多張連接牌：Double / Triple Prompt、Double Finesse、Prompt + Finesse
-	lvReverseFinesse = 2  // Reverse Finesse：finesse 接收者之後的人
-	lvSelfFinesse    = 2  // Self-Finesse：finesse 接收者自己（以及 finesse 對象讓給看得到的後一位）
-	lvFiveStall      = 2  // 5 Stall
-	lvWrongPrompt    = 2  // Wrong Prompt
-	lvMultipleOnes   = 3  // Playing Multiple 1's（出牌順序、焦點、多出來的 1）
-	lvFixClue        = 3  // Fix Clue（含 Stop Clue；Misplay Cost Principle 的修正）
-	lvSarcastic      = 3  // Sarcastic Discard
-	lvInfoLock       = 3  // Information Lock on In-Between Cards
-	lvChopMove       = 4  // Chop Moves：Trash / 5's / Order Chop Move
-	lvQueuedFinesse  = 5  // Queued Finesse：finesse 手上已有待打 finesse 牌的人，照提示先後盲打
-	lvLayeredFinesse = 5  // Layered / Clandestine Finesse：盲打出別張能打的牌時，繼續盲打下一張
-	lvHiddenFinesse  = 5  // Hidden Finesse：被 prompt 的牌打出是別張能打的牌時，真正的牌在 finesse position
-	lvUrgency        = 5  // Urgency Principle 與 Ambiguous Finesse：該盲打的人沒打（又不是在做緊急的事），就是我
-	lvMultiPrompt    = 5  // Prompts in Multi-Color Variants：prompt 正向資訊最多的已提示牌（彩虹等多色變體）
-	lvTempo          = 6  // Tempo Clues：Focus Shifting、Valuable Tempo Clue、Tempo Clue Chop Move（TCCM 優先於 Trash Chop Move）
-	lvScream         = 7  // Scream / Shout Discard Chop Move 與 Generation Discard
-	lvCMBlindPlay    = 7  // 很可能能打、還能承受閃電時盲打 Chop Moved 的牌
-	lvEndGame        = 8  // 終局（pace < 人數）：不 Chop Move（像 Chop Move 的提示改當拖延）、不 Scream / Shout / Generation Discard
-	lvStall          = 9  // Stalling：Stall Table 的拖延情況與嚴重度、Double Discard Avoidance
-	lvGentleman      = 10 // Gentleman's Discard（含 Layered）與 Baton Discard：棄掉被拿到的牌，傳到另一張所在的 finesse position
-	lvCertain        = 10 // Sarcastic Finesse、Certain Finesse / Certain Discard：finesse 可能和給提示者不確定的已提示牌重複
-	lvBluff          = 11 // Bluff / Self-Bluff（只從 Bluff Seat）、Cathy's Connecting Principle、Guide Principle
+	lvMultiConnect      = 2  // 一個提示多張連接牌：Double / Triple Prompt、Double Finesse、Prompt + Finesse
+	lvReverseFinesse    = 2  // Reverse Finesse：finesse 接收者之後的人
+	lvSelfFinesse       = 2  // Self-Finesse：finesse 接收者自己（以及 finesse 對象讓給看得到的後一位）
+	lvFiveStall         = 2  // 5 Stall
+	lvWrongPrompt       = 2  // Wrong Prompt
+	lvMultipleOnes      = 3  // Playing Multiple 1's（出牌順序、焦點、多出來的 1）
+	lvFixClue           = 3  // Fix Clue（含 Stop Clue；Misplay Cost Principle 的修正）
+	lvSarcastic         = 3  // Sarcastic Discard
+	lvInfoLock          = 3  // Information Lock on In-Between Cards
+	lvChopMove          = 4  // Chop Moves：Trash / 5's / Order Chop Move
+	lvQueuedFinesse     = 5  // Queued Finesse：finesse 手上已有待打 finesse 牌的人，照提示先後盲打
+	lvLayeredFinesse    = 5  // Layered / Clandestine Finesse：盲打出別張能打的牌時，繼續盲打下一張
+	lvHiddenFinesse     = 5  // Hidden Finesse：被 prompt 的牌打出是別張能打的牌時，真正的牌在 finesse position
+	lvUrgency           = 5  // Urgency Principle 與 Ambiguous Finesse：該盲打的人沒打（又不是在做緊急的事），就是我
+	lvMultiPrompt       = 5  // Prompts in Multi-Color Variants：prompt 正向資訊最多的已提示牌（彩虹等多色變體）
+	lvTempo             = 6  // Tempo Clues：Focus Shifting、Valuable Tempo Clue、Tempo Clue Chop Move（TCCM 優先於 Trash Chop Move）
+	lvScream            = 7  // Scream / Shout Discard Chop Move 與 Generation Discard
+	lvCMBlindPlay       = 7  // 很可能能打、還能承受閃電時盲打 Chop Moved 的牌
+	lvEndGame           = 8  // 終局（pace < 人數）：不 Chop Move（像 Chop Move 的提示改當拖延）、不 Scream / Shout / Generation Discard
+	lvStall             = 9  // Stalling：Stall Table 的拖延情況與嚴重度、Double Discard Avoidance
+	lvGentleman         = 10 // Gentleman's Discard（含 Layered）與 Baton Discard：棄掉被拿到的牌，傳到另一張所在的 finesse position
+	lvCertain           = 10 // Sarcastic Finesse、Certain Finesse / Certain Discard：finesse 可能和給提示者不確定的已提示牌重複
+	lvBluff             = 11 // Bluff / Self-Bluff（只從 Bluff Seat）、Cathy's Connecting Principle、Guide Principle
+	lvFocusInversion    = 12 // Focus Inversion：點到 chop 的提示，chop 依提示資訊不可能是 play clue（顏色時 Self-Finesse 不算），焦點改成最左邊的新牌
+	lvDupResponsibility = 12 // Duplication Responsibility 的平手規則：可能重複的張數一樣多時，提示資訊比較不明確的人負責（基本規則所有等級都用）
+	lvStale1s           = 12 // The Stale 1's Clue：結束 Early Game 的棄牌之後緊接著的「1」點到兩張以上的 1，照順序會先打的那張是壞的
 )
 
 // knows：這個 AI 的等級已經學到從 lv 開始的技巧。

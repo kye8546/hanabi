@@ -599,6 +599,9 @@ func (s *state) focusSingle(it interp) idSet {
 
 // seenAsTrash：提示後接收者推得出這張非焦點新牌不可能有用（只會是垃圾或焦點的重複）。
 func (s *state) seenAsTrash(it interp, id int) bool {
+	if slices.Contains(it.staleBad, id) {
+		return true // Level 12 Stale 1's Clue：接收者把它當已知垃圾
+	}
 	p := s.notes[id].poss & it.explicit[id]
 	return p&s.freshUseful(it.receiver, s.me, id)&^s.focusSingle(it)&^s.clueSettled(it, id) == 0
 }
