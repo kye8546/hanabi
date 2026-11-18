@@ -774,9 +774,12 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 		rec.plan = plan
-		if rec.promptWait > 0 && rec.promptWait-1 == e.Player && e.Type != game.EvDraw {
+		if rec.promptWait > 0 && rec.promptWait-1 == e.Player && e.Type != game.EvDraw && !s.deferred {
 			// 我之後那位看得到我的已提示牌：他沒盲打出那張，就是看到我這張正是它，prompt 的是我（deferMyPrompt）；
-			// 他盲打出了，計畫照新的煙火重算（stale）
+			// 他盲打出了，計畫照新的煙火重算（stale）。他這手是可以延後盲打的緊急行動（Urgency Principle 的例外、
+			// 餵提示給鎖手的人，s.deferred）時不算，再等他一回合（使用者回報 20261118-095623：使用者綠色點 AI-1 的 G4，
+			// AI-3 的 finesse position 是 G2，t36 AI-3 先救使用者 chop 上的 Y4、晚一手再盲打，AI-2 以為 prompt 的是自己
+			// 被綠色點過的 G3、當成 G2 打錯）
 			rec.promptWait = 0
 			if !stale {
 				for _, d := range rec.plan {

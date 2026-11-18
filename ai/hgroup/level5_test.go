@@ -622,3 +622,23 @@ func TestL5LayeredPromptKeepsOtherClued(t *testing.T) {
 		t.Errorf("Cathy 的 slot 5 應保留 r4 的可能，筆記卻是 %v", got.list())
 	}
 }
+
+func TestL5PromptWaitSurvivesUrgentDeferral(t *testing.T) {
+	// 使用者回報 20261118-095623 t39：Alice 綠色點 Bob 的 g4，Cathy 被綠色點過的是 g3，Donald 的 finesse position 是 g2。
+	// Cathy 看得到 Donald 的 g2，先等他（deferMyPrompt）；Donald 先救 Alice chop 上的牌（Urgency Principle 的例外，
+	// 晚一手再盲打），Cathy 要再等他一回合，不能以為 prompt 的是自己而把 g3 當 g2 打出
+	g, bots := scenario6(t, 5, "g1", "y3 b3 w3 r4", "g4 y4 b4 w4", "y2 b2 w2 g3", "g2 r3 y3 b3")
+	g.Hints = 5
+	preClued(t, g, bots, 2, 3, idents(t, "g2 g3 g4 g5"))
+	force(t, g, game.HintColorTo(1, game.Green)) // Alice
+	force(t, g, game.Discard(3))                 // Bob
+	if a := step(t, g, bots); a == game.Play(3) {
+		t.Fatalf("Cathy 應先等 Donald，卻打出綠牌（%s）", bots[2].Why())
+	}
+	force(t, g, game.HintRankTo(0, 4)) // Donald 救 Alice 的 chop（可以延後盲打）
+	force(t, g, game.Discard(0))       // Alice
+	force(t, g, game.Discard(0))       // Bob
+	if a := step(t, g, bots); a == game.Play(3) {
+		t.Fatalf("Donald 只是延後盲打，Cathy 應再等他，卻打出綠牌（%s）", bots[2].Why())
+	}
+}
