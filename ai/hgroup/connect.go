@@ -904,6 +904,30 @@ func (s *state) focusDiscarded(card int) {
 	}
 }
 
+// focusPlayed：某個提示的焦點成功打出了，這個提示就結束了：剩下的解讀（多半是靠我自己看不到的牌、從接收者角度
+// 猜的 finesse，或還沒升格的 self-finesse）都不成立，為它們寫下的筆記作廢。以前留著，之後那些解讀失敗時 fallback
+// 被升格，把接收者的牌記成被 finesse（使用者回報 20261118-151216：t7「4」點使用者的 G4，AI-3 盲打 G2、AI-2 打出 G3、
+// 使用者 t13 打出 G4，AI-3 的紀錄仍留著「R4 / Y4 / W4，finesse 我」與「G4，使用者 Self-Finesse G3」，t15 升格後把
+// 使用者 slot 4 的 B1 記成被 finesse，t24 用「1」把它當成會打錯的牌來修）。
+func (s *state) focusPlayed(card int) {
+	for _, rec := range s.recs {
+		if rec.focus != card {
+			continue
+		}
+		for _, ds := range append(depsOf(rec.cands), depsOf(rec.fallback)...) {
+			for _, d := range ds {
+				if d.card != card && s.holder(d.card) >= 0 && slices.Contains(rec.changed, d.card) &&
+					!slices.ContainsFunc(rec.plan, func(p dep) bool { return p.card == d.card }) {
+					if n := s.notes[d.card]; n.finRec == rec || !n.finessed && n.poss == setOf(d.id) {
+						s.resetNote(d.card)
+					}
+				}
+			}
+		}
+		rec.cands, rec.fallback = nil, nil
+	}
+}
+
 // release：rec 要的牌已經由別張打出，原本為它寫下的筆記（被 finesse / prompt 成那張）作廢——
 // 但這個提示的其他解讀還要這張牌（當成別的牌面）時不動。
 func (s *state) release(rec *clueRec, d dep) {

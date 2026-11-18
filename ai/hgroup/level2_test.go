@@ -746,3 +746,18 @@ func TestPromptedBystanderWaitsWhenPromptIsFollowedBySelfFinesse(t *testing.T) {
 		t.Errorf("AI-2 應把自己的黃牌記成 Y4，卻是 %v", got.list())
 	}
 }
+
+func TestFocusPlayedEndsClue(t *testing.T) {
+	// 使用者回報 20261118-151216 t24：t7 AI-2 的「4」點使用者的 G4（finesse AI-3 的 G2、AI-2 的 G3），使用者 t13 打出 G4。
+	// AI-3 的紀錄以前仍留著從使用者角度猜的「R4 / Y4 / W4，finesse 我」與「G4，使用者 Self-Finesse G3」，t15 升格後
+	// 把使用者 slot 4 的 B1 記成被 finesse，t24 用「1」當成 Fix Clue 修它。焦點打出後這個提示就結束了
+	const codes = "h11 p4 h3G p2 h23 p2 h04 p1 h2W h0G p4 h1W p2 h3W p4 d4 p4 p3 h03 p1 p4 h0Y d3"
+	g, bots := replayCodes(t, 4, 1794985936786350000, 12, codes)
+	b1 := g.Hands[0][3].Card.ID
+	if a := bots[3].Act(g.View(3)); a.Type == game.ActHint && a.Target == 0 {
+		t.Errorf("AI-3 不該提示使用者，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	if bots[3].s.notes[b1].finessed {
+		t.Errorf("AI-3 不該把使用者 slot 4 的牌記成被 finesse：%+v", bots[3].s.notes[b1])
+	}
+}

@@ -458,6 +458,9 @@ func (s *state) apply(e game.Event) {
 		}
 		certain := s.certainDiscard(e)
 		sarcDenied := s.sarcasticDenied(e)
+		if e.Type == game.EvPlay {
+			s.focusPlayed(e.Card.ID)
+		}
 		s.posResp = resp
 		s.deferred = s.feedDeferrable(e)
 		s.checkDeps(e, e.Card.ID)
