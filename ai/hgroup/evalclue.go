@@ -234,8 +234,15 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		// 接收者鎖手（沒有 chop 可 Chop Move，不會讀成 Tempo Clue Chop Move）、這個提示讓他確定焦點現在就能打、
 		// 他本來不知道：就是一般的 play clue，照打出一張算（使用者回報 20261113-165056：AI-3 鎖手，被「1」點到的 K1
 		// 記成「R1 或 K1」，用黑色補資訊就能打出，以前只在拖延時才給這種提示）
+		// Level 8 終局不 Chop Move（tempoChopMove）：Tempo Clue 只是讓焦點打出，同樣照一般的 play clue 算（使用者回報
+		// 20261118-141043 t50：只差 R4、R5、G5，你被「5」點到的兩張分不出哪張是 G5，AI-1 把綠色當成沒價值的拖延，改給沒用的「5」）
 		anyway := s.alreadyResolved(R, it.focus, t) || s.holderKnowsPlayable(it.focus) || s.notes[it.focus].willPlay || s.plannedPlay(it.focus)
-		if !(knowsPlay && !anyway && s.publicChop(R, nil) < 0) {
+		// 終局這種提示會被接受，就要確定他自己還推不出（從他看得到的牌，holderView；例如 Black 的 W2 / K2，他看得到 K2 在我手上）
+		heKnows := func() bool {
+			v := s.holderView(it.focus, s.certainMine())
+			return v != 0 && !slices.ContainsFunc(v.list(), func(i ident) bool { return !s.playableNow(i) })
+		}
+		if !(knowsPlay && !anyway && (s.publicChop(R, nil) < 0 || s.endGame() && !heKnows())) {
 			ev.kind = kindTempo
 			ev.knowsPlay = knowsPlay
 			ev.score = -dist

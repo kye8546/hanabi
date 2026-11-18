@@ -329,3 +329,14 @@ func TestPositionalMisplayKnownTrash(t *testing.T) {
 		t.Errorf("AI-2 應該回應 Positional Misplay 盲打 slot 4 的 G5，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestEndgameTempoClueIsPlayClue(t *testing.T) {
+	// 使用者回報 20261118-141043 t50（4 人局）：只差 R4、R5、G5、B5，使用者被「5」點到的 slot 1 是 G5、slot 4 是 R5，
+	// 大家記成「R5、G5 或 B5」。終局不 Chop Move，綠色重新點 G5 就是讓它打出的 play clue；以前當成沒價值的拖延，改給沒用的「5」
+	const codes = "h21 h01 p4 h0Y p1 h2R p3 d4 p4 d4 d4 h22 p2 h03 p1 h2G p4 d4 p1 h13 p4 p4 p4 h1G h33 p1 h3B p4 d3 " +
+		"h0G h0W p4 p1 d4 h0Y p3 p4 p1 d4 h14 p3 p1 h05 d4 h3W d4 d4 p4 h3B"
+	g, bots := replayCodes(t, 4, 1794982243891561000, 12, codes)
+	if a := bots[1].Act(g.View(1)); a != game.HintColorTo(0, game.Green) {
+		t.Errorf("AI-1 應該用綠色提示使用者的 G5，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
