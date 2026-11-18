@@ -77,6 +77,12 @@ type clueRec struct {
 	struck     bool       // 提示之後有人打錯（筆記被重置過，有人沒盲打可能是因為這樣，passMeansMe 用）
 	hint       game.Hint  // 提示的內容（Level 11 Cathy's Connecting Principle：盲打出的牌接不接得上提示）
 	bluff      bool       // Level 11：已確定是 Bluff，焦點是差一張就能打的牌（cands 沒有連接牌，也不用再找）
+	// Level 11：Bluff Seat 的人盲打出接不上的牌，我看不到焦點——它可能是 Bluff 的目標（bluffAlt），也可能不是合法的 Bluff 目標、
+	// 是 Layered Finesse（看得到焦點的人會照它繼續盲打）。等他下一個行動揭曉（resolveBluffAlt）：bluffBy 是他的座位 +1，0 表示沒有
+	bluffAlt     idSet
+	bluffAssigns map[ident][]dep
+	bluffBy      int
+	bluffX       ident // 那次盲打出的牌面（確定是 Bluff 時 bluffDenies 用）
 }
 
 // state 是 AI 依公開資訊重播整局後的認知。
@@ -441,6 +447,7 @@ func (s *state) apply(e game.Event) {
 		}
 		// Level 11：Bluff Seat 的下一位盲打出接不上提示的牌——Bluff，焦點是差一張就能打的牌（先於其他推論）
 		s.bluffCard = -1
+		s.resolveBluffAlt(e)
 		if e.Type == game.EvPlay && !resp && s.detectBluff(e, justClued) {
 			s.bluffCard = e.Card.ID
 		}

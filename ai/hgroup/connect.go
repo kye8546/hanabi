@@ -460,8 +460,8 @@ func (s *state) selfMark(rec *clueRec, who int) {
 // 「每種解讀」只算我對焦點的筆記還容許的：例如我數到三張 Y1 都在別人手上，我的黃牌就不是直接能打的 Y1，
 // 只剩「Y2，finesse P1 的 Y1」——P1 那張就確定被 finesse 了（看得到我這張的人本來就知道）。
 func (s *state) markCommon(rec *clueRec) {
-	if !s.knows(lvMultiConnect) || len(rec.cands) == 0 {
-		return
+	if !s.knows(lvMultiConnect) || len(rec.cands) == 0 || rec.bluffBy > 0 {
+		return // Level 11：還可能是 Bluff（不需要別人盲打）時不算每種解讀都要
 	}
 	cands := rec.cands
 	if n, ok := s.note(rec.focus); ok && s.holder(rec.focus) == s.me {

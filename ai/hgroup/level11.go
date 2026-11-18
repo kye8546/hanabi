@@ -214,6 +214,46 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 	}
 	// 先撤掉為這個提示寫下的連接筆記（例如旁觀者以為要 finesse 自己、記成被 finesse 的 r2，或被 prompt 成 r3 的已提示牌），
 	// 照沒有這個提示的連接來找目標；不是 Bluff 就還原
+	saved := s.undoBluffDeps(rec, played)
+	restore := func() {
+		for id, n := range saved {
+			*s.notes[id] = n
+		}
+	}
+	targets, assigns := s.bluffTargets(rec, s.notes[rec.focus].explicit, played, x)
+	if targets == 0 {
+		restore()
+		return false // 沒有可以當 Bluff 目標的牌（原文 Example 5：那就是 finesse，例如 Layered / Triple Finesse）
+	}
+	// Bluff 點到的牌一定差一張就能打（原文：「Bluffs on two-away-from-playable cards are normally illegal」；Mistaking a Layered
+	// Finesse for a Bluff：「if Alice gives a clue to Bob which is not a legal Bluff target, the clue should always be interpreted
+	// as a Layered Finesse」）。看得到焦點、它不在目標裡的人（包括盲打的人自己）照 Layered Finesse 讀，他繼續盲打——
+	// 給提示者弄錯了的話他會打錯，那是給提示者的責任。看不到焦點的接收者分不出來：兩種都留著，等他下一個行動
+	// （繼續盲打就是 Layered Finesse，沒有就是 Bluff，Lie Principle）；看得到的人替接收者算的解讀（共同筆記）也一樣。
+	// 使用者回報 20261118-121252：使用者紅色點 AI-3 的 R3、要 Layered Finesse AI-1 的 W1、R1、R2，大家以前都讀成
+	// Bluff（R2），AI-1 打出 W1 就停了。
+	truth, see := s.see(s.me, rec.focus)
+	if alt := s.layeredAlt(rec, e.Player, played, x, targets); alt || see && !targets.has(truth) {
+		restore()
+		if alt {
+			drop := func(cs []cand) []cand { return slices.DeleteFunc(cs, func(c cand) bool { return targets.has(c.id) }) }
+			rec.cands, rec.fallback = drop(rec.cands), drop(rec.fallback)
+			rec.bluffAlt, rec.bluffAssigns, rec.bluffBy, rec.bluffX = targets, assigns, e.Player+1, x
+		}
+		if !see || !targets.has(truth) {
+			return false
+		}
+		// 看得到焦點就是 Bluff 的目標（盲打的人看得到，不會再盲打）：照 Bluff 讀，只有共同筆記暫時保留兩種
+		s.undoBluffDeps(rec, played)
+		rec.bluffAlt, rec.bluffAssigns, rec.bluffBy = 0, nil, 0
+	}
+	s.applyBluff(rec, targets, assigns)
+	s.bluffDone(rec, played, x)
+	return true
+}
+
+// undoBluffDeps：撤掉為 rec 寫下的連接筆記（Bluff 的讀法不需要它們），回傳原本的筆記（不是 Bluff 時還原用）。
+func (s *state) undoBluffDeps(rec *clueRec, played int) map[int]note {
 	saved := map[int]note{}
 	for _, ds := range append([][]dep{rec.plan}, append(depsOf(rec.cands), depsOf(rec.fallback)...)...) {
 		for _, d := range ds {
@@ -226,22 +266,67 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 			}
 		}
 	}
-	targets, assigns := s.bluffTargets(rec, s.notes[rec.focus].explicit, played, x)
-	if targets == 0 {
-		for id, n := range saved {
-			*s.notes[id] = n
-		}
-		return false // 沒有可以當 Bluff 目標的牌（原文 Example 5：那就是 finesse，例如 Layered / Triple Finesse）
-	}
-	s.applyBluff(rec, targets, assigns)
-	// 盲打出的牌不算被這個提示拿到：只有給提示者和他自己（還有以為是 finesse 他的人）記過它被 finesse，
-	// 照它做 Good Touch 排除（revealGTP）會讓各家筆記不一致（自我對局 5 人局 seed 201：Bluff 盲打出 w1 後，
-	// 只有其中兩人把別人被「1」點到的牌排除了 w1，出牌順序與 Order Chop Move 的判斷就不同）
-	if n := s.notes[played]; !n.clued {
+	return saved
+}
+
+// bluffDone：rec 確定是 Bluff 之後，盲打出的牌（played，可能已不在手上）不算被這個提示拿到，給提示者看得到的已提示牌都不是 x。
+// 盲打出的牌不算被拿到：只有給提示者和他自己（還有以為是 finesse 他的人）記過它被 finesse，
+// 照它做 Good Touch 排除（revealGTP）會讓各家筆記不一致（自我對局 5 人局 seed 201：Bluff 盲打出 w1 後，
+// 只有其中兩人把別人被「1」點到的牌排除了 w1，出牌順序與 Order Chop Move 的判斷就不同）
+func (s *state) bluffDone(rec *clueRec, played int, x ident) {
+	if n, ok := s.note(played); ok && !n.clued {
 		n.finessed, n.finRec, n.giver = false, nil, -1
 	}
 	s.bluffDenies(rec.giver, played, x)
-	return true
+}
+
+// layeredAlt：B 從 finesse position 盲打出 x 之後，從看不到焦點的我的角度，rec 還可能是 Layered Finesse——有不是 Bluff 目標的
+// 解讀要 B 盲打這張（x 是 layer，他還要接著盲打）。接收者自己的 Self-Finesse 沒有 layer，不算。
+func (s *state) layeredAlt(rec *clueRec, B, played int, x ident, targets idSet) bool {
+	if B == rec.target {
+		return false
+	}
+	return slices.ContainsFunc(rec.cands, func(c cand) bool {
+		return !targets.has(c.id) && slices.ContainsFunc(c.deps, func(d dep) bool {
+			return d.player == B && d.finesse && d.card == played && d.id != x
+		})
+	})
+}
+
+// resolveBluffAlt：Bluff 與 Layered Finesse 分不出來的提示（rec.bluffAlt），盲打的人下一個行動揭曉：他接著盲打這個提示要的
+// 下一張就是 Layered Finesse（他看得到焦點不是合法的 Bluff 目標），否則是 Bluff（Lie Principle：Bluff 只要他打一張）。
+// 在事件處理（checkDeps）之前呼叫。
+func (s *state) resolveBluffAlt(e game.Event) {
+	if e.Type == game.EvDraw {
+		return
+	}
+	for _, rec := range s.recs {
+		if rec.bluffBy == 0 || rec.bluffBy-1 != e.Player {
+			continue
+		}
+		targets, assigns := rec.bluffAlt, rec.bluffAssigns
+		rec.bluffAlt, rec.bluffAssigns, rec.bluffBy = 0, nil, 0
+		played := -1
+		if e.Type == game.EvPlay || e.Type == game.EvMisplay {
+			played = e.Card.ID
+		}
+		// 打出的是之後才被提示點到的牌，不是盲打（被直接提示後照已提示的牌打出）
+		if played >= 0 && !(s.notes[played].clued && s.notes[played].cluedAt > rec.seq) && slices.ContainsFunc(rec.cands, func(c cand) bool {
+			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == e.Player && d.finesse && d.card == played })
+		}) {
+			// 他繼續盲打：Layered Finesse，焦點不是 Bluff 的目標
+			if n, ok := s.note(rec.focus); ok && n.poss&^targets != 0 {
+				n.poss &^= targets
+			}
+			if rec.target == s.me {
+				s.markCommon(rec)
+			}
+			continue
+		}
+		s.undoBluffDeps(rec, -1)
+		s.applyBluff(rec, targets, assigns)
+		s.bluffDone(rec, -1, rec.bluffX)
+	}
 }
 
 // bluffDenies：Bluff 的盲打出 x 之後，給提示者看得到的已被拿到的牌都不是 x——他要負責盲打出的牌不和看得到的已提示牌重複
@@ -275,7 +360,8 @@ func (s *state) applyBluff(rec *clueRec, targets idSet, assigns map[ident][]dep)
 	n.willPlay = true
 	truth, see := s.see(s.me, rec.focus)
 	if see && !targets.has(truth) {
-		// 我看得到的實際牌面不在推得的目標中（給提示者弄錯了）。Bluff 的讀法只看大家都知道的資訊，接收者一定照它記，
+		// 我看得到的實際牌面不在推得的目標中（不是合法的 Bluff，但盲打的人沒有繼續盲打——resolveBluffAlt）。
+		// Bluff 的讀法只看大家都知道的資訊，接收者一定照它記，
 		// 所以照樣寫進共同筆記，Fix Clue 才看得出他記錯、會打錯（使用者回報 20261106-151527：t16 使用者紅色點 AI-2 的 R4，
 		// AI-1 盲打出 G3，大家讀成 Bluff、R3；AI-1 看得到是 R4 就不寫，一直不知道 AI-2 以為是 R3，t29 還提示使用者的 R2，
 		// t33 AI-2 打錯 R4）。中間的牌（assigns）不寫：那是照錯的目標推的

@@ -580,7 +580,7 @@ func (s *state) refreshFocus(rec *clueRec) {
 	if !ok || s.holder(rec.focus) < 0 {
 		return
 	}
-	var u idSet
+	u := rec.bluffAlt // Level 11：還分不出是 Bluff 還是 Layered Finesse 時，Bluff 的目標也算
 	for _, c := range rec.cands {
 		u |= 1 << c.id
 	}

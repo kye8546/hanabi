@@ -1,6 +1,7 @@
 package hgroup
 
 import (
+	"slices"
 	"testing"
 
 	"hanabi/game"
@@ -315,6 +316,63 @@ func TestBluffNotBlockedByClueThatNeverUsesBluffee(t *testing.T) {
 			if r.giver == 0 && r.target == 2 && !r.bluff {
 				t.Errorf("AI-%d 應把 t29 的藍色讀成 Bluff", p)
 			}
+		}
+	}
+}
+
+func TestLayeredFinesseNotIllegalBluff(t *testing.T) {
+	// 使用者回報 20261118-121252：t1 使用者紅色點 AI-3 的 R3，要 AI-1 盲打 W1（layer）、R1、R2。AI-1 坐在 Bluff Seat，
+	// 打出接不上紅色的 W1，但 R3 差兩張、不是合法的 Bluff 目標（原文：「if Alice gives a clue to Bob which is not a legal Bluff
+	// target, the clue should always be interpreted as a Layered Finesse」）——看得到 R3 的 AI-1 繼續盲打 R1、R2。
+	// 看不到的 AI-3 先記成「R2 或 R3」，AI-1 繼續盲打後就知道是 R3。以前大家都讀成 Bluff（R2），AI-1 打完 W1 就停
+	g, bots := replayCodes(t, 4, 1794975172511946000, 12, "h3R p1")
+	r3 := g.Hands[3][1].Card.ID
+	step(t, g, bots) // AI-2
+	step(t, g, bots) // AI-3
+	if g.Strikes > 0 || g.Fireworks[game.Red] != 0 {
+		t.Fatalf("AI-3 的紅牌還不能打（%s）", bots[3].Why())
+	}
+	if got := bots[3].s.notes[r3].poss; !got.has(identOfCard(card(t, "r3"))) {
+		t.Fatalf("AI-3 應把紅牌記成可能是 R3（Layered Finesse），筆記卻是 %v", got.list())
+	}
+	force(t, g, game.Discard(3)) // 使用者
+	if a := step(t, g, bots); a.Type != game.ActPlay || g.Fireworks[game.Red] != 1 {
+		t.Fatalf("AI-1 應繼續盲打出 R1，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	for p := 1; p < 4; p++ {
+		bots[p].Observe(g.View(p))
+		if got := bots[p].s.notes[r3].poss; got != idents(t, "r3") {
+			t.Errorf("AI-%d 應把 AI-3 的紅牌記成 R3，筆記卻是 %v", p, got.list())
+		}
+	}
+}
+
+func TestBluffConfirmedWhenBluffeeStops(t *testing.T) {
+	// 看不到焦點的接收者分不出 Bluff 與 Layered Finesse 時，盲打的人下一手不再盲打就是 Bluff。
+	// Alice 紅色點 Donald 的 r2（差一張），Bob 盲打出 w1（接不上紅色）；Donald 看得到 Bob 的 w1 後面是 r1、r2，
+	// 以為也可能是 r3（Layered Finesse）。Bob 看得到 r2，知道是 Bluff，下一手不盲打——Donald 就記成 r2
+	g, bots := scenario6(t, 12, "", "y4 g4 b4 w4", "w1 r1 r2 b3", "y4 g3 b4 w3", "g4 b4 r2 y4")
+	r2 := g.Hands[3][2].Card.ID
+	force(t, g, game.HintColorTo(3, game.Red))
+	if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.White] != 1 {
+		t.Fatalf("Bob 應盲打出 w1，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	step(t, g, bots) // Cathy
+	if a := step(t, g, bots); a.Type == game.ActPlay {
+		t.Fatalf("Donald 的紅牌還不能打（%s）", bots[3].Why())
+	}
+	if got := bots[3].s.notes[r2].poss; !got.has(identOfCard(card(t, "r2"))) || !got.has(identOfCard(card(t, "r3"))) {
+		t.Errorf("Donald 還分不出是 Bluff 還是 Layered Finesse，應記成 r2 或 r3，筆記卻是 %v", got.list())
+	}
+	force(t, g, game.Discard(3)) // Alice
+	hand := slices.Clone(g.Hands[1])
+	if a := step(t, g, bots); a.Type == game.ActPlay && !hand[a.Slot].Know.Clued {
+		t.Fatalf("Bob 看得到 r2，知道是 Bluff，不該再盲打，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	for p := 1; p < 4; p++ {
+		bots[p].Observe(g.View(p))
+		if got := bots[p].s.notes[r2].poss; got != idents(t, "r2") {
+			t.Errorf("座位 %d 應把 Donald 的紅牌記成 r2（Bluff），筆記卻是 %v", p, got.list())
 		}
 	}
 }

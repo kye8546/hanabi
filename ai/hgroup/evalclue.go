@@ -267,9 +267,12 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		}
 	}
 	if playable && s.knows(lvBluff) {
-		if _, _, _, ok := s.bluffRead(R, h, it, touched, plan); ok {
+		if targets, _, fp, ok := s.bluffRead(R, h, it, touched, plan); ok && (targets.has(t) || !slices.ContainsFunc(it.cands, func(c cand) bool {
+			return !targets.has(c.id) && slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == fp && d.finesse })
+		})) {
 			// Level 11：下一位照計畫盲打出的牌接不上提示，大家會讀成 Bluff（例如 Bluff Seat 上的 Layered Finesse、
-			// 用數字提示的 Double Finesse），不是計畫的意思
+			// 用數字提示的 Double Finesse），不是計畫的意思。焦點不是合法的 Bluff 目標、接收者也看得出可能是 Layered Finesse
+			// 時不會（看得到焦點的人照 Layered Finesse 讀，接收者等盲打的人下一手揭曉，detectBluff）
 			ev.misleads = true
 			return ev, true
 		}
