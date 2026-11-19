@@ -12,7 +12,7 @@
 <!-- 開局設定 -->
 <main id="setup" class="setup" hidden>
   <h1>花火 <span>Hanabi</span></h1>
-  <p class="lead">和 AI 合作施放煙火。AI 照 <a href="https://hanabi.github.io/" target="_blank" rel="noopener">H-Group 慣例</a> 行動，你給的提示也會照同一個等級解讀。</p>
+  <p class="lead">和 AI（也可以邀朋友）合作施放煙火。AI 照 <a href="https://hanabi.github.io/" target="_blank" rel="noopener">H-Group 慣例</a> 行動，你給的提示也會照同一個等級解讀。</p>
   <form id="setup-form">
     <label class="field">
       <span>你的名字</span>
@@ -21,6 +21,10 @@
     <fieldset class="field">
       <legend>玩家人數（含你自己）</legend>
       <div class="seg" id="players"></div>
+    </fieldset>
+    <fieldset class="field">
+      <legend>其他座位 <small>（選「朋友」會先進等待室，把邀請連結傳給朋友）</small></legend>
+      <div id="seats" class="seat-choices"></div>
     </fieldset>
     <label class="field">
       <span>H-Group 慣例等級</span>
@@ -35,8 +39,31 @@
       <input name="seed" inputmode="numeric" pattern="[0-9]*" placeholder="隨機">
     </label>
     <p class="error" id="setup-error" hidden></p>
-    <button class="primary" type="submit">開始</button>
+    <button class="primary" type="submit" id="setup-submit">開始</button>
   </form>
+</main>
+
+<!-- 用邀請連結加入 -->
+<main id="join" class="setup" hidden>
+  <h1>花火 <span>Hanabi</span></h1>
+  <p class="lead">朋友邀請你一起施放煙火。選一個空位坐下，等房主開始。</p>
+  <div id="join-body"></div>
+</main>
+
+<!-- 等待室 -->
+<main id="lobby" class="setup" hidden>
+  <h1>等待室</h1>
+  <p class="lead" id="lobby-info"></p>
+  <div class="field">
+    <span>邀請連結</span>
+    <div class="invite"><input id="invite" readonly><button id="copy-invite" type="button">複製</button></div>
+    <small class="muted">把連結傳給朋友，打開後選一個空位坐下。開始時還空著的位子由 AI 坐。</small>
+  </div>
+  <div class="field">
+    <span>座位 <small>（照行動順序）</small></span>
+    <ol id="lobby-seats" class="seatlist"></ol>
+  </div>
+  <div id="lobby-actions" class="lobby-actions"></div>
 </main>
 
 <!-- 牌桌 -->
@@ -95,6 +122,13 @@
     <li><b>AI 代打</b>：照這局的慣例等級替你決定這一手並直接執行（紀錄會註明，附上 AI 的理由）。</li>
     <li><b>回溯</b>：回到你上一次行動之前，可以連續使用。<b>偷看</b>：看自己手牌的真實牌面（紀錄會註明你在第幾回合偷看過）。</li>
     <li><b>紀錄</b>：下載這局的紀錄檔。覺得 AI 哪一步怪怪的，把檔案和回合數（例如 t23）交給開發者就能完整重現。</li>
+  </ul>
+  <h2>和朋友一起玩</h2>
+  <ul>
+    <li>開局時把其他座位設成「朋友」，會先進等待室；把邀請連結傳給朋友，他們打開後選空位坐下，人到齊了由房主按「開始遊戲」。還空著的位子由 AI 坐。</li>
+    <li>朋友斷線或離開時，任何人都可以在他的名字旁按「讓 AI 接手」，AI 會照這局的慣例等級替他行動；他回來後按「我回來了」接回。自己要暫時離開也可以按「暫時交給 AI」。</li>
+    <li>多人局不能回溯、偷看，也要等遊戲結束才公開洗牌種子（知道種子就能算出整副牌）。AI 代打、AI 接手的那一手，大家的紀錄上都會標出來。</li>
+    <li>結束後房主可以替同一群人開下一局，大家會自動進到新的等待室。</li>
   </ul>
   <h2>畫面說明</h2>
   <ul>

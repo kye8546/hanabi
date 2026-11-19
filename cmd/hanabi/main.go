@@ -51,7 +51,7 @@ func main() {
 	color := !*noColor && os.Getenv("NO_COLOR") == ""
 	r := console.NewRenderer(os.Stdout, names, color, *showNeg)
 
-	gl, err := session.NewLog("logs", names, set.Level, set.Variant, *seed)
+	gl, err := session.NewLog("logs", names, []int{0}, set.Level, set.Variant, *seed)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "無法建立對局紀錄：", err)
 		exit(1)

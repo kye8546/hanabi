@@ -7,9 +7,16 @@ import (
 	"hanabi/game"
 )
 
-// snapshot 是送給某個座位的完整畫面（JSON）：只由 PlayerView 產生，自己的手牌照樣被遮蔽。
+// snapshot 是送給某個座位的完整畫面（JSON）：遊戲部分只由 PlayerView 產生，自己的手牌照樣被遮蔽。
+// 等待室（phase = lobby）只有設定與座位。
 type snapshot struct {
+	Phase        string       `json:"phase"` // lobby / game
 	Seat         int          `json:"seat"`
+	Host         bool         `json:"host"`           // 房主（座位 0）
+	Multi        bool         `json:"multi"`          // 兩位以上真人：不能回溯、偷看
+	Seats        []seatJSON   `json:"seats"`          // 每個座位是誰、在不在線上
+	Takeover     bool         `json:"takeover"`       // 我的座位正由 AI 接手
+	Next         string       `json:"next,omitempty"` // 房主開了下一局（同一群人再來一局）
 	Names        []string     `json:"names"`
 	Level        int          `json:"level"`
 	LevelName    string       `json:"levelName"`
@@ -37,6 +44,13 @@ type snapshot struct {
 	YourTurn     bool         `json:"yourTurn"`
 	HintOptions  []hintJSON   `json:"hintOptions"` // 所有會點到牌的提示（不管現在有沒有提示 token）
 	Error        string       `json:"error,omitempty"`
+}
+
+type seatJSON struct {
+	Name     string `json:"name"`
+	Kind     string `json:"kind"` // human / ai / open（等朋友加入）
+	Online   bool   `json:"online"`
+	Takeover bool   `json:"takeover"`
 }
 
 type cardJSON struct {
@@ -74,6 +88,7 @@ type eventJSON struct {
 	Touched []int     `json:"touched,omitempty"`
 	Reason  int       `json:"reason,omitempty"`
 	Score   int       `json:"score,omitempty"`
+	Note    string    `json:"note,omitempty"` // AI 代打 / AI 接手
 }
 
 var eventNames = map[game.EventType]string{
@@ -103,11 +118,26 @@ func toHint(h game.Hint) hintJSON {
 	return hintJSON{Kind: "rank", Color: -1, Rank: int(h.Rank)}
 }
 
-// buildSnapshot 把 v 轉成畫面；yourTurn 是「真人現在可以下指令」。
-func buildSnapshot(v game.PlayerView, names []string, level int, seed uint64, yourTurn bool) snapshot {
+// lobbySnapshot 是等待室的畫面：只有這局的設定（座位等資訊由 room.render 補上）。
+func lobbySnapshot(va game.Variant, level int, seed uint64) snapshot {
+	return snapshot{
+		Phase:       "lobby",
+		Level:       level,
+		LevelName:   hgroup.Levels[level-1],
+		Variant:     va.Code(),
+		VariantName: va.Name(),
+		Colors:      colorInts(va.Colors()),
+		ClueColors:  colorInts(va.ClueColors()),
+		Seed:        strconv.FormatUint(seed, 10),
+	}
+}
+
+// buildSnapshot 把 v 轉成遊戲畫面；notes 是回合 → 註記（AI 代打等）。
+// 名字、座位、輪到誰可以下指令由 room.render 補上。
+func buildSnapshot(v game.PlayerView, level int, seed uint64, notes map[int]string) snapshot {
 	s := snapshot{
+		Phase:        "game",
 		Seat:         v.Seat,
-		Names:        names,
 		Level:        level,
 		LevelName:    hgroup.Levels[level-1],
 		Variant:      v.Variant.Code(),
@@ -126,7 +156,6 @@ func buildSnapshot(v game.PlayerView, names []string, level int, seed uint64, yo
 		Score:        v.Score(),
 		MaxScore:     v.MaxScore(),
 		MaxReachable: v.MaxReachable(),
-		YourTurn:     yourTurn && !v.Over && v.Current == v.Seat,
 		Discards:     []cardJSON{},
 		Log:          []eventJSON{},
 		HintOptions:  []hintJSON{},
@@ -162,6 +191,9 @@ func buildSnapshot(v game.PlayerView, names []string, level int, seed uint64, yo
 	for _, e := range v.Log {
 		ej := eventJSON{Type: eventNames[e.Type], Turn: e.Turn, Player: e.Player, Slot: e.Slot, Bonus: e.Bonus,
 			Target: e.Target, Touched: e.Touched, Reason: int(e.Reason), Score: e.Score}
+		if e.Type != game.EvGameOver {
+			ej.Note = notes[e.Turn]
+		}
 		switch e.Type {
 		case game.EvPlay, game.EvMisplay, game.EvDiscard:
 			c := toCard(e.Card, true)

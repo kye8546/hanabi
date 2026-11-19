@@ -33,7 +33,8 @@ type logLine struct {
 }
 
 // NewLog 在 dir 下建立一份新紀錄（檔名是開局時間；同一秒開好幾局時加上序號）。
-func NewLog(dir string, names []string, level int, va game.Variant, seed uint64) (*Log, error) {
+// humans 是真人的座位：只有座位 0 時（console 與單人網頁版）不寫，其他情況寫成 humans=0,2（重播時這些座位照紀錄行動）。
+func NewLog(dir string, names []string, humans []int, level int, va game.Variant, seed uint64) (*Log, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -46,13 +47,24 @@ func NewLog(dir string, names []string, level int, va game.Variant, seed uint64)
 		path: path,
 		header: []string{
 			fmt.Sprintf("# 花火對局紀錄 %s", now.Format("2006-01-02 15:04:05")),
-			fmt.Sprintf("seed=%d players=%d level=%d variant=%s", seed, len(names), level, va.Code()),
+			fmt.Sprintf("seed=%d players=%d level=%d variant=%s%s", seed, len(names), level, va.Code(), humansField(humans)),
 			"# 每行：回合 座位 行動代碼 | 發生的事 | AI 理由（# 開頭的是註記，例如回溯、偷看）",
 		},
 		r:   console.NewRenderer(io.Discard, names, false, false),
 		why: map[int]string{},
 	}
 	return l, l.save()
+}
+
+func humansField(humans []int) string {
+	if len(humans) == 1 && humans[0] == 0 {
+		return ""
+	}
+	s := make([]string, len(humans))
+	for i, h := range humans {
+		s[i] = strconv.Itoa(h)
+	}
+	return " humans=" + strings.Join(s, ",")
 }
 
 func fileExists(path string) bool {

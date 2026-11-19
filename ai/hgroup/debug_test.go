@@ -383,8 +383,9 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 	}
 	var seed uint64
 	var n, level int
-	va := game.NoVariant      // 舊紀錄沒有 variant= / suits=，是 5 色
-	codes := map[int]string{} // 回合 → 行動代碼
+	va := game.NoVariant            // 舊紀錄沒有 variant= / suits=，是 5 色
+	humans := map[int]bool{0: true} // 真人的座位（多人網頁局寫 humans=0,2，沒有就只有座位 0）
+	codes := map[int]string{}       // 回合 → 行動代碼
 	for _, line := range strings.Split(string(data), "\n") {
 		if strings.HasPrefix(line, "seed=") {
 			fmt.Sscanf(line, "seed=%d players=%d level=%d", &seed, &n, &level)
@@ -393,6 +394,13 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 					va, _ = game.ParseVariant(code)
 				} else if f == "suits=6" {
 					va = game.SixSuits
+				} else if list, ok := strings.CutPrefix(f, "humans="); ok {
+					humans = map[int]bool{}
+					for _, x := range strings.Split(list, ",") {
+						if h, err := strconv.Atoi(x); err == nil {
+							humans[h] = true
+						}
+					}
 				}
 			}
 		}
@@ -423,12 +431,12 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 			return diffs, err
 		}
 		var a game.Action
-		if p == 0 {
+		if humans[p] {
 			a = want
-			if bots[0].s == nil {
-				bots[0].s = newState(g.View(0), bots[0].level)
+			if bots[p].s == nil {
+				bots[p].s = newState(g.View(p), bots[p].level)
 			}
-			bots[0].s.sync(g.View(0))
+			bots[p].s.sync(g.View(p))
 		} else {
 			a = bots[p].Act(g.View(p))
 			if a != want {
@@ -445,7 +453,7 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 				}
 			}
 		}
-		if turn == dumpTurn && p != 0 {
+		if turn == dumpTurn && !humans[p] {
 			st := bots[p].s
 			for _, ev := range st.allClues() {
 				fmt.Fprintf(out, "  EV %s→P%d kind=%d focus=#%d und=%v mis=%v danger=%v bad=%d good=%d score=%d\n",
@@ -479,7 +487,7 @@ func replayLog(path string, dumpTurn, free int, out io.Writer) (diffs []string, 
 			return diffs, fmt.Errorf("t%d: %v", turn, err)
 		}
 		why := ""
-		if p != 0 {
+		if !humans[p] {
 			why = bots[p].s.why
 		}
 		fmt.Fprintf(out, "t%-3d %-34s %s\n", turn, evStr(evs[0], names), why)
