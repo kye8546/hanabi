@@ -86,6 +86,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
+// roomCode 是隨機四位數的房號（朋友在首頁輸入它加入）。房間最多 maxRooms 個，撞號就重抽。
+func roomCode() string {
+	var b [2]byte
+	rand.Read(b[:])
+	return fmt.Sprintf("%04d", (int(b[0])<<8|int(b[1]))%10000)
+}
+
 func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
@@ -203,9 +210,9 @@ func (s *Server) open(cfg roomConfig) (*room, error) {
 	if len(s.rooms) >= maxRooms {
 		return nil, fmt.Errorf("伺服器目前太忙，請稍後再試")
 	}
-	id := randomHex(6)
+	id := roomCode()
 	for s.rooms[id] != nil {
-		id = randomHex(6)
+		id = roomCode()
 	}
 	r, err := newRoom(id, cfg, s.logDir, s.aiDelay)
 	if err != nil {
@@ -223,17 +230,23 @@ func (s *Server) find(id string) *room {
 
 const notFound = "找不到這局（可能已過期或伺服器重新啟動過）"
 
-// roomInfo 是邀請連結打開時看到的資訊（不用通行碼）：設定與座位。
+// roomInfo 是輸入房號（或打開邀請連結）時看到的資訊，不用通行碼：設定與座位。
+// 帶著這個瀏覽器之前在這間房的通行碼時，seat 是他的座位（-1 = 沒有，例如房號已經換成別的房間）。
 func (s *Server) roomInfo(w http.ResponseWriter, req *http.Request) {
-	r := s.find(req.URL.Query().Get("room"))
+	q := req.URL.Query()
+	r := s.find(q.Get("room"))
 	if r == nil {
-		writeJSON(w, http.StatusNotFound, reply{Error: notFound})
+		writeJSON(w, http.StatusNotFound, reply{Error: "沒有這個房號（可能打錯，或那局已經關閉）"})
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	info := lobbySnapshot(r.va, r.level, r.seed)
 	info.Seed = ""
+	info.Seat = -1
+	if seat, ok := r.tokens[q.Get("token")]; ok {
+		info.Seat = seat
+	}
 	if r.started {
 		info.Phase = "game"
 	}

@@ -256,6 +256,9 @@ func TestMultiplayer(t *testing.T) {
 	if host.Error != "" {
 		t.Fatal(host.Error)
 	}
+	if len(host.Room) != 4 || strings.Trim(host.Room, "0123456789") != "" {
+		t.Errorf("房號應該是四位數字：%q", host.Room)
+	}
 	var info snapshot
 	res, err := http.Get(ts.URL + "/api/room?room=" + host.Room)
 	if err != nil {
@@ -263,7 +266,7 @@ func TestMultiplayer(t *testing.T) {
 	}
 	json.NewDecoder(res.Body).Decode(&info)
 	res.Body.Close()
-	if info.Phase != "lobby" || len(info.Seats) != 3 || info.Seats[1].Kind != "open" || info.Seats[2].Kind != "ai" || info.Seed != "" {
+	if info.Phase != "lobby" || len(info.Seats) != 3 || info.Seats[1].Kind != "open" || info.Seats[2].Kind != "ai" || info.Seed != "" || info.Seat != -1 {
 		t.Fatalf("邀請連結看到的資訊不對：%+v", info)
 	}
 

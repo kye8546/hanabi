@@ -69,9 +69,9 @@ function hintText(h) {
   return `數字 ${h.rank}`;
 }
 
-// 同一時間只顯示一個畫面：開局設定 / 加入 / 等待室 / 牌桌
+// 同一時間只顯示一個畫面：首頁（創立 / 加入房間）/ 等待室 / 牌桌
 function views(name) {
-  for (const id of ['setup', 'join', 'lobby', 'game']) $('#' + id).hidden = id !== name;
+  for (const id of ['setup', 'lobby', 'game']) $('#' + id).hidden = id !== name;
 }
 
 // 多人房間的網址帶著 ?r=房間，重新整理或把網址傳給朋友都能用
@@ -96,7 +96,8 @@ async function loadConfig() {
   S.cfg = await res.json();
 }
 
-function showSetup(err) {
+// 首頁。joinCode：直接切到「加入房間」並查這個房號（打開邀請連結時）
+function showSetup(err, joinCode) {
   closeStream();
   S.room = S.token = S.snap = null;
   setRoomURL(null);
@@ -104,6 +105,11 @@ function showSetup(err) {
   document.title = '花火 Hanabi';
   const f = $('#setup-form');
   const last = JSON.parse(store('hanabi.settings') || '{}');
+  $('#name').value = last.name || '';
+  $('#room-code').value = joinCode || '';
+  $('#join-body').innerHTML = '';
+  setMode(joinCode ? 'join' : 'create');
+  if (joinCode) lookupRoom(joinCode);
 
   const seg = $('#players');
   seg.innerHTML = '';
@@ -119,7 +125,6 @@ function showSetup(err) {
   $('#variants').innerHTML = S.cfg.variants.map((v) =>
     `<label class="variant"><input type="radio" name="variant" value="${v.code}" ${(last.variant || 'none') === v.code ? 'checked' : ''}>
      <span><b>${esc(v.name)}</b><small>${esc(v.desc)}</small></span></label>`).join('');
-  f.name.value = last.name || '';
   f.seed.value = '';
   const e = $('#setup-error');
   e.hidden = !err;
@@ -185,65 +190,76 @@ $('#setup-form').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const f = ev.target;
   startGame({
-    name: f.name.value, players: Number(f.players.value), level: Number(f.level.value),
+    name: $('#name').value, players: Number(f.players.value), level: Number(f.level.value),
     variant: f.variant.value, seed: f.seed.value.trim(), seats: seatChoices(),
   });
 });
 
-// ---------- 用邀請連結加入 ----------
+// ---------- 加入房間 ----------
+
+function setMode(mode) {
+  $(`#mode-${mode}`).checked = true;
+  $('#setup-form').hidden = mode !== 'create';
+  $('#join-form').hidden = mode !== 'join';
+  if (mode === 'join') $('#room-code').focus();
+}
+
+$('#modes').addEventListener('change', (ev) => setMode(ev.target.value));
+
+// 輸入滿 4 位數就查房間
+$('#room-code').addEventListener('input', (ev) => {
+  const code = ev.target.value.replace(/\D/g, '').slice(0, 4);
+  ev.target.value = code;
+  if (code.length === 4) lookupRoom(code); else $('#join-body').innerHTML = '';
+});
+
+$('#join-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const code = $('#room-code').value;
+  if (code.length === 4) lookupRoom(code);
+});
 
 function settingsText(s) {
   const variant = s.variant === 'none' ? '' : ` · ${esc(s.variantName)}`;
   return `${s.seats.length} 人局${variant} · Lv${s.level} ${esc(s.levelName)}`;
 }
 
-async function showJoin(room) {
-  closeStream();
-  S.room = room;
-  S.token = S.snap = null;
-  views('join');
-  setRoomURL(room);
-  document.title = '加入牌局 · 花火';
+// 查房間：這個瀏覽器原本就坐在這間房（中途離開又回來）就直接回到座位，否則列出座位讓他選
+async function lookupRoom(code) {
   const body = $('#join-body');
-  body.innerHTML = '<p class="muted">讀取中…</p>';
+  body.innerHTML = '<p class="muted">查詢中…</p>';
+  const mine = store('hanabi.seat.' + code);
   let info;
   try {
-    const res = await fetch('api/room?room=' + encodeURIComponent(room), { cache: 'no-store' });
+    const res = await fetch(`api/room?room=${encodeURIComponent(code)}&token=${encodeURIComponent(mine || '')}`, { cache: 'no-store' });
     info = await res.json();
     if (!res.ok) throw new Error(info.error);
   } catch (e) {
-    body.innerHTML = `<p class="error">${esc(e.message || '連不上伺服器')}</p>`;
-    body.append(newGameButton());
+    if ($('#room-code').value === code) body.innerHTML = `<p class="error">${esc(e.message || '連不上伺服器')}</p>`;
     return;
   }
+  if ($('#room-code').value !== code) return; // 已經改成別的房號
+  if (info.seat >= 0) {
+    enterRoom(code, mine);
+    return;
+  }
+  if (mine) store('hanabi.seat.' + code, null); // 房號已經換成別的房間
   if (info.phase !== 'lobby') {
     body.innerHTML = `<p>${settingsText(info)}</p><p class="error">這局已經開始了，不能再加入。</p>`;
-    body.append(newGameButton());
     return;
   }
-  const last = JSON.parse(store('hanabi.settings') || '{}');
   body.innerHTML = `<p>${settingsText(info)}</p>
-    <label class="field"><span>你的名字</span><input id="join-name" maxlength="12" placeholder="玩家" autocomplete="nickname" value="${esc(last.name || '')}"></label>
-    <div class="field"><span>座位 <small>（照行動順序）</small></span><ol class="seatlist">${info.seats.map((st, i) => `
+    <div class="field"><span>選一個空位 <small>（照行動順序）</small></span><ol class="seatlist">${info.seats.map((st, i) => `
       <li><span class="seat">${i}</span><span class="who">${seatLabel(st, i)}</span>
-      ${st.kind === 'open' ? `<button class="primary" data-sit="${i}">坐這裡</button>` : ''}</li>`).join('')}</ol></div>`;
-  if (!info.seats.some((st) => st.kind === 'open')) {
-    body.insertAdjacentHTML('beforeend', '<p class="error">座位已經坐滿了。</p>');
-    body.append(newGameButton());
-  }
+      ${st.kind === 'open' ? `<button class="primary" type="button" data-sit="${i}">坐這裡</button>` : ''}</li>`).join('')}</ol></div>`;
+  if (!info.seats.some((st) => st.kind === 'open')) body.insertAdjacentHTML('beforeend', '<p class="error">座位已經坐滿了。</p>');
   for (const b of body.querySelectorAll('[data-sit]')) {
-    b.addEventListener('click', () => joinSeat(room, Number(b.dataset.sit)));
+    b.addEventListener('click', () => joinSeat(code, Number(b.dataset.sit)));
   }
-}
-
-function newGameButton() {
-  const b = el('button', '', '自己開一局');
-  b.addEventListener('click', () => showSetup());
-  return b;
 }
 
 async function joinSeat(room, seat) {
-  const name = $('#join-name').value;
+  const name = $('#name').value;
   const last = JSON.parse(store('hanabi.settings') || '{}');
   store('hanabi.settings', JSON.stringify({ ...last, name }));
   let out;
@@ -258,7 +274,7 @@ async function joinSeat(room, seat) {
   }
   if (out.error) {
     toast(out.error, 'error');
-    showJoin(room);
+    lookupRoom(room);
     return;
   }
   enterRoom(out.room, out.token);
@@ -280,7 +296,7 @@ function renderLobby(s) {
   setRoomURL(S.room);
   document.title = '等待室 · 花火';
   $('#lobby-info').innerHTML = settingsText(s);
-  $('#invite').value = inviteURL(S.room);
+  $('#lobby-code').textContent = S.room;
   $('#lobby-seats').innerHTML = s.seats.map((st, i) => {
     let t = `<li class="${i === s.seat ? 'me' : ''}"><span class="seat">${i}</span><span class="who">`;
     if (st.kind === 'human') t += `<i class="dot ${st.online ? 'on' : ''}" title="${st.online ? '在線上' : '離線'}"></i> `;
@@ -338,14 +354,13 @@ $('#lobby-actions').addEventListener('click', async (ev) => {
 });
 
 $('#copy-invite').addEventListener('click', async () => {
-  const input = $('#invite');
+  const url = inviteURL(S.room);
   try {
-    await navigator.clipboard.writeText(input.value);
+    await navigator.clipboard.writeText(url);
+    toast('已複製邀請連結');
   } catch {
-    input.select();
-    document.execCommand('copy');
+    prompt('複製這個連結傳給朋友：', url); // 不是 https 時瀏覽器不給寫入剪貼簿
   }
-  toast('已複製邀請連結');
 });
 
 // ---------- 連線 ----------
@@ -472,7 +487,7 @@ function render() {
   views('game');
   hideMenu(); // 畫面重畫後選單指向的牌已經不在了
   document.title = s.yourTurn ? '● 輪到你了 · 花火' : '花火 Hanabi';
-  $('#game-info').innerHTML = settingsText(s) + (s.seed ? ` · seed ${s.seed}` : '');
+  $('#game-info').innerHTML = settingsText(s) + (s.multi ? ` · 房號 ${esc(S.room)}` : '') + (s.seed ? ` · seed ${s.seed}` : '');
   for (const b of document.querySelectorAll('[data-cmd]')) {
     b.hidden = s.multi && b.dataset.cmd !== 'auto'; // 多人局不能回溯、偷看
     b.disabled = !s.yourTurn;
@@ -854,15 +869,12 @@ $('#btn-new').addEventListener('click', () => {
   }
   const want = new URLSearchParams(location.search).get('r');
   const saved = JSON.parse(store('hanabi.session') || 'null');
-  const seat = want && store('hanabi.seat.' + want);
-  if (seat) {
-    enterRoom(want, seat);
-  } else if (saved && !want) {
+  if (saved && (!want || saved.room === want)) {
     S.room = saved.room;
     S.token = saved.token;
     openStream();
   } else if (want) {
-    showJoin(want);
+    showSetup(null, want); // 邀請連結：查這個房號（原本就坐在裡面會直接回去）
   } else {
     showSetup();
   }

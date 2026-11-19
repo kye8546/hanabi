@@ -103,14 +103,26 @@ input[type=text], input:not([type]), input[inputmode], select {
 .setup .primary { width: 100%; padding: 10px; font-size: 17px; }
 .setup .seatlist .primary, .setup .seg .primary { width: auto; padding: 4px 12px; font-size: 15px; }
 
+/* ---------- 首頁的兩個分頁、房號 ---------- */
+.seg.tabs { margin: 4px 0 20px; }
+.seg.tabs label { padding: 10px 0; font-weight: 600; }
+.code-input {
+  font: 700 32px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace !important;
+  letter-spacing: .4em; text-align: center; padding: 10px !important;
+}
+.code-input::placeholder { color: var(--line); }
+.room-code {
+  font: 800 44px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .25em;
+  padding: 8px 0 6px; color: var(--accent); user-select: all;
+}
+.linkish { border: 0; background: none; padding: 0 2px; color: var(--accent); text-decoration: underline; font-size: inherit; }
+
 /* ---------- 座位（開局設定、加入、等待室） ---------- */
 .seat-choices { display: grid; gap: 6px; }
 .seat-choice { display: flex; align-items: center; gap: 12px; }
 .seat-choice > span { min-width: 52px; color: var(--muted); }
 .seat-choice .seg { flex: 1; }
 .seg.small label { padding: 4px 0; }
-.invite { display: flex; gap: 6px; }
-.invite input { flex: 1; min-width: 0; font-size: 13px; }
 .seatlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .seatlist li {
   display: flex; align-items: center; gap: 10px; padding: 8px 10px;
