@@ -250,3 +250,14 @@ func TestFeedDiscardDefersFinesse(t *testing.T) {
 		t.Fatalf("AI-3 應盲打 slot 2 的 G4，卻做了 %+v（%s）", a, bots[3].Why())
 	}
 }
+
+func TestDDANotWhenLastCopyVisible(t *testing.T) {
+	// 使用者回報 20261119-172721 t25：AI-3 棄掉一張 B4，另一張 B4 還在 AI-3 手上，使用者看得到，不是 Double Discard Situation。
+	// 他用「5」重新點 AI-1 早被綠色點過、大家都知道是 G5 的牌，是 Tempo Clue：Reverse Finesse AI-2 的 G3、prompt AI-3 的 G4。
+	// 以前照提示資訊把使用者當成 DDA，「5」被讀成拖延，AI-2 沒盲打、還用綠色直接提示使用者的 G3
+	const codes = "h3G p1 h0R h2B p1 h3R p4 p2 h1G p1 h13 p4 p1 p4 h3Y p3 h1Y p2 d4 h2W p1 p3 p3 d3 h15 d3"
+	g, bots := replayCodes(t, 4, 1795080441995189000, 12, codes)
+	if a := bots[2].Act(g.View(2)); a.Type != game.ActPlay || a.Slot != 0 {
+		t.Errorf("AI-2 應該盲打 slot 1 的 G3，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

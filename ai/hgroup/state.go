@@ -189,6 +189,9 @@ type sim struct {
 	// retouch：評估「不給新資訊」的提示（重新點已提示的牌拖延，Hard Burn）——我鎖手、要棄的已提示牌很可能是 critical 時，
 	// 或我在 Double Discard Situation、沒有別的拖延提示時（discard）
 	retouch bool
+
+	// ddaHolderView：模擬最後那張的持有者怎麼讀（他看不到自己的牌，以為 Double Discard Situation 成立，ddaRec.holder）
+	ddaHolderView bool
 }
 
 // saveSim 存下目前的假設情境，回傳還原它的函式。

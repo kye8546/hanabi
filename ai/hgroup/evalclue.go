@@ -108,6 +108,10 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	}
 	it := s.interpret(s.me, R, h, touched)
 	ev := clueEval{act: act, target: R, focus: it.focus, touched: touched}
+	if s.ddaMisread(R, h, touched, it) {
+		ev.misleads = true
+		return ev, true
+	}
 	if it.fix {
 		return s.evalFix(it, ev, h, dist), true
 	}
@@ -902,4 +906,36 @@ func (s *state) unsafeFinesse(R int, plan []dep) bool {
 		}
 		return s.queuedBehind(d) || d.layers > 0 && (!s.playableNow(d.id) || d.player == R)
 	})
+}
+
+// ddaMisread（Level 9）：我看得到上一位棄掉的那張的最後一張在第三人 H 手上，所以我不在 Double Discard Situation；
+// 但 H 看不到自己的牌，以為我在，會把我的提示照拖延讀（5 Stall、Tempo Clue 不 Chop Move、Fill-In 不讓人盲打）。
+// 這個提示要 H 行動（他是接收者，或要他打連接牌），而照他的讀法意思不同時，算誤導
+// （自我對局 4 人局 seed 212：P3 的「5」對別人是 finesse，持有最後一張 Y4 的 P1 讀成 5 Stall 而沒盲打）。
+func (s *state) ddaMisread(R int, h game.Hint, touched []int, it interp) bool {
+	if s.dda == nil || s.dda.target != s.me || s.dda.holder < 0 || s.ddaHolderView {
+		return false
+	}
+	H := s.dda.holder
+	uses := func(cs []cand) bool {
+		return slices.ContainsFunc(cs, func(c cand) bool {
+			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == H })
+		})
+	}
+	if R != H && !uses(it.cands) && !slices.ContainsFunc(it.plan, func(d dep) bool { return d.player == H }) {
+		return false
+	}
+	restore := s.saveSim()
+	s.ddaHolderView = true
+	alt := s.interpret(s.me, R, h, touched)
+	restore()
+	ids := func(cs []cand) []ident {
+		var out []ident
+		for _, c := range cs {
+			out = append(out, c.id)
+		}
+		return out
+	}
+	return alt.fix != it.fix || alt.cmKind != it.cmKind || !slices.Equal(alt.cm, it.cm) ||
+		!slices.Equal(ids(alt.cands), ids(it.cands)) || !sameDeps(alt.plan, it.plan)
 }

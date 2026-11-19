@@ -13,6 +13,9 @@ import (
 type ddaRec struct {
 	target int
 	id     ident
+	// holder：最後那張在第三人（不是 target）手上、我看得到時是他，否則 -1。這時 target 看得到它，不是 Double Discard
+	// Situation——只有 holder 看不到自己的牌，仍以為是（sim.ddaHolderView 模擬他的讀法）
+	holder int
 }
 
 // detectDDA：p 剛棄掉（或打錯）牌面 id 之後，下一位是否處在 Double Discard Situation（原文的定義：上一位棄牌或打錯，
@@ -28,7 +31,21 @@ func (s *state) detectDDA(p int, id ident, sarcastic bool) *ddaRec {
 	if c := s.publicChop(q, nil); c < 0 || !s.notes[c].explicit.has(id) {
 		return nil
 	}
-	return &ddaRec{target: q, id: id}
+	// 原文：「Since Bob does not see the red 4 in anyone else's hand ... Bob knows that he is currently in a Double
+	// Discard Situation」——最後那張在別人（不是他）手上、他看得到時就不是。我看得到它在第三人手上，他也看得到
+	// （記下 holder；它在我手上時我看不到，照舊當成可能）。使用者回報 20261119-172721 t25：AI-3 棄掉一張 B4，另一張在 AI-3 手上，
+	// 使用者的 chop 依提示可能是 B4，大家就把他重新點 AI-1 已知 G5 的「5」當成拖延，沒人接 finesse
+	for r, h := range s.hands {
+		if r == q || r == s.me {
+			continue
+		}
+		for _, cid := range h {
+			if c, ok := s.card(cid); ok && identOfCard(c) == id {
+				return &ddaRec{target: q, id: id, holder: r}
+			}
+		}
+	}
+	return &ddaRec{target: q, id: id, holder: -1}
 }
 
 // myDDA：我這一手處在 Double Discard Situation——依我自己的推論，chop 上的牌可能就是那張最後一張
@@ -53,7 +70,7 @@ func (s *state) stallSeverity(giver int) int {
 		return 4
 	case s.chop(giver) < 0:
 		return 3
-	case s.screamed(giver) || s.dda != nil && s.dda.target == giver && !s.loaded(giver):
+	case s.screamed(giver) || s.dda != nil && s.dda.target == giver && (s.dda.holder < 0 || s.ddaHolderView) && !s.loaded(giver):
 		return 2
 	case !s.midGame:
 		return 1
