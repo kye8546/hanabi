@@ -34,6 +34,14 @@ func (s *state) focusInverted(giver, R int, h game.Hint, it *interp, fresh []int
 	selfFin := func(c cand) bool {
 		return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == R && d.finesse })
 	}
+	// 旁觀者看不到自己的 finesse position，接收者看得到：模擬接收者的讀法時假設我那張不是要的牌（多半如此），
+	// finesse 照接收者的找法落到別人或他自己（Self-Finesse）。否則旁觀者以為「可能是 finesse 我」，和接收者、給提示者的
+	// 判斷不一致（自我對局 Rainbow 5 人局 seed 523 t13：「3」點到 P4 的 R3 與 chop 上的 Y3，P4 看得到大家的 finesse
+	// position 都不是 G2 / B2 / W2，chop 的 G3 / B3 / W3 只能是 Self-Finesse、不反轉；P0、P1、P3 卻反轉成 R3，之後連鎖三閃電）
+	if s.me != R && s.me != giver {
+		defer s.saveSim()()
+		s.skipFinesse = append(slices.Clone(s.skipFinesse), s.me)
+	}
 	base := it.explicit[it.focus]
 	for _, c := range s.playCands(R, giver, R, it.focus, base) {
 		if !blind(c) || h.Kind == game.HintRank && selfFin(c) {

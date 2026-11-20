@@ -1,6 +1,7 @@
 package hgroup
 
 import (
+	"fmt"
 	"testing"
 
 	"hanabi/game"
@@ -162,5 +163,36 @@ func TestL12DuplicationResponsibilityTie(t *testing.T) {
 		if a.Type != game.ActHint || a.Target != 0 || !a.Hint.Matches(game.Card{Color: game.Blue, Rank: 2}) {
 			t.Fatalf("Cathy 應救 Alice 的 b2，卻做了 %+v（%s）", a, bots[2].Why())
 		}
+	}
+}
+
+func TestL12FocusInversionBystandersAgreeWithReceiver(t *testing.T) {
+	// 自我對局 Rainbow 5 人局 seed 523 t13：P2 用「3」點 P4 的 R3（slot 1）與 chop 上的 Y3。P4 看得到大家的 finesse position
+	// 都不是 G2 / B2 / W2，chop 的 G3 / B3 / W3 只能是他的 Self-Finesse（數字提示，優先於 Focus Inversion），不反轉；
+	// 旁觀者 P0、P1、P3 以前以為可能是「finesse 我」而反轉成 R3，各家讀法不一致，之後連鎖三閃電
+	n := 5
+	g, _ := game.NewVariant(n, game.RainbowSix, 523)
+	bots := make([]*Bot, n)
+	for i := range bots {
+		bots[i] = New(fmt.Sprint(i), 12)
+	}
+	for g.Turn <= 13 {
+		p := g.Current
+		g.Apply(bots[p].Act(g.View(p)))
+	}
+	focus := -1
+	for q := range n {
+		bots[q].Observe(g.View(q))
+		for _, r := range bots[q].s.recs {
+			if r.giver == 2 && r.target == 4 {
+				if focus >= 0 && r.focus != focus {
+					t.Fatalf("P%d 讀到的焦點 #%d 和別人的 #%d 不同", q, r.focus, focus)
+				}
+				focus = r.focus
+			}
+		}
+	}
+	if focus < 0 {
+		t.Fatal("布置錯誤：找不到 t13 P2 給 P4 的提示")
 	}
 }
