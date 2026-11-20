@@ -814,8 +814,13 @@ func (s *state) blindProves(e game.Event, played int, explained map[*clueRec]boo
 		// 接收者自己的 self-prompt 解讀在還有其他解讀時放在 fallback，也算（例如給提示者看不到自己的牌，以為接收者
 		// 可能讀成 finesse 自己；使用者回報 20261110-101232：AI-2 以為 AI-3 可能把「4」讀成「W4，finesse AI-2 的 W2、W3」，
 		// G4 那條在 fallback）
-		for _, c := range append(slices.Clone(rec.cands), rec.fallback...) {
-			if slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == played }) {
+		// 可能是 save clue 的提示（有 save 解讀）不會讓人盲打：fallback 只在所有解讀都失敗後才升格，save 解讀不會失敗，
+		// fallback 裡要他盲打這張的解讀就不是他盲打的理由（使用者回報 20261120-144720：AI-2 的「5」救 AI-1 chop 上的 W5，
+		// fallback 留著「W5，AI-1 Self-Finesse W2–W4」；使用者的白色點 AI-3 的 W4、finesse AI-1 的 W2，AI-1 盲打出 W2 後
+		// AI-2 以為可能是照那個 fallback，不當成證明，一直不知道自己被白色點過的牌是要被 prompt 的 W3）
+		saveRec := slices.ContainsFunc(rec.cands, func(c cand) bool { return c.save })
+		for i, c := range append(slices.Clone(rec.cands), rec.fallback...) {
+			if (i < len(rec.cands) || !saveRec) && slices.ContainsFunc(c.deps, func(d dep) bool { return d.card == played }) {
 				return nil // 這個提示本來就要他盲打這張，照一般流程處理
 			}
 			if slices.ContainsFunc(c.deps, func(d dep) bool { return d.id == t && !d.finesse && d.player != e.Player }) {
@@ -1191,6 +1196,9 @@ func (s *state) afterPlay() {
 		if rec.reconnect {
 			rec.reconnect = false
 			s.reconnectCands(rec)
+			// 我看得到焦點時，我自己的計畫也照新的煙火重算：提示當下可能根本排不出計畫（例如以為要 prompt 我自己的已提示牌
+			// 當下一張，再下一張卻沒人有），盲打證明了是 finesse 之後，我那張就是下一張的 prompt（使用者回報 20261120-144720）
+			rec.stale = true
 		}
 		if rec.stale {
 			rec.stale = false

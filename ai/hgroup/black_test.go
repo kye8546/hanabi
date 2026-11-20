@@ -113,3 +113,17 @@ func TestOneOnChopIsNeverSave(t *testing.T) {
 		t.Error("「1」點到 chop 應是 play clue")
 	}
 }
+
+func TestBlindPlayNotExplainedBySaveClueFallback(t *testing.T) {
+	// 使用者回報 20261120-144720（Black，4 人局）：t25 使用者白色點 AI-2 chop 上的 W3（記成「W2 或 W3」）；t31 AI-2 的「5」
+	// 救 AI-1 chop 上的 W5，fallback 留著「W5，AI-1 Self-Finesse W2–W4」；t33 使用者白色點 AI-3 的 W4，t34 AI-1 盲打出 W2。
+	// 「5」可能是 save clue，不會讓 AI-1 盲打，這次盲打證明了白色是 W4（finesse AI-1 的 W2），AI-2 的白牌就是被 prompt 的 W3
+	const codes = "h3B p1 h11 h2R h25 p4 p1 h0K d2 p4 h35 d3 h35 p1 d4 p4 p1 p2 h1G p3 p1 d3 h12 p2 h2W p4 h3G p3 h33 p3 h15 p4 h3W p1"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1795157240339150000, 12, codes)
+	if c := g.Hands[2][3].Card; c.Color != game.White || c.Rank != 3 {
+		t.Fatalf("布置錯誤：AI-2 slot 4 應是 W3，卻是 %+v", c)
+	}
+	if a := step(t, g, bots); a != game.Play(3) {
+		t.Fatalf("AI-2 應打出被 prompt 的 W3（slot 4），卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
