@@ -315,3 +315,22 @@ func TestL6ReclueOfFocusThatPlaysAfterOwnCardsIsTCCM(t *testing.T) {
 		}
 	}
 }
+
+func TestL6ReclueOfDelayedFocusIsTCCM(t *testing.T) {
+	// 使用者回報 20261120-093408 t16（Black，4 人局）：AI-2 的「3」點到使用者 slot 1 與 chop 上的 R3，焦點是 chop，
+	// 直接解讀是 R3 / Y3 / B3（B2 在 AI-1 手上、大家都知道），AI-1 打出 B2 後使用者一定會打它。
+	// AI-3 再用紅色點它只是換順序（紅色的 prompt 會先落在 slot 1 也不算有價值）：是 TCCM，使用者 chop 上的 G5 被 Chop Move
+	const codes = "h2Y h2B h11 p1 h1B p4 p3 p2 h3R p3 p3 p2 h15 p3 h03"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1795138448345290000, 12, codes)
+	if a := step(t, g, bots); a != game.HintRankTo(0, 5) {
+		t.Fatalf("AI-3 應用「5」直接救使用者 chop 上的 G5（有正向資訊），卻做了 %+v（%s）", a, bots[3].Why())
+	}
+	g, bots = replayCodesVariant(t, 4, game.BlackSix, 1795138448345290000, 12, codes+" h0R")
+	chop := g.Hands[0][2].Card.ID
+	for p := 1; p < 4; p++ {
+		bots[p].Act(g.View(p))
+		if !bots[p].s.notes[chop].cm {
+			t.Errorf("AI-%d 應把使用者 chop 上的 G5 記成被 Chop Move（紅色是 Tempo Clue Chop Move）", p)
+		}
+	}
+}
