@@ -531,7 +531,10 @@ func (s *state) discard(v game.PlayerView, evs []clueEval) (game.Action, string)
 	if chop := s.chop(s.me); chop >= 0 {
 		// Level 9 Double Discard Avoidance：上一位剛棄掉的牌只剩一張、可能就在我的 chop 上，不棄 chop，改給提示
 		// （拖延提示也可以：5 Stall、Tempo Clue、補資訊）。只有會誤導或讓人打錯的提示時照樣棄牌
-		if v.Hints >= 2 && s.myDDA() {
+		// 只剩 1 個提示時照樣棄牌（AI 的判斷，原文沒有：用掉最後一個提示，下一位就被迫棄牌）——但下一位有確定能打的牌、
+		// 或有已知垃圾可棄時，他不會被迫棄 chop，照樣拖延（使用者回報 20261120-174355 t15：AI-1 剛棄掉 B4，AI-2 的 chop
+		// 是最後的 B4，下一位 AI-3 有大家都知道能打的 Y2，AI-2 卻因為只剩 1 個提示就棄掉它）
+		if (v.Hints >= 2 || v.Hints == 1 && s.keepsChop((s.me+1)%s.n)) && s.myDDA() {
 			allowed := slices.DeleteFunc(slices.Clone(evs), func(e clueEval) bool { return e.kind != kindStall && e.kind != kindTempo })
 			if a, tier := s.stallTier(allowed); tier > 2 {
 				return a, "Double Discard Avoidance：上一位棄掉的牌只剩一張，可能就在我的 chop 上，給拖延提示"

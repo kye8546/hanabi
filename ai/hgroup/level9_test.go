@@ -261,3 +261,15 @@ func TestDDANotWhenLastCopyVisible(t *testing.T) {
 		t.Errorf("AI-2 應該盲打 slot 1 的 G3，卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestL9DDAWithOneHintWhenNextHasPlay(t *testing.T) {
+	// 使用者回報 20261120-174355 t15（Rainbow，4 人局）：t14 AI-1 棄掉 B4，AI-2 的 chop 是最後的 B4（Double Discard
+	// Situation），提示只剩 1 個。下一位 AI-3 有大家都知道能打的 Y2，用掉最後一個提示也不會逼他棄牌，AI-2 要拖延、不棄 chop
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1795167835214864000, 12, "h2Y h01 p4 h02 p2 h22 h3B p4 p3 h3Y h32 p2 h25 d3")
+	if c := g.Hands[2][1].Card; c.Color != game.Blue || c.Rank != 4 {
+		t.Fatalf("布置錯誤：AI-2 slot 2 應是 B4，卻是 %+v", c)
+	}
+	if a := step(t, g, bots); a.Type != game.ActHint {
+		t.Fatalf("AI-2 在 Double Discard Situation 應給拖延提示，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}
