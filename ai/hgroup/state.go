@@ -530,7 +530,7 @@ func (s *state) apply(e game.Event) {
 		if e.Type != game.EvPlay {
 			s.dda = s.detectDDA(e.Player, id, sarcastic)
 		}
-		s.afterPlay()
+		s.afterPlay(e)
 	case game.EvDraw:
 		s.deck--
 		s.hands[e.Player] = slices.Insert(s.hands[e.Player], 0, e.Card.ID)

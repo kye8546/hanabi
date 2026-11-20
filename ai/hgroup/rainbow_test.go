@@ -160,3 +160,19 @@ func TestSaveFiveWithNumberAtMaxHints(t *testing.T) {
 		t.Fatalf("AI-3 應用「5」救 AI-1 chop 上的 Y5，卻做了 %+v（%s）", a, bots[3].Why())
 	}
 }
+
+func TestRefutedDelayedBecomesReverseFinesse(t *testing.T) {
+	// 使用者回報 20261120-170125（Rainbow，4 人局）：t1 紅色點到 AI-1 的 M1（大家記成「R1 或 M1」）；t5 使用者「2」點 AI-1
+	// 的 R2。t6 AI-1 打出的是 M1：使用者在 t5 就看得到它不是 R1，要的是 R2，R1 由 Reverse Finesse AI-3 盲打（AI-2 的
+	// finesse position 是 G3）。以前「R2」的解讀直接被拿掉、只剩 M2，AI-3 不盲打，AI-2 只好在 t7 重複點「2」
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1795165285441581000, 12, "h1R h22 h15 d4 h12 p4")
+	if a := step(t, g, bots); a == game.HintRankTo(1, 2) {
+		t.Fatalf("AI-2 不必重複點 AI-1 的 R2（%s）", bots[2].Why())
+	}
+	if c := g.Hands[3][0].Card; c.Color != game.Red || c.Rank != 1 {
+		t.Fatalf("布置錯誤：AI-3 slot 1 應是 R1，卻是 %+v", c)
+	}
+	if a := step(t, g, bots); a != game.Play(0) {
+		t.Fatalf("AI-3 應接 Reverse Finesse 盲打 slot 1 的 R1，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}

@@ -1083,21 +1083,45 @@ func depsOf(cs []cand) [][]dep {
 
 // recheckDelayed：delayed play clue 的解讀是靠「已經有人會打的牌」接上的。那些牌打出或棄掉後，
 // 若證實不是需要的牌（例如以為可能是 g1 的 1 打出來是 y1），這個解讀就不成立了，從筆記移除。
-func (s *state) recheckDelayed() {
+// 但那張牌在提示當時就在別人（不是給提示者）手上時，給提示者早就看得到它不是：他要的若是這個牌面，就是要人 finesse
+// 那張缺的牌——看得到焦點的人照現在的煙火替實際牌面重找連接（connectRec），找得到就改成那個解讀（要接收者自己盲打的
+// 放進 fallback）。接收者看不到焦點，照舊。
+// 使用者回報 20261120-170125：t1 紅色點到 AI-1 的 M1（大家記成「R1 或 M1」），t5 使用者「2」點 AI-1 的 R2、要 Reverse
+// Finesse AI-3 的 R1；t6 打出的是 M1 後「R2」的解讀被拿掉，大家只剩 M2，AI-3 不盲打，AI-2 只好在 t7 重複點「2」。
+func (s *state) recheckDelayed(e game.Event) {
 	for _, rec := range s.recs {
 		if s.holder(rec.focus) < 0 || rec.bluff {
 			continue // Bluff 的焦點本來就差一張（沒有人會打的那張），不是靠已經會打的牌接上的
 		}
+		seen := e.Type == game.EvPlay && e.Player != rec.giver && s.notes[e.Card.ID] != nil && s.notes[e.Card.ID].drawn < rec.seq
+		var moved []cand
 		kept := slices.DeleteFunc(slices.Clone(rec.cands), func(c cand) bool {
 			if c.save || len(c.deps) > 0 || s.trash(c.id) || s.playableNow(c.id) {
 				return false
 			}
 			deps, ok := s.connectRec(rec, rec.target, c.id)
+			// 給提示者的意思只有一個：只有看得到焦點的人、而且只為實際的牌面這樣改（其他被推翻的牌面不是他要的，
+			// 改成 finesse 會讓看不到自己手牌的人跟著盲打錯）
+			// 實際牌面還有 save 的解讀時，給提示者的意思是救它，不是 finesse
+			saved := slices.ContainsFunc(rec.cands, func(o cand) bool { return o.id == c.id && o.save })
+			if x, vis := s.see(s.me, rec.focus); ok && len(deps) > 0 && seen && vis && x == c.id && !saved {
+				moved = append(moved, cand{id: c.id, deps: deps})
+			}
 			return !ok || len(deps) > 0
 		})
 		if len(kept) > 0 && len(kept) < len(rec.cands) {
+			for _, c := range moved {
+				if slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == rec.target }) {
+					rec.fallback = append(rec.fallback, c)
+				} else {
+					kept = append(kept, c)
+				}
+			}
 			rec.cands = kept
 			s.refreshFocus(rec)
+			if len(moved) > 0 {
+				s.replan(rec) // 我看得到焦點時，計畫也照新的煙火重算
+			}
 		}
 	}
 }
@@ -1191,7 +1215,7 @@ func (s *state) refutePrompts(R int) {
 }
 
 // afterPlay 重新檢查還在追蹤的提示，並丟掉已經沒有東西要追蹤的紀錄。
-func (s *state) afterPlay() {
+func (s *state) afterPlay(e game.Event) {
 	for _, rec := range s.recs {
 		if rec.reconnect {
 			rec.reconnect = false
@@ -1205,7 +1229,7 @@ func (s *state) afterPlay() {
 			s.replan(rec)
 		}
 	}
-	s.recheckDelayed()
+	s.recheckDelayed(e)
 	s.recs = slices.DeleteFunc(s.recs, func(r *clueRec) bool {
 		if len(r.plan) > 0 || s.holder(r.focus) >= 0 {
 			return false
