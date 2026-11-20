@@ -14,6 +14,9 @@ import (
 type screamRec struct {
 	from, target int
 	chop         int // target 當時的 chop（只跳過被提示與 Chop Move 的牌，publicChop；-1 = 沒有牌可 Chop Move）
+	// gen：當時是不是 Generation Discard 的情況（再下一位 chop 上是必須保留的牌、他又沒事可做）：1 是、0 不是、
+	// -1 我就是再下一位、看不到自己的 chop，照被叫的人的回應判斷（generationReply）
+	gen int
 }
 
 // Scream / Shout Discard 要大家看法一致，「大家都知道能打 / 沒用」只看提示本身（explicit 扣掉已打出、打不出去的牌面）。
@@ -139,19 +142,44 @@ func (s *state) detectScream(P, id int) *screamRec {
 		return nil
 	}
 	N := (P + 1) % s.n
-	return &screamRec{from: P, target: N, chop: s.publicChop(N, nil)}
+	sc := &screamRec{from: P, target: N, chop: s.publicChop(N, nil)}
+	// 原文：「It is not a Scream Discard if the next player has to generate a clue for cluing the next player after that」——
+	// 是不是 Generation Discard 看當時的情況，不看被叫的人怎麼回應。看得到再下一位 chop 的人照情況判斷
+	// （使用者回報 20261120-150449：t16 AI-3 做 Generation Discard 讓使用者救 AI-1 chop 上的 R1，使用者用「2」點 AI-2 的 R2、
+	// finesse AI-1 的 R1，以前因為沒點到 AI-1 的 chop 就當成 Scream，Chop Move 了使用者 chop 上的 W5，t23 的白色焦點因此是 slot 2）
+	if P3 := (N + 1) % s.n; s.n >= 3 {
+		switch {
+		case P3 == s.me:
+			sc.gen = -1
+		case s.generationSituation(P3):
+			sc.gen = 1
+		}
+	}
+	return sc
+}
+
+// generationSituation：棄牌時 P3（再下一位）的情況是 Generation Discard 要救的——只用大家（P3 以外）都看得到的資訊，
+// 各家判斷才一致（試過用 screamWorthy：裡面有各家私下的推論——finesse、自己手上可能重複的牌、2 看不看得到——
+// Chop Move 看法不一致的張數變多）：他的 chop（publicChop）是 5、critical 或現在就能打的牌，而他手上沒有大家都知道
+// 能打或沒用的牌（沒事可做，會棄 chop）。
+func (s *state) generationSituation(P3 int) bool {
+	c := s.publicChop(P3, nil)
+	if c < 0 || s.publicPlayable(P3, -1) || s.hasPublicTrash(P3, -1) {
+		return false
+	}
+	t := identOfCard(s.cards[c])
+	return !s.trash(t) && (t.rank() == game.MaxRank || s.critical(t) || s.playableNow(t))
 }
 
 // screamed：p 這一手是被 Scream / Shout 的人，不能棄牌、必須給提示（只能拖延時可以 5 Stall 或補已提示牌的資訊）。
 func (s *state) screamed(p int) bool { return s.scream != nil && s.scream.target == p }
 
-// resolveScream：被 Scream 的人行動了（e），照他的行動決定 Chop Move。他的提示點到再下一位的 chop（p3Chop，行動前算好），
-// 就是 Generation Discard：棄牌只是讓他有提示可以救那張（挑戰題 Too Few Clues），不 Chop Move。chop 只跳過被提示與
-// Chop Move 的牌（被 finesse 的牌不是每個人都知道，publicChop）。
-// 各家都照他實際的行動判斷（看不到自己 chop 的再下一位分不出是哪一種），筆記才會一致。
-// 被叫的人自己判斷不是 Generation Discard 時，就不給點到再下一位 chop 的提示（decide）。
-func (s *state) resolveScream(sc *screamRec, e game.Event, p3Chop int) {
-	if s.generationReply(sc, e, p3Chop) {
+// resolveScream：被 Scream 的人行動了（e），決定 Chop Move。Generation Discard（棄牌只是讓他有提示可以救再下一位的 chop，
+// 挑戰題 Too Few Clues）不 Chop Move：看得到再下一位 chop 的人照當時的情況（screamRec.gen），再下一位自己照回應
+// （generationReply）。chop 只跳過被提示與 Chop Move 的牌（被 finesse 的牌不是每個人都知道，publicChop）。
+// 被叫的人自己判斷不是 Generation Discard 時，就不給再下一位提示（decide 的 misreadAsGeneration），筆記才會一致。
+func (s *state) resolveScream(sc *screamRec, e game.Event, p3Chop int, p3Fin bool) {
+	if sc.gen == 1 || sc.gen == -1 && s.generationReply(sc, e, p3Chop, p3Fin) {
 		return
 	}
 	if c := sc.chop; c >= 0 && s.holder(c) == sc.target && !s.gotten(c) && !s.notes[c].cm {
@@ -159,23 +187,28 @@ func (s *state) resolveScream(sc *screamRec, e game.Event, p3Chop int) {
 	}
 }
 
-// generationReply：被叫的人的行動 e 是回應 Generation Discard——提示再下一位、點到他的 chop。
-func (s *state) generationReply(sc *screamRec, e game.Event, p3Chop int) bool {
-	if e.Type != game.EvHint || e.Player != sc.target || s.n < 3 || e.Target != (sc.target+1)%s.n || p3Chop < 0 {
+// generationReply：被叫的人的行動 e 是回應 Generation Discard——提示再下一位。
+// 只有看不到自己 chop 的再下一位照回應判斷（其他人照當時的情況，screamRec.gen）。原文：棄牌「is just for the purposes of
+// generating a clue so that player 2 can clue player 3」，而 player 3 有事可做（例如打牌）就不必救——所以任何給我的提示都算回應
+// （例如讓我下一手打牌的 play clue；重播 20261109-121725 t32：AI-1 用「3」讓 AI-2 打 Y3，看得到 AI-2 chop 的人當成 Generation
+// Discard，只照「點到 chop」判斷的 AI-2 卻以為是 Scream），提示要我盲打 chop 上那張（我的 finesse position 就是 chop）也算。
+func (s *state) generationReply(sc *screamRec, e game.Event, p3Chop int, p3Fin bool) bool {
+	P3 := (sc.target + 1) % s.n
+	if e.Type != game.EvHint || e.Player != sc.target || s.n < 3 || p3Chop < 0 {
 		return false
 	}
-	return slices.Contains(e.Touched, slices.Index(s.hands[e.Target], p3Chop))
+	return e.Target == P3 || !p3Fin && s.holder(p3Chop) == P3 && s.notes[p3Chop].finessed
 }
 
-// misreadAsGeneration：我被 Scream 叫到、自己判斷不是 Generation Discard（再下一位的 chop 不必救），
-// 這個提示卻會點到再下一位的 chop，大家就會以為是 Generation Discard、不 Chop Move 我的 chop。
+// misreadAsGeneration：我被 Scream 叫到時，這個提示會讓看不到自己 chop 的再下一位讀錯（他照回應判斷，generationReply）：
+//   - 不是 Generation Discard 卻提示他：他會以為是回應，不 Chop Move 我的 chop；
+//   - 是 Generation Discard 卻不提示他：他會以為是 Scream，把我的 chop 記成被 Chop Move。原文也是要我提示他
+//     （「the discard is just for the purposes of generating a clue so that player 2 can clue player 3」）。
 func (s *state) misreadAsGeneration(a game.Action) bool {
-	P3 := (s.me + 1) % s.n
-	if a.Type != game.ActHint || s.n < 3 || a.Target != P3 || s.screamWorthy(P3) {
+	if a.Type != game.ActHint || s.n < 3 || s.scream == nil || s.scream.target != s.me || s.scream.gen < 0 {
 		return false
 	}
-	c := s.publicChop(P3, nil)
-	return c >= 0 && a.Hint.Matches(s.cards[c])
+	return (a.Target == (s.me+1)%s.n) != (s.scream.gen == 1)
 }
 
 // screamWorthy（Level 7）：p 的 chop 值得用 Scream Discard 救——是現在能打或 critical 的牌（或別處看不到的 2），

@@ -385,11 +385,12 @@ func (s *state) apply(e game.Event) {
 	// Level 7：上一位做了 Scream / Shout Discard，這是被叫的人的行動（抽牌不算）：行動後照他做了什麼決定 Chop Move
 	if sc := s.scream; sc != nil && e.Type != game.EvDraw {
 		p3Chop := s.publicChop((sc.target+1)%s.n, nil)
+		p3Fin := p3Chop >= 0 && s.notes[p3Chop].finessed
 		defer func() {
 			if s.scream == sc {
 				s.scream = nil
 			}
-			s.resolveScream(sc, e, p3Chop)
+			s.resolveScream(sc, e, p3Chop, p3Fin)
 		}()
 	}
 	if e.Type != game.EvDraw {

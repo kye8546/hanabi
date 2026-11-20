@@ -216,3 +216,22 @@ func TestScreamWithPlayableRevealedBySarcasticDiscard(t *testing.T) {
 		}
 	}
 }
+
+func TestL7GenerationDiscardNoChopMoveWhateverTheReply(t *testing.T) {
+	// 使用者回報 20261120-150449（Black，4 人局）：t16 提示 0 個，AI-3 棄牌換提示（Generation Discard），讓使用者救 AI-1 chop 上
+	// 唯一看得到的 R1；t17 使用者用「2」點 AI-2 的 R2、finesse AI-1 的 R1（沒點到 AI-1 的 chop）。原文：「It is not a Scream Discard
+	// if the next player has to generate a clue for cluing the next player after that」——是 Generation Discard 就不 Chop Move
+	// 使用者的 chop（slot 3 的 W5）；以前照回應判斷，把它當成 Scream，t23 白色的焦點就成了 slot 2
+	const codes = "h11 p3 h1Y h2B h32 p1 p2 h12 h3W p3 h03 p2 h15 d1 h0G d1 h22"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1795158289341202000, 12, codes)
+	w5 := g.Hands[0][2].Card
+	if w5.Color != game.White || w5.Rank != 5 {
+		t.Fatalf("布置錯誤：使用者 slot 3 應是 W5，卻是 %+v", w5)
+	}
+	for p := 1; p < 4; p++ {
+		bots[p].Observe(g.View(p))
+		if bots[p].s.notes[w5.ID].cm {
+			t.Errorf("AI-%d 不該把使用者 slot 3 的 W5 記成被 Chop Move（Generation Discard 不是 Scream）", p)
+		}
+	}
+}
