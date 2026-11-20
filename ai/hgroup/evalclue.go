@@ -359,8 +359,15 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 	default:
 		return ev, true
 	}
+	// 能選的話優先用顏色提示；但救 5 用數字 5（5 Save）：顏色只在提示滿 8（8 Clue Save）等情況救得到它，接收者只知道是
+	// 「有用的某色牌」（可能以為是能打的 1），不如「5」清楚（使用者回報 20261120-163141 t16：提示滿 8，AI-3 用黃色救 AI-1
+	// chop 上的 Y5，只因為顏色多 2 分）
 	if h.Kind == game.HintColor {
-		ev.score += scoreColor
+		if ev.kind == kindSave && t.rank() == game.MaxRank {
+			ev.score -= scoreColor
+		} else {
+			ev.score += scoreColor
+		}
 	}
 	ev.targetPlays = ev.kind == kindPlay && (s.knowsPlayNow(it) || s.playsByTurn(it, R))
 	// 給下一位的提示：提示後他的 chop 往左移到必須保留的牌上，而他又沒有能立刻打的牌，

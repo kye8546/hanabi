@@ -148,3 +148,15 @@ func TestFreeChoicePromptDoesNotWaitForLaterFinesse(t *testing.T) {
 		t.Fatalf("AI-1 應打出被 Free Choice Prompt 的 M1（slot 2），卻做了 %+v（%s）", a, bots[1].Why())
 	}
 }
+
+func TestSaveFiveWithNumberAtMaxHints(t *testing.T) {
+	// 使用者回報 20261120-163141 t16（Rainbow，4 人局）：提示滿 8，AI-1 chop 上是 Y5。8 Clue Save 讓黃色也救得到它，
+	// 但救 5 照慣例用「5」（5 Save）；以前只因為「優先用顏色」多 2 分就用了黃色
+	g, bots := replayCodesVariant(t, 4, game.RainbowSix, 1795163501102297000, 12, "h11 p2 h1R d4 p1 p2 h02 p1 p1 p4 d4 h23 d4 d3 p4")
+	if c := g.Hands[1][2].Card; c.Color != game.Yellow || c.Rank != 5 {
+		t.Fatalf("布置錯誤：AI-1 slot 3 應是 Y5，卻是 %+v", c)
+	}
+	if a := step(t, g, bots); a != game.HintRankTo(1, 5) {
+		t.Fatalf("AI-3 應用「5」救 AI-1 chop 上的 Y5，卻做了 %+v（%s）", a, bots[3].Why())
+	}
+}
