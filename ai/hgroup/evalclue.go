@@ -173,6 +173,9 @@ func (s *state) evalClue(R int, h game.Hint, dist int) (clueEval, bool) {
 		}
 	}
 	ev.misleads, ev.danger, ev.costly = s.misleads(R, it, touched)
+	if it.saveOK && !it.planOK && s.fakeFlorrat(h, t, &it) {
+		ev.misleads = true // Black：不是真的 Florrat Save，看得到的人會讀成黑 3 / 黑 4 的 play clue
+	}
 	waived := s.goodTouchWaived(R, it, touched, side, ev.bad, &ev)
 	if it.stray {
 		ev.misleads, ev.danger = true, true // 計畫外的玩家會盲打（或打已提示的牌），多半打錯

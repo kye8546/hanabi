@@ -5,6 +5,8 @@
 
 package hgroup
 
+import "hanabi/game"
+
 // blackColorSave：黑色提示能不能是救黑 2 / 黑 5 的 save clue。例外只算大家都看得出的兩種：
 // 點到兩張以上之前沒被提示的牌（都是黑色），或補上一張已提示牌的資訊（filled in an ancillary card）。
 // 「為了不違反 Good Touch」「給了重要的負向資訊」要看接收者看不到的牌、或靠主觀判斷，接收者無從確認，不算
@@ -35,4 +37,20 @@ func (s *state) florratSave(t ident, it *interp) bool {
 		}
 	}
 	return false
+}
+
+// fakeFlorrat：我要用數字 3 / 4 救 chop 上的黑 3 / 黑 4（t），接收者照 florratSave 讀得成 save，但一起點到的新牌實際上
+// 沒有一張是 critical。原文：「if the number clue also touched another critical card」——看得到那些牌的旁觀者知道例外不成立，
+// 會照原文讀成 play clue（使用者回報 20261120-155843 t30：AI-1 用「4」救 AI-3 chop 上的 K4，一起點到的是 G4，只因為它
+// 可能是 B4 / W4（各棄了一張）就當成 Florrat Save）。解讀別人的提示時照舊用 florratSave（接收者無從確認，各家看法一致）。
+func (s *state) fakeFlorrat(h game.Hint, t ident, it *interp) bool {
+	if h.Kind != game.HintRank || t.color() != game.Black || t.rank() != 3 && t.rank() != 4 || !it.chopFocus {
+		return false
+	}
+	for _, id := range it.newCards {
+		if x, ok := s.see(s.me, id); ok && id != it.focus && x != t && s.critical(x) {
+			return false
+		}
+	}
+	return true
 }

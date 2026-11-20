@@ -127,3 +127,17 @@ func TestBlindPlayNotExplainedBySaveClueFallback(t *testing.T) {
 		t.Fatalf("AI-2 應打出被 prompt 的 W3（slot 4），卻做了 %+v（%s）", a, bots[2].Why())
 	}
 }
+
+func TestFlorratSaveNeedsActuallyCriticalCard(t *testing.T) {
+	// 使用者回報 20261120-155843 t30（Black，4 人局）：AI-3 chop 上是 K4，「4」會一起點到 slot 3 的 G4。B4、W4 各棄了一張，
+	// 接收者看不到 G4、以為它可能是 critical，但原文 Florrat Save 要「also touched another critical card」：看得到 G4 的人
+	// 會把「4」讀成 K4 的 play clue。AI-1 要用黑色救 K4
+	const codes = "h31 h35 h32 p2 h3R h03 h0R p1 d4 h04 d4 p3 p3 h0G d4 p3 p3 h22 d3 p4 p2 d4 h11 h12 d2 p4 p4 d4 h1W"
+	g, bots := replayCodesVariant(t, 4, game.BlackSix, 1795161523285457000, 12, codes)
+	if c := g.Hands[3][3].Card; c.Color != game.Black || c.Rank != 4 {
+		t.Fatalf("布置錯誤：AI-3 slot 4 應是 K4，卻是 %+v", c)
+	}
+	if a := step(t, g, bots); a != game.HintColorTo(3, game.Black) {
+		t.Fatalf("AI-1 應用黑色救 K4（一起點到的 G4 不是 critical，「4」不是 Florrat Save），卻做了 %+v（%s）", a, bots[1].Why())
+	}
+}
