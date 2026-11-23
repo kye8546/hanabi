@@ -376,3 +376,19 @@ func TestBluffConfirmedWhenBluffeeStops(t *testing.T) {
 		}
 	}
 }
+
+func TestBluffUndoesPromptNoteFromSeveralReadings(t *testing.T) {
+	// r1、b2 已打出，Cathy 有一張只被「3」點過的 3（實際是 r3）。Alice「4」點 Cathy 新的 r4：提示當下 Cathy 的 3 被兩種解讀
+	// 寫成「r3 或 b3」（r4：finesse Bob 的 r2、prompt 3 當 r3；b4：prompt 3 當 b3）。Bob 盲打出 r2，2 接不上 4，是 Bluff（b4）。
+	// 撤掉連接筆記時，以前只撤「正好等於某一種解讀」的筆記，「r3 或 b3」留著；r2 打出後 r3、b3 都能打，Cathy 就把 3 打出
+	g, bots := scenario6(t, 11, "r1 b2", "y4 g4 w4 y4 g4", "r2 y4 g4 w4 y1", "g2 r4 r3 y2 w2")
+	g.Hints = 5
+	preClued(t, g, bots, 2, 2, idents(t, "r3 y3 g3 b3 w3"))
+	force(t, g, game.HintRankTo(2, 4))
+	if a := step(t, g, bots); a != game.Play(0) || g.Fireworks[game.Red] != 2 {
+		t.Fatalf("Bob 應盲打出 r2，卻做了 %+v（%s）", a, bots[1].Why())
+	}
+	if a := step(t, g, bots); a.Type == game.ActPlay {
+		t.Errorf("Cathy 不知道 3 是哪張，不該打牌，卻做了 %+v（%s）", a, bots[2].Why())
+	}
+}

@@ -255,12 +255,20 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 // undoBluffDeps：撤掉為 rec 寫下的連接筆記（Bluff 的讀法不需要它們），回傳原本的筆記（不是 Bluff 時還原用）。
 func (s *state) undoBluffDeps(rec *clueRec, played int) map[int]note {
 	saved := map[int]note{}
-	for _, ds := range append([][]dep{rec.plan}, append(depsOf(rec.cands), depsOf(rec.fallback)...)...) {
+	all := append([][]dep{rec.plan}, append(depsOf(rec.cands), depsOf(rec.fallback)...)...)
+	// 同一張牌被幾種解讀寫成不同的牌面時，筆記是它們的聯集（例如 Hard Bluff 的 Cathy：她的 3 被寫成「r3 或 b3」），也要撤掉
+	ids := map[int]idSet{}
+	for _, ds := range all {
+		for _, d := range ds {
+			ids[d.card] |= setOf(d.id)
+		}
+	}
+	for _, ds := range all {
 		for _, d := range ds {
 			if _, done := saved[d.card]; done || d.card == played || d.card == rec.focus || s.holder(d.card) < 0 || !slices.Contains(rec.changed, d.card) {
 				continue
 			}
-			if n := s.notes[d.card]; n.finRec == rec || !n.finessed && n.poss == setOf(d.id) {
+			if n := s.notes[d.card]; n.finRec == rec || !n.finessed && n.poss&^ids[d.card] == 0 {
 				saved[d.card] = *n
 				s.resetNote(d.card)
 			}
