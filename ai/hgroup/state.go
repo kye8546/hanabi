@@ -12,6 +12,7 @@ type note struct {
 	finessed bool     // 沒被點到但已被承諾要盲打（finesse），視同隱形提示
 	finRec   *clueRec // finesse 這張牌的那次提示（knowsFinessed 用）
 	willPlay bool     // 是 play clue 的焦點（或被 prompt / finesse），持有者遲早會打
+	vouched  bool     // 別人的提示點到同一人兩張一樣的牌：給提示者判斷持有者分得出哪張是重複的（vouchDuplicates）
 	giver    int      // 第一次「拿到」這張牌（提示或 finesse）的給提示者；-1 = 還沒被拿到
 	seq      int      // 第一次被拿到時的事件序號
 	cluedAt  int      // 第一次被提示點到時的事件序號（先被 finesse、後來才被提示時和 seq 不同）

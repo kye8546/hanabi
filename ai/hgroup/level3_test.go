@@ -559,3 +559,14 @@ func TestFixWithNegativeInformation(t *testing.T) {
 		t.Errorf("AI-3 應打出 B3，卻 %+v（%s）", a, bots[3].s.why)
 	}
 }
+
+func TestNoFixForDuplicatesVouchedByGiver(t *testing.T) {
+	// 使用者回報 20261123-181625 t15：AI-1 的「1」點到使用者兩張 G1（使用者知道 W1 是他自己 finesse 給 AI-3 的）。
+	// AI-1 看得到兩張都是 G1 還這樣給，就是判斷使用者分得出另一張是重複的；AI-2 看不出原因也該相信他，不必修
+	// （AI-2 以前立刻用綠色 Fix Clue）
+	g, bots := replayCodes(t, 4, 1795428985831592000, 13, "h2Y h3B p2 p2 h15 d4 h12 d4 h3Y p1 h3R p4 h24 h01")
+	a := bots[2].Act(g.View(2))
+	if a.Type == game.ActHint && a.Target == 0 && a.Hint.Kind == game.HintColor && a.Hint.Color == game.Green {
+		t.Errorf("AI-2 不必修使用者重複的 G1（%s）", bots[2].Why())
+	}
+}

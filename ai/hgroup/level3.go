@@ -501,6 +501,10 @@ func (s *state) brokenCards() map[int]bool {
 			}
 			t := identOfCard(s.cards[y])
 			p := s.notes[y].poss
+			// 給提示者擔保持有者分得出的重複牌（vouchDuplicates）：兩張都在，或另一張已經照這個牌面打出
+			if s.notes[y].vouched && (s.dupOf(y) >= 0 || s.played(t)) {
+				continue
+			}
 			// 他看得到的牌能排除掉的可能，他自己就知道（例如共同筆記只剩 w5，但他看得到我手上的 w5）：
 			// 推得出是垃圾就會自己棄掉，不必修；剩下的可能才決定他會不會打錯
 			hv := s.holderView(y, mine)

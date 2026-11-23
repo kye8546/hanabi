@@ -481,6 +481,7 @@ func (s *state) onClue(e game.Event) {
 		n.touches++
 		n.hinted |= hintBit(e.Hint)
 	}
+	s.vouchDuplicates(e.Player, R, touched)
 	if it.fix {
 		s.applyFix(R, e.Player, it)
 		return
@@ -682,5 +683,53 @@ func (s *state) dropMyCardReadings(giver, R int, it *interp) {
 	it.cands = slices.DeleteFunc(slices.Clone(it.cands), mine)
 	if len(it.cands) == 0 {
 		it.cands, it.fallback = it.fallback, nil
+	}
+}
+
+// vouchDuplicates：別人（不是我、也不是接收者）給的提示點到接收者兩張一樣的牌 t（我看得到）。給提示者也看得到，他會這樣給，
+// 可能是判斷接收者分得出另一張是重複的（Good Touch 的例外：接收者推得出只是焦點的重複，seenAsTrash），也可能是失誤
+// （挑戰題 Playing Multiple 1's III：第一回合「1」點到兩張 r1，要修）。提示本身容許的其他有用牌面，每一種都是某個還沒結束的
+// 提示在某種解讀裡會被拿到、而且我看得到那張實際就是它的牌（我看不到自己的牌，分不出是哪種解讀）時，接收者可能知道那些牌面已有人有，就相信給提示者，
+// 不替這兩張給 Fix Clue（brokenCards）。
+// 使用者回報 20261123-181625 t15：AI-1 的「1」點到使用者兩張 G1，剩下的 1 只有 G1、W1；使用者知道 W1 是自己的「4」finesse 給 AI-3 的，
+// AI-2 看不到自己的 W4、以為「4」多半是 Y4，就用綠色給了 Fix Clue。使用者的判斷：那個情況根本不用修。
+func (s *state) vouchDuplicates(giver, R int, touched []int) {
+	if giver == s.me || R == s.me {
+		return
+	}
+	pending := func(u ident) bool {
+		for _, r := range s.recs {
+			if s.holder(r.focus) < 0 {
+				continue
+			}
+			// 那個解讀要拿到的牌我看得到、實際就是 u（否則只是某種解讀的猜測，例如 5 Stall 的 fallback 裡 self-finesse 出的各種 1；
+			// 重播 20261012-101340 t5：「1」點到 AI-2 三張 R1 是失誤，要修）
+			is := func(id int) bool {
+				x, ok := s.see(s.me, id)
+				return ok && x == u
+			}
+			for _, c := range append(slices.Clone(r.cands), r.fallback...) {
+				if c.id == u && is(r.focus) || slices.ContainsFunc(c.deps, func(d dep) bool { return d.id == u && is(d.card) }) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for i, a := range touched {
+		ca, ok := s.card(a)
+		if !ok {
+			continue
+		}
+		t := identOfCard(ca)
+		for _, b := range touched[i+1:] {
+			if cb, ok := s.card(b); !ok || identOfCard(cb) != t {
+				continue
+			}
+			others := s.notes[a].explicit & s.useful() &^ setOf(t)
+			if !slices.ContainsFunc(others.list(), func(u ident) bool { return !pending(u) }) {
+				s.notes[a].vouched, s.notes[b].vouched = true, true
+			}
+		}
 	}
 }
