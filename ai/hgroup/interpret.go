@@ -569,6 +569,7 @@ func (s *state) onClue(e game.Event) {
 		if s.knows(lvInfoLock) {
 			s.lockMine(rec, it)
 		}
+		s.knownBluff(rec, it)
 	}
 	s.recs = append(s.recs, rec)
 	s.lastClue = rec

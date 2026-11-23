@@ -189,7 +189,7 @@ func (s *state) bluffTargets(rec *clueRec, ex idSet, played int, x ident) (idSet
 			assigns[t] = deps
 		}
 	}
-	return targets, assigns
+	return s.extraBluffTargets(rec, ex, x, targets, assigns), assigns
 }
 
 // detectBluff（Level 11）：上一個行動是 giver 給的提示 rec，他的下一位（Bluff Seat）接著從 finesse position 盲打出 x。
@@ -209,8 +209,19 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 	if s.bluffBlocked(rec, e.Player, played, x) {
 		return false
 	}
+	gtb, gtbOld := -1, note{}
 	if s.bluffConnects(rec, x) && s.bluffFinesse(rec, s.notes[rec.focus].explicit, x) {
-		return false // 接得上，是 finesse
+		// Level 13 The Good Touch Bluff：接得上的那張只可能是我手上已提示的那張，給提示者才會這樣給
+		id, u := s.goodTouchBluffCard(rec, x)
+		if id < 0 {
+			return false // 接得上，是 finesse
+		}
+		gtb, gtbOld = id, *s.notes[id]
+		s.notes[id].poss = setOf(u)
+		if s.bluffFinesse(rec, s.notes[rec.focus].explicit, x) {
+			*s.notes[id] = gtbOld
+			return false
+		}
 	}
 	// 先撤掉為這個提示寫下的連接筆記（例如旁觀者以為要 finesse 自己、記成被 finesse 的 r2，或被 prompt 成 r3 的已提示牌），
 	// 照沒有這個提示的連接來找目標；不是 Bluff 就還原
@@ -218,6 +229,9 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 	restore := func() {
 		for id, n := range saved {
 			*s.notes[id] = n
+		}
+		if gtb >= 0 {
+			*s.notes[gtb] = gtbOld
 		}
 	}
 	targets, assigns := s.bluffTargets(rec, s.notes[rec.focus].explicit, played, x)
@@ -233,6 +247,10 @@ func (s *state) detectBluff(e game.Event, rec *clueRec) bool {
 	// 使用者回報 20261118-121252：使用者紅色點 AI-3 的 R3、要 Layered Finesse AI-1 的 W1、R1、R2，大家以前都讀成
 	// Bluff（R2），AI-1 打出 W1 就停了。
 	truth, see := s.see(s.me, rec.focus)
+	if gtb >= 0 && (!see || !targets.has(truth)) {
+		restore()
+		return false
+	}
 	if alt := s.layeredAlt(rec, e.Player, played, x, targets); alt || see && !targets.has(truth) {
 		restore()
 		if alt {
@@ -562,8 +580,10 @@ func (s *state) bluffeeBlindPlays(B, R int, it interp, touched []int, fp int) bo
 		}
 		ds, ok := s.connect(B, s.me, R, it.focus, it.truth)
 		restore()
-		if !ok || len(ds) == 0 || slices.ContainsFunc(ds[1:], func(d dep) bool { return d.finesse }) {
-			return false // 還要別人（例如接收者自己）也盲打時，他不一定先動（自我對局 3 人局 seed 406）
+		// 還要別人（例如接收者自己）也盲打時，他不一定先動（自我對局 3 人局 seed 406）；後面的 finesse 也是他自己時
+		// （例如 3 Bluff：他以為是 Double Finesse 自己的 r1、r2）他照樣先盲打第一張
+		if !ok || len(ds) == 0 || slices.ContainsFunc(ds[1:], func(d dep) bool { return d.finesse && d.player != B }) {
+			return false
 		}
 		firsts = ds[:1]
 	}

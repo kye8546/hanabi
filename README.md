@@ -10,7 +10,7 @@
 ## 執行
 
 ```bash
-go run ./cmd/hanabi              # 開局時會要求選人數（2–5）、H-Group 慣例等級（目前可選 Lv1–12）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black，4 = Rainbow）
+go run ./cmd/hanabi              # 開局時會要求選人數（2–5）、H-Group 慣例等級（目前可選 Lv1–13）、變體（Enter = 標準 5 色，2 = 6 Suits，3 = Black，4 = Rainbow）
 go run ./cmd/hanabi -seed 42     # 固定牌序（不加 -seed 時開局會問種子，直接按 Enter = 隨機）
 go run ./cmd/hanabi -nocolor     # 不用終端顏色（也支援 NO_COLOR 環境變數）
 go run ./cmd/hanabi -showneg     # 開局就顯示反向提示資訊（預設只顯示被點到的顏色/數字；遊戲中可用 n 即時切換，連 AI 手牌一起）
@@ -49,7 +49,7 @@ cloudflared tunnel --url http://localhost:8080   # 另一個視窗；印出的 h
 編成 Windows 執行檔：`GOOS=windows GOARCH=amd64 go build -o hanabi.exe ./cmd/hanabi`。
 遊戲結束（含輸入 `q` 離開）時會等你按 Enter 才關閉，直接點兩下 exe 執行時視窗不會一結束就消失。
 
-AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Level 12**（更高的等級還不能選）：
+AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Level 13**（更高的等級還不能選）：
 - Lv1：整份 Beginner's Guide。
 - Lv2：5 Stall、Double/Triple Prompt、Double Finesse、Prompt + Finesse、Reverse Finesse、Self-Finesse、Wrong Prompt。
 - Lv3：Playing Multiple 1's（起手牌的 1 由舊到新、Fresh 1's、Chop-Focus 例外）、Fix Clue（含不給新資訊的 Stop Clue）、Sarcastic Discard、Information Lock。
@@ -62,6 +62,7 @@ AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Le
 - Lv10：Special Discards——Gentleman's Discard（棄掉確定能打的已提示牌，傳給 finesse position 上有同一張的人盲打；可以藏在能打的牌後面：Layered）、Baton Discard（還不能打的確定的牌，正好在別人的 finesse position 時傳給他，那張視同被提示）——這兩種 AI 只解讀、不主動給（實測主動給分數略低）；Sarcastic Finesse（焦點可能和給提示者不確定的已提示牌重複的 finesse，接收者看到重複就 Sarcastic Discard 傳回）、Certain Finesse（被 finesse 的牌可能重複時，被 finesse 的人看到給提示者那張就是它，就把自己的 finesse position 棄掉傳回：Certain Discard）。
 - Lv11：Bluffs——只有坐在 Bluff Seat（正好在盲打的人前一位）的人可以 Bluff：點一張差一張就能打的牌，下一位以為是 finesse 自己而盲打出別張能打的牌；盲打出的牌接不上提示（Cathy's Connecting Principle：顏色提示要點得到它，數字提示要正好小一號），大家就知道焦點是差一張就能打的牌，盲打的人也不再往下打（Bluff 優先於 Layered Finesse）。Self-Bluff（用數字提示讓接收者盲打自己的 finesse position）、Bluff 穿過已提示的牌、Bob's Truth Principle（看得到別人有連接牌就不盲打）、Guide Principle（被引導盲打時不必先救下一位的 chop）。AI 會主動給 Bluff 與 Self-Bluff。
 - Lv12：Context——Focus Inversion（點到 chop 和其他新牌的顏色提示，chop 依之前的負向資訊不可能是能打的牌、也不是要救的牌時，焦點改成最左邊的新牌；數字提示的 Self-Finesse 優先）、The Stale 1's Clue（有人棄牌結束 Early Game 後，緊接著的「1」點到兩張以上的 1，照順序會先打的那張是壞的，跳過它）、Duplication Responsibility 的平手規則（可能重複的張數一樣多時，提示資訊比較不明確的人負責救）。Selfish Clue / Selfish Finesse 照一般的 delayed play clue / Reverse Finesse 就讀得懂。
+- Lv13：Intermediate Bluffs——合法的 Bluff 目標擴大：任何還不能打、之後有用的 3（3 Bluff；「3」讓人盲打出同色的 1 也算，Hard 3 Bluff），以及顏色提示點到之前沒被提示的 critical 非 5（Critical Color Bluff）；Hard Bluff（盲打出的牌可能是 Bluff，也可能是同色的 finesse + prompt 時，兩種都記下、先不打）；Known Bluff（坐在 Bluff Seat 的人知道自己沒有連接牌、又看不出別的解釋時，照樣盲打）；Good Touch Bluff（接得上的那張已在別人手上被提示，就是 Bluff；看不到自己那張的人推得出自己的就是它）。AI 會主動給 3 Bluff 與 Critical Color Bluff。
 - 所有等級都會在終局被迫拖延（取自 Level 8：棄牌會讓最高分拿不到時改給提示）。
 - Black 變體另外照 [黑色的慣例](https://hanabi.github.io/variant-specific/black)（所有等級）：救 chop 上的黑 2、黑 5 用數字，黑 3、黑 4 用黑色；用另一種提示點到它們就是 play clue。例外：黑色點到兩張以上新的黑牌、或補上一張已提示牌的資訊時可以救黑 2 / 黑 5；「3」/「4」同時點到另一張可能是 critical 的新牌（Florrat Save）時可以救黑 3 / 黑 4。（「為了不違反 Good Touch」「給了重要的負向資訊」這兩個例外接收者無從確認，AI 不用也不這樣解讀。）
 - Rainbow 變體另外照 [彩虹的慣例](https://hanabi.github.io/variant-specific/rainbow)（所有等級）：彩虹 2 照一般的 2 Save，critical 的彩虹牌可以用任何顏色或數字救；Free Choice Finesse（顏色提示只點到彩虹牌時，捨棄和已提示牌相同的顏色、改用別的顏色 = finesse）。
@@ -97,7 +98,7 @@ AI 依 [H-Group 慣例](https://hanabi.github.io/) 行動，目前實作到 **Le
 ```
 game/      純規則引擎（無 I/O）：Action → Event，PlayerView 遮蔽自己的手牌
 player/    Player 介面（真人與 AI 共用）＋ Run 主迴圈
-ai/hgroup  H-Group 慣例 AI（目前 Level 1–12）
+ai/hgroup  H-Group 慣例 AI（目前 Level 1–13）
 ai/        其他 AI；DiscardBot（能棄就棄最舊的牌，當基準）
 console/   文字介面：Renderer 畫面、Human 讀指令
 session/   console 與網頁共用：對局紀錄、AI 代打的座位、回溯

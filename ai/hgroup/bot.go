@@ -3,7 +3,7 @@ package hgroup
 import "hanabi/game"
 
 // MaxLevel 是目前已實作的最高慣例等級。
-const MaxLevel = 12
+const MaxLevel = 13
 
 // Levels 是 H-Group 的 25 個慣例等級名稱（Levels[0] = Level 1）。
 var Levels = [...]string{
@@ -62,6 +62,11 @@ const (
 	lvFocusInversion    = 12 // Focus Inversion：點到 chop 的提示，chop 依提示資訊不可能是 play clue（顏色時 Self-Finesse 不算），焦點改成最左邊的新牌
 	lvDupResponsibility = 12 // Duplication Responsibility 的平手規則：可能重複的張數一樣多時，提示資訊比較不明確的人負責（基本規則所有等級都用）
 	lvStale1s           = 12 // The Stale 1's Clue：結束 Early Game 的棄牌之後緊接著的「1」點到兩張以上的 1，照順序會先打的那張是壞的
+	lv3Bluff            = 13 // 3 Bluff（含 Hard 3 Bluff）：任何之後有用、還不能打的 3 都是合法的 Bluff 目標
+	lvCritColorBluff    = 13 // Critical Color Bluff：顏色提示點到之前沒被提示的 critical 非 5，也是合法的 Bluff 目標
+	lvHardBluff         = 13 // Hard Bluff：Bluff 和同色的 finesse + prompt 分不出來時兩種都記下，先不打
+	lvKnownBluff        = 13 // Known Bluff：Bluff Seat 的人知道自己沒有連接牌、看不出別的解釋，仍盲打 finesse position
+	lvGoodTouchBluff    = 13 // Good Touch Bluff：接得上的那張已在我手上被提示，給提示者才會這樣給——我那張就是它
 )
 
 // knows：這個 AI 的等級已經學到從 lv 開始的技巧。
