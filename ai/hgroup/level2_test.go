@@ -761,3 +761,19 @@ func TestFocusPlayedEndsClue(t *testing.T) {
 		t.Errorf("AI-3 不該把使用者 slot 4 的牌記成被 finesse：%+v", bots[3].s.notes[b1])
 	}
 }
+
+func TestBystanderTrustsGiverAboutOwnCards(t *testing.T) {
+	// 使用者回報 20261123-173302 t18：t9 使用者「4」點 AI-3 的 Y4（AI-3 被黃色點過的 Y3 會先打出）。AI-1 看不到自己被白色點過的
+	// W3、W4，以為 AI-3 會讀成「W4，prompt AI-1 的白牌當 W2、W3」，Y4 只是 fallback，t18 就用黃色告訴 AI-3 是 Y4。
+	// 給提示者和 AI-3 都看得到 AI-1 的白牌，AI-1 的牌真是 W2、W3 的話這個「4」會讓 AI-3 讀錯，使用者不會這樣給：
+	// AI-1 應知道 AI-3 把它記成 Y4，不必再提示
+	g, bots := replayCodes(t, 4, 1795426382956030000, 13, "h11 p3 h3Y p4 h2B p2 p1 h1W h34 p2 h0G p4 d4 p1 h34 p3 p3")
+	y4 := g.Hands[3][2].Card.ID
+	a := bots[1].Act(g.View(1))
+	if got := bots[1].s.notes[y4].poss; got != idents(t, "y4") {
+		t.Errorf("AI-1 應把 AI-3 的 4 記成 Y4，筆記卻是 %v", got.list())
+	}
+	if a == game.HintColorTo(3, game.Yellow) {
+		t.Errorf("AI-3 早就知道是 Y4，AI-1 不該再用黃色提示（%s）", bots[1].Why())
+	}
+}

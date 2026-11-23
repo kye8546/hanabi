@@ -419,6 +419,7 @@ func (s *state) onClue(e game.Event) {
 		touched = append(touched, s.hands[R][sl])
 	}
 	it := s.interpret(e.Player, R, e.Hint, touched)
+	s.dropMyCardReadings(e.Player, R, &it)
 	gottenBefore := s.notes[it.focus].clued || s.notes[it.focus].finessed // 提示前就已被拿到（interpret 不改筆記）
 	if !s.midGame && e.Hint.Kind == game.HintRank && e.Hint.Rank == game.MaxRank && len(it.newCards) > 0 && !it.chopFocus && it.cmKind == 0 {
 		s.stalled5 = true
@@ -655,4 +656,31 @@ func (s *state) onStrike(card int) {
 		}
 	}
 	s.recs = s.recs[:idx]
+}
+
+// dropMyCardReadings：我是旁觀者、看得到焦點的實際牌面 t。我替接收者算的解讀裡，不是 t、又要靠我自己的牌
+// （prompt 或 finesse 我）才成立的，是我看不到自己的手牌才多出來的：給提示者和接收者都看得到我的牌，我的牌真是那樣的話，
+// 這個提示會讓接收者讀成別張，給提示者不會這樣給——預設自己的牌不會讓提示變得誤導（同 Fix Clue 的「預設自己的牌是好的」）。
+// 拿掉它們；只剩 fallback 時升格。只在實際牌面被擠到 fallback 時這樣做（接收者會先照別的解讀行動，那才是誤導）；
+// 實際牌面本來就在解讀裡時只是暫時分不出來（例如「3」可能是 W3，也可能 prompt 我被「2」點過的牌當 Y2、B2），等連接牌
+// 打出就揭曉，給提示者可以這樣給——重播 20261014-095355 t20：拿掉後 AI-1 以為 AI-2 知道是 W3，W3 打出後就不修他的重複牌。
+// 使用者回報 20261123-173302 t18：使用者「4」點 AI-3 的 Y4（AI-3 自己的 Y3 會被 prompt），AI-1 看不到自己被白色點過的
+// W3、W4，以為 AI-3 會讀成「W4，prompt AI-1 的白牌當 W2、W3」、Y4 只是 fallback，就用黃色告訴他是 Y4；AI-3 看得到 AI-1 的白牌，
+// 早就知道是 Y4。
+func (s *state) dropMyCardReadings(giver, R int, it *interp) {
+	if !it.hasTruth || giver == s.me || R == s.me {
+		return
+	}
+	t := it.truth
+	mine := func(c cand) bool {
+		return c.id != t && slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == s.me })
+	}
+	isT := func(c cand) bool { return c.id == t }
+	if !slices.ContainsFunc(it.cands, mine) || slices.ContainsFunc(it.cands, isT) || !slices.ContainsFunc(it.fallback, isT) {
+		return
+	}
+	it.cands = slices.DeleteFunc(slices.Clone(it.cands), mine)
+	if len(it.cands) == 0 {
+		it.cands, it.fallback = it.fallback, nil
+	}
 }
