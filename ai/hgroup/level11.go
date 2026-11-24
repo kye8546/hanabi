@@ -78,9 +78,19 @@ func (s *state) bluffBlocked(rec *clueRec, B, played int, x ident) bool {
 			// 又盲打下一張當 G1 而打錯）
 			continue
 		}
-		if r.target == s.me && B != s.me && rec != nil && !slices.ContainsFunc(append(slices.Clone(r.cands), r.fallback...), func(c cand) bool {
+		// 用得到他的牌的解讀，若是因為這次的給提示者「沒盲打」才補上的（retryFinesse：他那一手就是這個提示），不算——
+		// 這個提示讓下一位盲打，是原文 Urgency Principle 的第一個例外（「giving a clue that causes a Finesse」），他只是延後，
+		// 不是讓出（使用者回報 20261124-101437 之後，不重要的 chop 提示不再算延後；20261117-102820 t29 使用者的藍色
+		// 點到 AI-2 chop 上的 B4，AI-3 就把紅色補成「Ambiguous Finesse，AI-1 有 R2」，AI-1 盲打出 R2 又被當成接紅色）
+		passedNow := false
+		for i, p := range r.passed {
+			if rec != nil && p == rec.giver && r.passSeq[i] == rec.seq {
+				passedNow = true
+			}
+		}
+		if r.target == s.me && B != s.me && rec != nil && (passedNow || !slices.ContainsFunc(append(slices.Clone(r.cands), r.fallback...), func(c cand) bool {
 			return slices.ContainsFunc(c.deps, func(d dep) bool { return d.player == B })
-		}) {
+		})) {
 			// 我是那個提示的接收者、看不到焦點，但他看得到：他只會照實際的計畫接它。我替那個提示算的解讀（含 fallback）
 			// 都用不到他的牌時，就沒有一種說得通的計畫要他盲打——他不是在接它（使用者回報 20261117-102820 t30：
 			// AI-2 的紅色點 AI-3 的 M1，AI-3 的解讀是 M1 或「R4，Reverse Finesse 使用者的 R2」；使用者接著用藍色

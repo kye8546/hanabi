@@ -624,21 +624,24 @@ func TestL5LayeredPromptKeepsOtherClued(t *testing.T) {
 }
 
 func TestL5PromptWaitSurvivesUrgentDeferral(t *testing.T) {
-	// 使用者回報 20261118-095623 t39：Alice 綠色點 Bob 的 g4，Cathy 被綠色點過的是 g3，Donald 的 finesse position 是 g2。
-	// Cathy 看得到 Donald 的 g2，先等他（deferMyPrompt）；Donald 先救 Alice chop 上的牌（Urgency Principle 的例外，
-	// 晚一手再盲打），Cathy 要再等他一回合，不能以為 prompt 的是自己而把 g3 當 g2 打出
-	g, bots := scenario6(t, 5, "g1", "y3 b3 w3 r4", "g4 y4 b4 w4", "y2 b2 w2 g3", "g2 r3 y3 b3")
-	g.Hints = 5
-	preClued(t, g, bots, 2, 3, idents(t, "g2 g3 g4 g5"))
-	force(t, g, game.HintColorTo(1, game.Green)) // Alice
-	force(t, g, game.Discard(3))                 // Bob
-	if a := step(t, g, bots); a == game.Play(3) {
-		t.Fatalf("Cathy 應先等 Donald，卻打出綠牌（%s）", bots[2].Why())
+	// 使用者回報 20261118-095623 t39：使用者綠色點 AI-1 的 G4，AI-2 被綠色點過的是 G3，AI-3 的 finesse position 是 G2。
+	// AI-2 看得到 AI-3 的 G2，先等他（deferMyPrompt）；t36 AI-3 先用黃色救使用者 chop 上 critical 的 Y4（另一張 t32 被棄掉，
+	// Urgency Principle 的例外，晚一手再盲打），AI-2 要再等他一回合，不能以為 prompt 的是自己而把 G3 當 G2 打出。
+	// 以前用布置的情境，chop 上的是不是 critical 的 r4——那不算「really important」，現在不算延後（deferWorthy）
+	codes := "h21 h0B p1 h2G p1 h02 p4 d3 p2 d4 p2 d3 p3 h3R d4 d3 p1 h0B h1R p3 p1 p3 h0R d3 p3 h3R h1W p3 p1 h2W d2 d3 h1G p1 p3 h0Y d2 h0W"
+	g, bots := replayCodes(t, 4, 1794966983544047000, 12, codes)
+	if a := bots[2].Act(g.View(2)); a.Type == game.ActPlay {
+		t.Fatalf("AI-3 只是延後盲打，AI-2 應再等他，卻打出 slot %d（%s）", a.Slot+1, bots[2].Why())
 	}
-	force(t, g, game.HintRankTo(0, 4)) // Donald 救 Alice 的 chop（可以延後盲打）
-	force(t, g, game.Discard(0))       // Alice
-	force(t, g, game.Discard(0))       // Bob
-	if a := step(t, g, bots); a == game.Play(3) {
-		t.Fatalf("Donald 只是延後盲打，Cathy 應再等他，卻打出綠牌（%s）", bots[2].Why())
+}
+
+func TestAmbiguousFinesseNotDeferredByUnimportantChopClue(t *testing.T) {
+	// 使用者回報 20261124-101437：使用者藍色點 AI-3 chop 上的 B2，AI-1、AI-2 的 finesse position 都是 B1。
+	// AI-1 看到 AI-2 的 B1 而不打，改用「1」點 AI-3 chop 上的 W1——還有兩張的 1 不是「really important」的事，
+	// 不是 Urgency Principle 的延後盲打：AI-2 要接 Ambiguous Finesse（以前以為 AI-1 在延後，給了 5 Stall）
+	g, bots := replayCodes(t, 4, 1795486477936027000, 13, "h3B h31")
+	a := bots[2].Act(g.View(2))
+	if a.Type != game.ActPlay || a.Slot != 0 {
+		t.Errorf("AI-2 該盲打 slot 1 的 B1，卻 %v（%s）", a, bots[2].Why())
 	}
 }

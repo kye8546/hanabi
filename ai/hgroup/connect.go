@@ -672,6 +672,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 	for _, rec := range s.recs {
 		// 接收者角度的解讀
 		passedBefore := slices.Clone(rec.cands)
+		depsBefore := append(depsOf(rec.cands), depsOf(rec.fallback)...)
 		kept, changed, done, peeled := s.stepCands(rec, rec.cands, e, played, -1)
 		// 沒盲打的人是我自己也一樣（我看不到自己的 finesse position，接收者角度的解讀裡有要我盲打的；我沒打，
 		// 大家就會補回其他解讀，例如接收者自己的 Self-Finesse——使用者回報 20261022-123841：「2」要 AI-2 Self-Finesse w1，
@@ -774,6 +775,7 @@ func (s *state) checkDeps(e game.Event, played int) {
 			}
 		}
 		rec.plan = plan
+		s.dropOrphanDeps(rec, depsBefore, played)
 		if rec.promptWait > 0 && rec.promptWait-1 == e.Player && e.Type != game.EvDraw && !s.deferred {
 			// 我之後那位看得到我的已提示牌：他沒盲打出那張，就是看到我這張正是它，prompt 的是我（deferMyPrompt）；
 			// 他盲打出了，計畫照新的煙火重算（stale）。他這手是可以延後盲打的緊急行動（Urgency Principle 的例外、
@@ -930,6 +932,36 @@ func (s *state) focusPlayed(card int) {
 			}
 		}
 		rec.cands, rec.fallback = nil, nil
+	}
+}
+
+// dropOrphanDeps：這次行動讓 rec 剩下的解讀全部不成立（cands、fallback 都空了），這個提示就結束了：和焦點打出
+// （focusPlayed）一樣，為那些解讀寫下、計畫也沒在用的連接筆記（被 finesse / prompt 成某張）作廢。以前留著
+// （使用者回報 20261118-151216：AI-3 替使用者猜的「G4，使用者 Self-Finesse G3」在 t9 使用者給提示時就不成立了，
+// 使用者 slot 4 的 B1 卻一直記成被 finesse；以前把 t9 的提示當成延後盲打才沒露出來）。
+// 只丟掉部分解讀時不動：一張牌常被好幾種解讀記成不同牌面（例如 finesse 的 R1 / Y1 / W2），筆記照剩下的解讀收斂。
+// 這次被打出 / 棄掉的牌（played）不動：之後的推論（Gentleman's / Sarcastic Discard 等）要看它被記成什麼。
+func (s *state) dropOrphanDeps(rec *clueRec, before [][]dep, played int) {
+	if len(rec.cands) > 0 || len(rec.fallback) > 0 {
+		return
+	}
+	used := func(card int) bool {
+		for _, ds := range append([][]dep{rec.plan}, append(depsOf(rec.cands), depsOf(rec.fallback)...)...) {
+			if slices.ContainsFunc(ds, func(d dep) bool { return d.card == card }) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, ds := range before {
+		for _, d := range ds {
+			if d.card == rec.focus || d.card == played || s.holder(d.card) < 0 || !slices.Contains(rec.changed, d.card) || used(d.card) {
+				continue
+			}
+			if n := s.notes[d.card]; n.finessed && n.finRec == rec || !n.finessed && n.poss == setOf(d.id) {
+				s.resetNote(d.card)
+			}
+		}
 	}
 }
 

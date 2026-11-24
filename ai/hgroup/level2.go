@@ -51,6 +51,7 @@ func (s *state) retryFinesse(rec *clueRec, e game.Event, played int, before, kep
 		return kept
 	}
 	rec.passed = append(rec.passed, e.Player)
+	rec.passSeq = append(rec.passSeq, s.seq)
 	defer s.saveSim()()
 	s.skipFinesse = rec.passed
 	// 他沒盲打的那張不算「已經有人會打」（這個提示可能已把它記成被 finesse；別的提示的筆記不動）
